@@ -41,3 +41,24 @@ if (typeof HTMLDialogElement !== "undefined" && typeof HTMLDialogElement.prototy
     });
   });
 }
+
+// jsdom has no IntersectionObserver - needed for motion/react's
+// `whileInView` (used by TrustBar/AboutSection, US-013). A minimal stub
+// is enough: components only need the constructor to exist and not
+// throw; tests assert on final rendered content, not on the actual
+// scroll-triggered observation callback.
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  class IntersectionObserverStub implements IntersectionObserver {
+    readonly root: Element | Document | null = null;
+    readonly rootMargin: string = "";
+    readonly thresholds: ReadonlyArray<number> = [];
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+
+  globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
+}

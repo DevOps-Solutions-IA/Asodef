@@ -97,8 +97,11 @@ describe("HomePage - approved Hero copy (US-012)", () => {
   it("keeps the placeholder hero image decorative (empty alt) - no imageAlt wired in yet", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
-    const image = screen.getByRole("presentation");
-    expect(image).toHaveAttribute("alt", "");
+    // Hero and About each render their own decorative placeholder image,
+    // so both must resolve to role "presentation" with an empty alt.
+    const images = screen.getAllByRole("presentation");
+    expect(images.length).toBeGreaterThanOrEqual(1);
+    images.forEach((image) => expect(image).toHaveAttribute("alt", ""));
   });
 
   it("renders the heading fully visible immediately when reduced motion is preferred", () => {
@@ -108,5 +111,50 @@ describe("HomePage - approved Hero copy (US-012)", () => {
     const h1 = screen.getByRole("heading", { level: 1 });
     expect(h1).toBeVisible();
     expect(h1.style.opacity === "" || h1.style.opacity === "1").toBe(true);
+  });
+});
+
+describe("HomePage - TrustBar and About sections (US-013)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders exactly one page-level h1 even with the About section's h2 present", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Quiénes somos" })).toBeInTheDocument();
+  });
+
+  it("renders no TrustBar content, since no approved trust-item copy exists yet", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+    expect(screen.queryByRole("region", { name: "Indicadores de confianza" })).not.toBeInTheDocument();
+  });
+
+  it("anchors the About section at #quienes-somos, reachable via the homepage anchor", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.querySelector("section#quienes-somos")).toBeInTheDocument();
+  });
+
+  it("renders the three approved About card titles with no invented body copy", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    for (const title of ["Nuestra historia", "Nuestra misión", "Nuestra visión"]) {
+      const heading = screen.getByRole("heading", { level: 3, name: title });
+      expect(heading.closest("article")?.querySelector("p")).not.toBeInTheDocument();
+    }
+  });
+
+  it("renders Hero before the About section in document order", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    const h1 = screen.getByRole("heading", { level: 1 });
+    const about = document.querySelector("section#quienes-somos")!;
+    expect(h1.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

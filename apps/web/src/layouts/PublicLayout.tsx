@@ -3,6 +3,7 @@ import { Link, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
+import { useScrollToHash } from "./shared/useScrollToHash";
 
 const NAV_LINKS = [
   { to: "/quienes-somos", label: "Quiénes somos" },
@@ -22,6 +23,7 @@ const NAV_LINKS = [
 export function PublicLayout() {
   const mainRef = useRef<HTMLElement>(null);
   useFocusMainOnRouteChange(mainRef);
+  useScrollToHash();
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-base">
