@@ -5,6 +5,7 @@ import { AuthLayout } from "../layouts/AuthLayout";
 import { RouteErrorBoundary } from "../layouts/shared/RouteErrorBoundary";
 import { NotFoundPage } from "../pages/errors/NotFoundPage";
 import { RoutePlaceholder } from "../pages/RoutePlaceholder";
+import { HomePage } from "../pages/home/HomePage";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
@@ -58,7 +59,7 @@ export const routeConfig: RouteObject[] = [
     element: <PublicLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <RoutePlaceholder title="Inicio" /> },
+      { index: true, element: <HomePage /> },
       { path: "quienes-somos", element: <RoutePlaceholder title="Quiénes somos" /> },
       { path: "beneficios", element: <RoutePlaceholder title="Beneficios" /> },
       { path: "portafolio", element: <RoutePlaceholder title="Portafolio" /> },

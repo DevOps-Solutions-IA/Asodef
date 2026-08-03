@@ -29,7 +29,10 @@ describe("router", () => {
 
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Inicio" })).toBeInTheDocument();
+    // The homepage's Hero section (US-012) renders here - assert on its
+    // one confirmed piece of real copy (the company tagline) and its
+    // real-route CTA, rather than an invented page heading.
+    expect(screen.getByRole("link", { name: "Centro de pagos" })).toHaveAttribute("href", "/pagos");
   });
 
   it("renders each top-level public marketing route inside PublicLayout", () => {
