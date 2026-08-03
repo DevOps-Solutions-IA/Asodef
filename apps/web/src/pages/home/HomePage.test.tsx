@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createQueryClient } from "../../lib/query-client";
 import { HomePage } from "./HomePage";
 
 function mockPrefersReducedMotion(matches: boolean) {
@@ -16,10 +18,13 @@ function mockPrefersReducedMotion(matches: boolean) {
 }
 
 function renderHomePage() {
+  const queryClient = createQueryClient();
   return render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -395,5 +400,54 @@ describe("HomePage - approved Coverage and Alliance CTA copy (US-016)", () => {
 
     expect(coverageCard.style.opacity === "" || coverageCard.style.opacity === "1").toBe(true);
     expect(allianceContainer.style.opacity === "" || allianceContainer.style.opacity === "1").toBe(true);
+  });
+});
+
+describe("HomePage - Contact section (US-018)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders exactly one page-level h1 with the Contact section's h2 present", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Contáctanos" })).toBeInTheDocument();
+  });
+
+  it("anchors the Contact section at #contacto, resolving Hero's and AllianceCta's existing CTA hrefs", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.querySelector("section#contacto")).toBeInTheDocument();
+
+    // Both CTAs already pointed at #contacto in earlier stories (US-012,
+    // US-016) before any real target existed - confirm they now resolve
+    // to this real section, not a dead anchor.
+    expect(screen.getByRole("link", { name: "Contáctanos" })).toHaveAttribute("href", "/#contacto");
+    expect(screen.getByRole("link", { name: "Quiero ser aliado" })).toHaveAttribute("href", "/#contacto");
+  });
+
+  it("renders the Contact form with all required fields", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+    for (const label of ["Nombre completo", "Empresa", "Cargo", "Ciudad", "Correo electrónico", "Sector", "Mensaje"]) {
+      expect(screen.getByLabelText(label, { exact: false, selector: "input, textarea" })).toBeInTheDocument();
+    }
+  });
+
+  it("renders every homepage section, ending with Contact, in the correct document order", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    const alliance = document.querySelector("section#aliados")!;
+    const contact = document.querySelector("section#contacto")!;
+    expect(alliance.compareDocumentPosition(contact) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders no lorem/placeholder text anywhere on the homepage", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.textContent).not.toMatch(/lorem ipsum/i);
   });
 });

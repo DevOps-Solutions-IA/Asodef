@@ -6,16 +6,17 @@ import { CompanyBenefits } from "./CompanyBenefits";
 import { BenefitPortfolio } from "./BenefitPortfolio";
 import { CoverageSection } from "./CoverageSection";
 import { AllianceCta } from "./AllianceCta";
+import { ContactSection } from "./ContactSection";
 
 /**
  * Institutional homepage. US-012 (Hero), US-013 (TrustBar + About),
- * US-015 (Company Benefits + Benefit Portfolio), and US-016 (Coverage +
- * Alliance CTA) are all content-complete with approved Spanish copy.
+ * US-015 (Company Benefits + Benefit Portfolio), US-016 (Coverage +
+ * Alliance CTA), and US-018 (Contact form) are all content-complete.
  * US-014 (Statistics) is deferred by product decision - no verified
  * figures exist yet, so it isn't rendered here.
  *
- * Hero's #contacto CTA anchor remains a stable id for a still-unbuilt
- * future Contact section.
+ * Hero's/AllianceCta's "#contacto" anchors now resolve to a real,
+ * working section (US-018) - previously a stable id with no target yet.
  */
 export function HomePage() {
   return (
@@ -129,6 +130,12 @@ export function HomePage() {
           phoneNumber: "573232733927",
           message: "Hola, quiero conocer más información para ser aliado de ASODEF.",
         }}
+      />
+
+      <ContactSection
+        eyebrow="Hablemos"
+        heading="Contáctanos"
+        description="Cuéntanos en qué podemos ayudarte y te responderemos lo antes posible."
       />
     </>
   );

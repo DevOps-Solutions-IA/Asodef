@@ -4,6 +4,7 @@ import { ASODEF_COMPANY } from "@asodef/config";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 import { useScrollToHash } from "./shared/useScrollToHash";
+import { WhatsAppFloatingButton } from "./shared/WhatsAppFloatingButton";
 
 const NAV_LINKS = [
   { to: "/quienes-somos", label: "Quiénes somos" },
@@ -12,6 +13,16 @@ const NAV_LINKS = [
   { to: "/cobertura", label: "Cobertura" },
   { to: "/pagos", label: "Pagos" },
   { to: "/contacto", label: "Contacto" },
+];
+
+// US-018: verbatim from the approved acceptance criteria.
+const WHATSAPP_NUMBER = "573232733927";
+
+const LEGAL_LINKS = [
+  { to: "/legal", label: "Centro legal" },
+  { to: "/legal/terminos-y-condiciones", label: "Términos y condiciones" },
+  { to: "/legal/politica-de-privacidad", label: "Política de privacidad" },
+  { to: "/legal/politica-de-cookies", label: "Política de cookies" },
 ];
 
 /**
@@ -57,14 +68,57 @@ export function PublicLayout() {
       </main>
 
       <footer className="border-t border-border-soft bg-brand-deep text-white">
-        <div className="mx-auto max-w-7xl px-5 py-10 text-sm sm:px-8 lg:px-12">
-          <p className="font-display text-lg font-semibold">{ASODEF_COMPANY.legalName}</p>
-          <p className="mt-1 text-white/70">{ASODEF_COMPANY.tagline}</p>
-          <p className="mt-6 text-white/50">
+        <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 text-sm sm:px-8 md:grid-cols-3 lg:px-12">
+          <div>
+            <p className="font-display text-lg font-semibold">{ASODEF_COMPANY.legalName}</p>
+            <p className="mt-1 text-white/70">{ASODEF_COMPANY.tagline}</p>
+          </div>
+
+          <nav aria-label="Pie de página">
+            <p className="font-display text-sm font-semibold tracking-wide text-white/60">Navegación</p>
+            <ul className="mt-3 flex flex-col gap-2">
+              {NAV_LINKS.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-white/80 hover:text-white hover:underline">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div>
+            <p className="font-display text-sm font-semibold tracking-wide text-white/60">Contacto</p>
+            <address className="mt-3 flex flex-col gap-1 not-italic text-white/80">
+              <span>Juan Pablo Filigrana, Director Comercial</span>
+              <span>WhatsApp 323 273 3927</span>
+              <span>Cali, Colombia</span>
+            </address>
+
+            <ul className="mt-4 flex flex-col gap-2">
+              {LEGAL_LINKS.map((link) => (
+                <li key={link.to}>
+                  <Link to={link.to} className="text-white/60 hover:text-white hover:underline">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10">
+          <p className="mx-auto max-w-7xl px-5 py-6 text-sm text-white/50 sm:px-8 lg:px-12">
             © {new Date().getFullYear()} {ASODEF_COMPANY.legalName} Todos los derechos reservados.
           </p>
         </div>
       </footer>
+
+      <WhatsAppFloatingButton
+        phoneNumber={WHATSAPP_NUMBER}
+        tooltip="Escríbenos por WhatsApp"
+        ariaLabel="Contactar por WhatsApp (se abre en una pestaña nueva)"
+      />
     </div>
   );
 }
