@@ -43,6 +43,6 @@ import { RolesGuard } from "./guards/roles.guard";
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, TokenService, SessionService],
+  exports: [AuthService, TokenService, SessionService, AccountUnlockService, PasswordResetTokenService, PasswordService],
 })
 export class AuthModule {}

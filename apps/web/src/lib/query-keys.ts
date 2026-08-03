@@ -17,4 +17,19 @@ export const queryKeys = {
      * state in multiple global stores"). */
     me: () => ["auth", "me"] as const,
   },
+  admin: {
+    users: {
+      stats: () => ["admin", "users", "stats"] as const,
+      list: (filters: unknown) => ["admin", "users", "list", filters] as const,
+      detail: (userId: string) => ["admin", "users", "detail", userId] as const,
+      roles: (userId: string) => ["admin", "users", "detail", userId, "roles"] as const,
+      sessions: (userId: string) => ["admin", "users", "detail", userId, "sessions"] as const,
+      securityEvents: (userId: string, filters: unknown) =>
+        ["admin", "users", "detail", userId, "security-events", filters] as const,
+      /** Shared prefix for invalidating every cached list page at once
+       * after a mutation (create/deactivate/reactivate/etc. all change
+       * what the list should show). */
+      allLists: () => ["admin", "users", "list"] as const,
+    },
+  },
 } as const;

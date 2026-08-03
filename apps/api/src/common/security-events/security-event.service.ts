@@ -1,6 +1,26 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { Prisma, SecurityEvent } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
-import type { RecordSecurityEventInput } from "./security-event.types";
+import type { RecordSecurityEventInput, SecurityEventType } from "./security-event.types";
+
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 20;
+
+export interface SecurityEventFilters {
+  type?: SecurityEventType;
+  fromDate?: Date;
+  toDate?: Date;
+  requestId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SecurityEventListResult {
+  items: SecurityEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
 
 /**
  * A low-cardinality subset of event types worth a structured log line in
@@ -52,5 +72,42 @@ export class SecurityEventService {
         error instanceof Error ? error.stack : undefined,
       );
     }
+  }
+
+  /** Paginated, filterable security-event history for one user (US-011's
+   * admin security-history view) - `userId` here matches whatever
+   * `.record()` was called with (the acting admin for governance-type
+   * events, or the account owner for session/login-lifecycle events),
+   * exactly the semantics already established by every existing caller.
+   * Bounded page size - never returns an unbounded result set. */
+  async findForUser(userId: string, filters: SecurityEventFilters = {}): Promise<SecurityEventListResult> {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const pageSize = filters.pageSize && filters.pageSize > 0 ? Math.min(filters.pageSize, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+
+    const where: Prisma.SecurityEventWhereInput = {
+      userId,
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.requestId ? { requestId: filters.requestId } : {}),
+      ...(filters.fromDate || filters.toDate
+        ? {
+            createdAt: {
+              ...(filters.fromDate ? { gte: filters.fromDate } : {}),
+              ...(filters.toDate ? { lte: filters.toDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.securityEvent.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.securityEvent.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 }

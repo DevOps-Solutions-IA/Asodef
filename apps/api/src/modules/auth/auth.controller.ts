@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, Req, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
-import { AuthService, RateLimitedException, type RequestContext } from "./auth.service";
+import { AuthService, RateLimitedException } from "./auth.service";
 import { AuthCookieService } from "./auth-cookie.service";
 import { PasswordRecoveryService } from "./password-recovery.service";
 import { PasswordRecoveryErrorCode, PasswordRecoveryException } from "./password-recovery.types";
@@ -11,6 +11,7 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
+import { buildRequestContext } from "../../common/http/request-context.util";
 import type { AuthenticatedRequest, RequestUser } from "./types/request-user.type";
 
 const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más tarde.";
@@ -20,15 +21,6 @@ const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más 
  * 429, matching the existing RateLimitedException convention below. */
 function passwordRecoveryHttpStatus(code: PasswordRecoveryErrorCode): number {
   return code === PasswordRecoveryErrorCode.RATE_LIMITED ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_REQUEST;
-}
-
-function buildRequestContext(request: AuthenticatedRequest): RequestContext {
-  const userAgent = request.headers["user-agent"];
-  return {
-    ipAddress: request.ip ?? null,
-    userAgent: typeof userAgent === "string" ? userAgent : null,
-    requestId: (request as AuthenticatedRequest & { requestId?: string }).requestId ?? null,
-  };
 }
 
 @ApiTags("auth")

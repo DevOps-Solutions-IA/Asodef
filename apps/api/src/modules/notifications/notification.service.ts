@@ -20,6 +20,14 @@ export interface QueuePasswordChangedEmailInput {
   correlationId: string;
 }
 
+export interface QueueAccountInvitationEmailInput {
+  recipientEmail: string;
+  userId: string;
+  fullName: string;
+  setupUrl: string;
+  correlationId: string;
+}
+
 /**
  * The notification "outbox" (US-007): every send attempt is durably
  * recorded as a NotificationJob (status/retryCount/failureReason/
@@ -61,6 +69,39 @@ export class NotificationService {
       to: input.recipientEmail,
       subject: "Restablece tu contraseña - ASODEF",
       textBody: this.buildPasswordResetBody(input.resetUrl),
+      templateVersion: TEMPLATE_VERSION,
+      correlationId: input.correlationId,
+    });
+
+    return job.id;
+  }
+
+  /**
+   * US-011's account-invitation flow (option A from the story: invitation
+   * with a one-time setup token, preferred over an admin-generated
+   * temporary password). Deliberately reuses the *same* PasswordReset
+   * token mechanism and the *same* /restablecer-clave frontend page
+   * already built and verified in US-010 - the new user's account is
+   * created with an unusable random password hash, and "setting your
+   * initial password" is, mechanically, identical to a password reset.
+   * This avoids inventing a second token table/page/NotificationType for
+   * a flow that is otherwise indistinguishable from one already built.
+   */
+  async queueAccountInvitationEmail(input: QueueAccountInvitationEmailInput): Promise<string> {
+    const job = await this.prisma.notificationJob.create({
+      data: {
+        type: "PASSWORD_RESET",
+        recipientEmail: input.recipientEmail,
+        userId: input.userId,
+        correlationId: input.correlationId,
+        templateVersion: TEMPLATE_VERSION,
+      },
+    });
+
+    void this.dispatch(job.id, input.userId, {
+      to: input.recipientEmail,
+      subject: "Bienvenido a ASODEF - configura tu contraseña",
+      textBody: this.buildAccountInvitationBody(input.fullName, input.setupUrl),
       templateVersion: TEMPLATE_VERSION,
       correlationId: input.correlationId,
     });
@@ -160,6 +201,16 @@ export class NotificationService {
       `Si fuiste tú, haz clic en el siguiente enlace para continuar: ${resetUrl}`,
       "Este enlace expira pronto y solo puede usarse una vez.",
       "Si no solicitaste este cambio, puedes ignorar este mensaje con tranquilidad.",
+      `¿Dudas? Escríbenos a ${this.corporateEmail}.`,
+    ].join("\n\n");
+  }
+
+  private buildAccountInvitationBody(fullName: string, setupUrl: string): string {
+    return [
+      `Hola ${fullName},`,
+      "Se creó una cuenta para ti en la plataforma administrativa de ASODEF.",
+      `Para activarla, configura tu contraseña aquí: ${setupUrl}`,
+      "Este enlace expira pronto y solo puede usarse una vez.",
       `¿Dudas? Escríbenos a ${this.corporateEmail}.`,
     ].join("\n\n");
   }

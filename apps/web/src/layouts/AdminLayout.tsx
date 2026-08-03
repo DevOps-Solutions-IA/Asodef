@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { to: "/admin/reportes", label: "Reportes" },
   { to: "/admin/auditoria", label: "Auditoría" },
   { to: "/admin/usuarios", label: "Usuarios" },
+  { to: "/admin/configuracion", label: "Configuración" },
 ];
 
 /**

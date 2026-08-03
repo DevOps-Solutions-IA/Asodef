@@ -27,3 +27,4 @@ export * from "./components/Breadcrumb";
 export * from "./components/PageHeader";
 export * from "./components/SectionHeading";
 export * from "./components/StatusBadge";
+export * from "./components/Pagination";

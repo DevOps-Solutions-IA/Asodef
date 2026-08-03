@@ -114,7 +114,7 @@ export class PasswordRecoveryService {
 
   private buildResetUrl(rawToken: string): string {
     const base = this.configService.get("PUBLIC_APP_URL", { infer: true });
-    return `${base}/restablecer-password?token=${encodeURIComponent(rawToken)}`;
+    return `${base}/restablecer-clave?token=${encodeURIComponent(rawToken)}`;
   }
 
   async resetPassword(dto: ResetPasswordDto, context: RequestContext): Promise<ResetPasswordResponse> {

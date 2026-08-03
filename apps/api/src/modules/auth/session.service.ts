@@ -96,6 +96,17 @@ export class SessionService {
     return { outcome: "rotated", session: newSession, rawRefreshToken };
   }
 
+  /** Every session ever created for this user, newest first - the
+   * admin-facing session-visibility list (US-011). Returns full rows
+   * (including refreshTokenHash) - callers exposing this over HTTP must
+   * map to a safe subset themselves, never forward a row unmapped. */
+  async listSessionsForUser(userId: string): Promise<Session[]> {
+    return this.prisma.session.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   async revokeSession(sessionId: string, reason: SessionRevocationReason): Promise<void> {
     await this.prisma.session.updateMany({
       where: { id: sessionId, revokedAt: null },

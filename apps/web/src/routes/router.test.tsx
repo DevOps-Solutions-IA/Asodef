@@ -5,10 +5,18 @@ import { routeConfig, routerFutureConfig } from "./router";
 import { buildCurrentUser, mockAuthFetch, renderWithAuth } from "../test-utils/auth-test-helpers";
 import type { CurrentUser } from "../lib/auth/auth-types";
 
-function renderAtPath(path: string, currentUser: CurrentUser | null = null) {
-  mockAuthFetch(currentUser);
+function renderAtPath(
+  path: string,
+  currentUser: CurrentUser | null = null,
+  additionalHandlers?: (url: string, init: RequestInit | undefined) => Promise<Response> | undefined,
+) {
+  mockAuthFetch(currentUser, additionalHandlers);
   const testRouter = createMemoryRouter(routeConfig, { initialEntries: [path], future: routerFutureConfig });
   return renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
+}
+
+function jsonResponse(status: number, body: unknown): Promise<Response> {
+  return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
 }
 
 describe("router", () => {
@@ -73,6 +81,34 @@ describe("router", () => {
 
     expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dashboard administrativo" })).not.toBeInTheDocument();
+  });
+
+  it("renders the real UserListPage for /admin/usuarios when the actor holds users.read", async () => {
+    renderAtPath(
+      "/admin/usuarios",
+      buildCurrentUser({ roles: ["ADMIN"], permissions: ["users.read", "users.create"] }),
+      (url) => {
+        if (url.includes("/admin/users")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+        return undefined;
+      },
+    );
+
+    expect(await screen.findByRole("heading", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Administración" })).toBeInTheDocument();
+  });
+
+  it("shows ForbiddenPage for /admin/usuarios when the actor lacks users.read (permission-based navigation, not just role-based)", async () => {
+    renderAtPath("/admin/usuarios", buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Usuarios" })).not.toBeInTheDocument();
+  });
+
+  it("shows ForbiddenPage for /admin/usuarios/nuevo when the actor holds users.read but not users.create", async () => {
+    renderAtPath("/admin/usuarios/nuevo", buildCurrentUser({ roles: ["ADMIN"], permissions: ["users.read"] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Nuevo usuario" })).not.toBeInTheDocument();
   });
 
   it("renders the lazily-loaded LegalLayout with its document list for /legal/politica-de-privacidad", async () => {

@@ -55,7 +55,15 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "reports.export", description: "Exportar reportes" },
   { key: "users.read", description: "Ver usuarios internos" },
   { key: "users.manage", description: "Administrar usuarios internos" },
+  { key: "users.create", description: "Crear usuarios internos" },
+  { key: "users.update", description: "Editar datos de perfil de usuarios internos" },
+  { key: "users.deactivate", description: "Desactivar usuarios internos" },
+  { key: "users.reactivate", description: "Reactivar usuarios internos" },
   { key: "users.unlock", description: "Desbloquear cuentas de usuario tras un bloqueo por intentos fallidos" },
+  { key: "users.roles.manage", description: "Asignar y revocar roles de usuarios internos" },
+  { key: "users.sessions.read", description: "Ver sesiones activas de usuarios internos" },
+  { key: "users.sessions.revoke", description: "Revocar sesiones de usuarios internos" },
+  { key: "users.security.read", description: "Ver historial de seguridad de usuarios internos" },
   { key: "roles.manage", description: "Administrar roles" },
   { key: "permissions.manage", description: "Administrar permisos" },
   { key: "content.read", description: "Ver contenido institucional" },
@@ -96,6 +104,15 @@ const ALL_PERMISSION_KEYS = PERMISSION_CATALOG.map((p) => p.key);
 // broad account-unlock capability to ADMIN, so per that story's explicit
 // instruction it stays SUPER_ADMIN-only rather than being silently
 // inherited via "everything ADMIN doesn't lose".
+//
+// US-011: users.roles.manage joins the set because RoleAssignmentService
+// itself hard-requires the acting actor to hold SUPER_ADMIN regardless of
+// any permission grant (US-008) - granting this permission to ADMIN would
+// only create a dead/misleading capability, never an actually-usable one.
+// users.security.read also joins the set: a user's security-event history
+// (login failures, lockout/unlock activity, session revocations) is
+// sensitive enough that the story explicitly requires it stay opt-in
+// rather than implied by the ADMIN role name.
 const PLATFORM_ONLY_KEYS = [
   "roles.manage",
   "permissions.manage",
@@ -103,16 +120,19 @@ const PLATFORM_ONLY_KEYS = [
   "approvals.manage",
   "legal.approve",
   "users.unlock",
+  "users.roles.manage",
+  "users.security.read",
 ];
 
 /**
  * Role -> permission key mapping.
  *
- * ADMIN intentionally excludes the six platform-defining permissions
- * (roles/permissions/settings/approvals/legal-approve/users.unlock) so
- * that changing the platform's own governance rules, publishing binding
- * legal documents, or unlocking a locked-out account always requires
- * SUPER_ADMIN, not just day-to-day operational
+ * ADMIN intentionally excludes the eight platform-defining permissions
+ * (roles/permissions/settings/approvals/legal-approve/users.unlock/
+ * users.roles.manage/users.security.read) so that changing the platform's
+ * own governance rules, publishing binding legal documents, unlocking a
+ * locked-out account, reassigning roles, or reading a user's security
+ * history always requires SUPER_ADMIN, not just day-to-day operational
  * access. COMPANY_PARTNER/AFFILIATE/CUSTOMER permissions are resource-type
  * gates only - they do not imply row-level scoping. The service layer for
  * each self-service portal (a later story) must still restrict a

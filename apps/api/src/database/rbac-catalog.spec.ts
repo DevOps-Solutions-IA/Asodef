@@ -49,7 +49,7 @@ describe("RBAC catalog data integrity", () => {
     expect(new Set(ROLE_PERMISSIONS.SUPER_ADMIN)).toEqual(permissionKeys);
   });
 
-  it("withholds the six platform-governance permissions from ADMIN (US-008: legal.approve, US-009: users.unlock)", () => {
+  it("withholds the eight platform-governance permissions from ADMIN (US-008: legal.approve, US-009: users.unlock, US-011: users.roles.manage/users.security.read)", () => {
     const platformOnly = [
       "roles.manage",
       "permissions.manage",
@@ -57,6 +57,8 @@ describe("RBAC catalog data integrity", () => {
       "approvals.manage",
       "legal.approve",
       "users.unlock",
+      "users.roles.manage",
+      "users.security.read",
     ];
     for (const key of platformOnly) {
       expect(ROLE_PERMISSIONS.ADMIN).not.toContain(key);
@@ -65,7 +67,7 @@ describe("RBAC catalog data integrity", () => {
     expect(ROLE_PERMISSIONS.ADMIN.length).toBe(PERMISSION_CATALOG.length - platformOnly.length);
   });
 
-  describe("US-008/US-009 governance matrix rules", () => {
+  describe("US-008/US-009/US-011 governance matrix rules", () => {
     const GOVERNANCE_KEYS = [
       "roles.manage",
       "permissions.manage",
@@ -73,6 +75,8 @@ describe("RBAC catalog data integrity", () => {
       "approvals.manage",
       "legal.approve",
       "users.unlock",
+      "users.roles.manage",
+      "users.security.read",
     ];
     const nonSuperAdminRoles = ROLE_CATALOG.map((r) => r.name).filter((name) => name !== "SUPER_ADMIN");
 
@@ -126,6 +130,21 @@ describe("RBAC catalog data integrity", () => {
       }
     });
 
+    it("grants ADMIN the ordinary (non-platform-only) user-management permissions introduced by US-011", () => {
+      const ordinaryUserManagementKeys = [
+        "users.read",
+        "users.create",
+        "users.update",
+        "users.deactivate",
+        "users.reactivate",
+        "users.sessions.read",
+        "users.sessions.revoke",
+      ];
+      for (const key of ordinaryUserManagementKeys) {
+        expect(ROLE_PERMISSIONS.ADMIN).toContain(key);
+      }
+    });
+
     it("denies CUSTOMER_SERVICE refunds, legal/policy approval, permission management, and account unlock", () => {
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("payments.refund");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("legal.approve");
@@ -133,6 +152,8 @@ describe("RBAC catalog data integrity", () => {
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("permissions.manage");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("users.unlock");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("roles.manage");
+      expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("users.roles.manage");
+      expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("users.security.read");
     });
   });
 });

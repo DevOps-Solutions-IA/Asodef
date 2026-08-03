@@ -11,6 +11,15 @@ import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { GuestOnlyRoute } from "../lib/auth/route-guards/GuestOnlyRoute";
 import { AuthenticatedRoute } from "../lib/auth/route-guards/AuthenticatedRoute";
 import { RoleRoute } from "../lib/auth/route-guards/RoleRoute";
+import { PermissionRoute } from "../lib/auth/route-guards/PermissionRoute";
+import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
+import { UserListPage } from "../pages/admin/UserListPage";
+import { CreateUserPage } from "../pages/admin/CreateUserPage";
+import { UserDetailPage } from "../pages/admin/UserDetailPage";
+import { EditUserPage } from "../pages/admin/EditUserPage";
+import { UserRolesPage } from "../pages/admin/UserRolesPage";
+import { UserSessionsPage } from "../pages/admin/UserSessionsPage";
+import { UserSecurityPage } from "../pages/admin/UserSecurityPage";
 
 // Payment/account/company/admin/legal are never needed on first paint of
 // the public marketing site, so they're code-split - satisfies "no
@@ -151,7 +160,7 @@ export const routeConfig: RouteObject[] = [
             path: "admin",
             element: <AdminLayout />,
             children: [
-              { index: true, element: <RoutePlaceholder title="Dashboard administrativo" /> },
+              { index: true, element: <AdminDashboardPage /> },
               { path: "clientes", element: <RoutePlaceholder title="Clientes" /> },
               { path: "afiliados", element: <RoutePlaceholder title="Afiliados" /> },
               { path: "empresas", element: <RoutePlaceholder title="Empresas" /> },
@@ -164,7 +173,43 @@ export const routeConfig: RouteObject[] = [
               { path: "pqr", element: <RoutePlaceholder title="PQR" /> },
               { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
               { path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> },
-              { path: "usuarios", element: <RoutePlaceholder title="Usuarios" /> },
+              { path: "configuracion", element: <RoutePlaceholder title="Configuración" /> },
+              {
+                path: "usuarios",
+                children: [
+                  {
+                    // users.read gates the list/detail read views.
+                    element: <PermissionRoute permissions={["users.read"]} />,
+                    children: [
+                      { index: true, element: <UserListPage /> },
+                      { path: ":userId", element: <UserDetailPage /> },
+                    ],
+                  },
+                  {
+                    element: <PermissionRoute permissions={["users.create"]} />,
+                    children: [{ path: "nuevo", element: <CreateUserPage /> }],
+                  },
+                  {
+                    element: <PermissionRoute permissions={["users.update"]} />,
+                    children: [{ path: ":userId/editar", element: <EditUserPage /> }],
+                  },
+                  {
+                    // users.roles.manage is SUPER_ADMIN-only in the seeded
+                    // matrix (RoleAssignmentService itself also enforces
+                    // this - the backend remains authoritative either way).
+                    element: <PermissionRoute permissions={["users.roles.manage"]} />,
+                    children: [{ path: ":userId/roles", element: <UserRolesPage /> }],
+                  },
+                  {
+                    element: <PermissionRoute permissions={["users.sessions.read"]} />,
+                    children: [{ path: ":userId/sesiones", element: <UserSessionsPage /> }],
+                  },
+                  {
+                    element: <PermissionRoute permissions={["users.security.read"]} />,
+                    children: [{ path: ":userId/seguridad", element: <UserSecurityPage /> }],
+                  },
+                ],
+              },
             ],
           },
         ],
