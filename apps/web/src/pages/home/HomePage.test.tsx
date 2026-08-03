@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { HomePage } from "./HomePage";
 
@@ -74,14 +74,16 @@ describe("HomePage - approved Hero copy (US-012)", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
 
-    expect(screen.getByText("Cercanía")).toBeInTheDocument();
-    expect(screen.getByText("Atención humana")).toBeInTheDocument();
-    expect(screen.getByText("Confianza")).toBeInTheDocument();
-    expect(screen.getByText("Gestión responsable")).toBeInTheDocument();
-    expect(screen.getByText("Bienestar")).toBeInTheDocument();
-    // "Compromiso familiar" is approved copy in both the Hero stat label
-    // and the TrustBar's third item title - two distinct, legitimate uses.
-    expect(screen.getAllByText("Compromiso familiar")).toHaveLength(2);
+    // Scoped to the Hero section: "Gestión responsable" and "Compromiso
+    // familiar" are also approved copy elsewhere (a CompanyBenefits card
+    // title and a TrustBar item title, respectively - US-015/US-013).
+    const hero = within(screen.getByText("Cercanía").closest("section")!);
+    expect(hero.getByText("Cercanía")).toBeInTheDocument();
+    expect(hero.getByText("Atención humana")).toBeInTheDocument();
+    expect(hero.getByText("Confianza")).toBeInTheDocument();
+    expect(hero.getByText("Gestión responsable")).toBeInTheDocument();
+    expect(hero.getByText("Bienestar")).toBeInTheDocument();
+    expect(hero.getByText("Compromiso familiar")).toBeInTheDocument();
   });
 
   it("positions all three stats at distinct locations (no overlapping duplicate position)", () => {
@@ -133,16 +135,18 @@ describe("HomePage - approved TrustBar and About copy (US-013)", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
 
-    expect(screen.getByRole("region", { name: "Indicadores de confianza" })).toBeInTheDocument();
-    expect(screen.getByText("Atención cercana")).toBeInTheDocument();
-    expect(screen.getByText("Acompañamiento humano y responsable")).toBeInTheDocument();
-    expect(screen.getByText("Gestión confiable")).toBeInTheDocument();
-    expect(screen.getByText("Procesos claros y orientados al bienestar")).toBeInTheDocument();
-    // "Compromiso familiar" is shared with a Hero stat label - assert both instances exist.
-    expect(screen.getAllByText("Compromiso familiar")).toHaveLength(2);
-    expect(screen.getByText("Soluciones pensadas para las familias")).toBeInTheDocument();
-    expect(screen.getByText("Servicio responsable")).toBeInTheDocument();
-    expect(screen.getByText("Atención con respeto, transparencia y cuidado")).toBeInTheDocument();
+    // Scoped to the TrustBar region: "Atención cercana" and "Compromiso
+    // familiar" are also approved copy elsewhere (CompanyBenefits card
+    // title and a Hero stat label, respectively - US-015).
+    const trustBar = within(screen.getByRole("region", { name: "Indicadores de confianza" }));
+    expect(trustBar.getByText("Atención cercana")).toBeInTheDocument();
+    expect(trustBar.getByText("Acompañamiento humano y responsable")).toBeInTheDocument();
+    expect(trustBar.getByText("Gestión confiable")).toBeInTheDocument();
+    expect(trustBar.getByText("Procesos claros y orientados al bienestar")).toBeInTheDocument();
+    expect(trustBar.getByText("Compromiso familiar")).toBeInTheDocument();
+    expect(trustBar.getByText("Soluciones pensadas para las familias")).toBeInTheDocument();
+    expect(trustBar.getByText("Servicio responsable")).toBeInTheDocument();
+    expect(trustBar.getByText("Atención con respeto, transparencia y cuidado")).toBeInTheDocument();
   });
 
   it("renders the approved About eyebrow, heading, and introductory paragraph", () => {
@@ -206,9 +210,101 @@ describe("HomePage - approved TrustBar and About copy (US-013)", () => {
     mockPrefersReducedMotion(true);
     renderHomePage();
 
-    const trustItem = screen.getByText("Atención cercana").closest("div")!;
+    // "Atención cercana" is approved copy in both the TrustBar item and a
+    // CompanyBenefits card title (US-015) - disambiguate by container tag.
+    const trustItem = screen.getAllByText("Atención cercana").find((el) => el.closest("div") && !el.closest("article"))!;
     const aboutCard = screen.getByText("Nuestra historia").closest("article")!;
-    expect(trustItem.style.opacity === "" || trustItem.style.opacity === "1").toBe(true);
+    expect(trustItem.closest("div")!.style.opacity === "" || trustItem.closest("div")!.style.opacity === "1").toBe(true);
     expect(aboutCard.style.opacity === "" || aboutCard.style.opacity === "1").toBe(true);
+  });
+});
+
+describe("HomePage - approved CompanyBenefits and BenefitPortfolio copy (US-015)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders exactly one page-level h1 with Benefits/Portfolio headings present", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Soluciones que aportan bienestar y valor" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Alternativas pensadas para cada necesidad" })).toBeInTheDocument();
+  });
+
+  it("anchors CompanyBenefits at #beneficios and BenefitPortfolio at #portafolio", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.querySelector("section#beneficios")).toBeInTheDocument();
+    expect(container.querySelector("section#portafolio")).toBeInTheDocument();
+  });
+
+  it("renders all six approved Company Benefits cards with their bodies", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    const benefits = within(container.querySelector("section#beneficios")!);
+
+    for (const title of [
+      "Atención cercana",
+      "Soluciones flexibles",
+      "Bienestar familiar",
+      "Gestión responsable",
+      "Acompañamiento continuo",
+      "Relaciones de confianza",
+    ]) {
+      expect(benefits.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+    }
+    expect(
+      benefits.getByText("Brindamos orientación clara y acompañamiento humano durante cada etapa del servicio."),
+    ).toBeInTheDocument();
+    expect(
+      benefits.getByText("Construimos vínculos basados en el cumplimiento, la comunicación y el respeto mutuo."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders all eight approved Benefit Portfolio categories with unique 'Conocer más' links", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    const portfolio = within(container.querySelector("section#portafolio")!);
+
+    const categories = [
+      "Bienestar personal",
+      "Bienestar familiar",
+      "Educación y desarrollo",
+      "Hogar y protección",
+      "Recreación y experiencias",
+      "Orientación y acompañamiento",
+      "Soluciones para empresas",
+      "Servicios complementarios",
+    ];
+
+    for (const title of categories) {
+      expect(portfolio.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
+      const link = portfolio.getByRole("link", { name: `Conocer más sobre ${title}` });
+      expect(link).toHaveAttribute("href", "/#contacto");
+    }
+  });
+
+  it("renders no lorem/placeholder text anywhere on the homepage", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.textContent).not.toMatch(/lorem ipsum/i);
+  });
+
+  it("renders Hero, TrustBar, About, CompanyBenefits, and BenefitPortfolio in document order", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    const h1 = screen.getByRole("heading", { level: 1 });
+    const trustBar = screen.getByRole("region", { name: "Indicadores de confianza" });
+    const about = document.querySelector("section#quienes-somos")!;
+    const benefits = document.querySelector("section#beneficios")!;
+    const portfolio = document.querySelector("section#portafolio")!;
+
+    expect(h1.compareDocumentPosition(trustBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trustBar.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(about.compareDocumentPosition(benefits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(benefits.compareDocumentPosition(portfolio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
