@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, Req, Res } from "@nestjs/common";
 import type { Response } from "express";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import { AuthService, RateLimitedException, type RequestContext } from "./auth.service";
 import { AuthCookieService } from "./auth-cookie.service";
 import { PasswordRecoveryService } from "./password-recovery.service";
@@ -93,6 +93,12 @@ export class AuthController {
     return { status: "ok" };
   }
 
+  // Swagger scheme name matches the default COOKIE_ACCESS_TOKEN_NAME
+  // ("asodef_at") - see config/swagger.ts. Decorators are evaluated at
+  // class-load time, before env is read, so a deployment that overrides
+  // the cookie name will have a (harmless, documentation-only) mismatch
+  // here until this literal is updated to match.
+  @ApiCookieAuth("asodef_at")
   @Post("logout-all")
   @HttpCode(HttpStatus.OK)
   async logoutAll(
@@ -110,6 +116,7 @@ export class AuthController {
     return { status: "ok" };
   }
 
+  @ApiCookieAuth("asodef_at")
   @Get("me")
   async me(@CurrentUser() user: RequestUser | undefined) {
     if (!user) {
@@ -140,6 +147,7 @@ export class AuthController {
     }
   }
 
+  @ApiCookieAuth("asodef_at")
   @Post("change-password")
   @HttpCode(HttpStatus.OK)
   async changePassword(

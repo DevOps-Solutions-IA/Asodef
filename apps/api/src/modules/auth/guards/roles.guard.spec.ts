@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RolesGuard } from "./roles.guard";
+import { SecurityEventService } from "../../../common/security-events/security-event.service";
 import type { RequestUser } from "../types/request-user.type";
 
 function buildContext(user?: RequestUser): ExecutionContext {
@@ -23,11 +24,13 @@ const ADMIN_USER: RequestUser = {
 
 describe("RolesGuard", () => {
   let reflector: Reflector;
+  let securityEventService: jest.Mocked<Pick<SecurityEventService, "record">>;
   let guard: RolesGuard;
 
   beforeEach(() => {
     reflector = new Reflector();
-    guard = new RolesGuard(reflector);
+    securityEventService = { record: jest.fn().mockResolvedValue(undefined) };
+    guard = new RolesGuard(reflector, securityEventService as unknown as SecurityEventService);
   });
 
   it("allows a route with no @RequireRoles() metadata", () => {
@@ -48,5 +51,24 @@ describe("RolesGuard", () => {
   it("rejects when there is no authenticated user", () => {
     jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["SUPER_ADMIN"]);
     expect(() => guard.canActivate(buildContext(undefined))).toThrow(ForbiddenException);
+  });
+
+  it("records an AUTHORIZATION_DENIED security event (internal audit only) when denying access", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["SUPER_ADMIN"]);
+    expect(() => guard.canActivate(buildContext(ADMIN_USER))).toThrow(ForbiddenException);
+
+    expect(securityEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "AUTHORIZATION_DENIED",
+        userId: "user-1",
+        metadata: expect.objectContaining({ requiredRoles: "SUPER_ADMIN" }),
+      }),
+    );
+  });
+
+  it("does not record any security event when access is allowed", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["ADMIN"]);
+    guard.canActivate(buildContext(ADMIN_USER));
+    expect(securityEventService.record).not.toHaveBeenCalled();
   });
 });

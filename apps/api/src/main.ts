@@ -33,7 +33,8 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = configService.get("NODE_ENV", { infer: true });
 
   if (shouldEnableSwagger(nodeEnv)) {
-    setupSwagger(app, appName);
+    const accessTokenCookieName = configService.get("COOKIE_ACCESS_TOKEN_NAME", { infer: true });
+    setupSwagger(app, appName, accessTokenCookieName);
   }
 
   const port = configService.get("API_PORT", { infer: true });

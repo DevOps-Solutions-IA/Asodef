@@ -11,6 +11,7 @@ import { AuthService, RateLimitedException } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
 import { PasswordRecoveryService } from "./password-recovery.service";
+import { RedisService } from "../../common/redis/redis.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -27,6 +28,19 @@ describe("Auth endpoints (integration, real HTTP via the exact configureApp() se
 
     prisma = app.get(PrismaService);
     passwordService = app.get(PasswordService);
+
+    // Every in-process supertest request in this file resolves to the
+    // same loopback address, so LOGIN_RATE_LIMIT's IP-keyed Redis counter
+    // (persistent across separate `npx jest`/turbo runs, and shared with
+    // any other controller-integration file exercising /login from the
+    // same address) could otherwise accumulate and shadow this file's
+    // own tests with a false 429. Clearing only this key pattern (never
+    // a broad FLUSHALL) keeps this file's runs independent.
+    const redisClient = app.get(RedisService).getClient();
+    const loginKeys = await redisClient.keys("ratelimit:login:*");
+    if (loginKeys.length > 0) {
+      await redisClient.del(...loginKeys);
+    }
   });
 
   afterAll(async () => {

@@ -6,6 +6,7 @@ import { PrismaModule } from "./database/prisma.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { HealthModule } from "./health/health.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { GovernanceModule } from "./modules/governance/governance.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuthModule } from "./modules/auth/auth.module";
     RedisModule,
     HealthModule,
     AuthModule,
+    GovernanceModule,
   ],
   controllers: [AppController],
   providers: [],

@@ -82,18 +82,27 @@ export const ROLE_CATALOG: RoleDefinition[] = [
 
 const ALL_PERMISSION_KEYS = PERMISSION_CATALOG.map((p) => p.key);
 
-const PLATFORM_ONLY_KEYS = ["roles.manage", "permissions.manage", "settings.manage", "approvals.manage"];
+// US-008 correction: legal.approve joins the platform-governance set.
+// "Aprobar y publicar documentos legales" is exactly the kind of
+// irreversible, production-legal-risk action ("manage legal/commercial
+// approval rules") the US-008 governance review calls out as
+// SUPER_ADMIN-only - it was previously reachable by ADMIN (everything
+// not explicitly excluded), which was too broad. See rbac-catalog.spec.ts
+// for the test locking this in.
+const PLATFORM_ONLY_KEYS = ["roles.manage", "permissions.manage", "settings.manage", "approvals.manage", "legal.approve"];
 
 /**
  * Role -> permission key mapping.
  *
- * ADMIN intentionally excludes the four platform-defining permissions
- * (roles/permissions/settings/approvals) so that changing the platform's
- * own governance rules always requires SUPER_ADMIN, not just day-to-day
- * operational access. COMPANY_PARTNER/AFFILIATE/CUSTOMER permissions are
- * resource-type gates only - they do not imply row-level scoping. The
- * service layer for each self-service portal (a later story) must still
- * restrict a partner/affiliate/customer to their own records; this
+ * ADMIN intentionally excludes the five platform-defining permissions
+ * (roles/permissions/settings/approvals/legal-approve) so that changing
+ * the platform's own governance rules or publishing binding legal
+ * documents always requires SUPER_ADMIN, not just day-to-day operational
+ * access. COMPANY_PARTNER/AFFILIATE/CUSTOMER permissions are resource-type
+ * gates only - they do not imply row-level scoping. The service layer for
+ * each self-service portal (a later story) must still restrict a
+ * partner/affiliate/customer to their own records using the ownership/
+ * organization-scope policies in common/authorization/ (US-008); this
  * permission table cannot express "only their own company" by itself.
  */
 export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {

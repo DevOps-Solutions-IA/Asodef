@@ -16,6 +16,27 @@ const SAFE_AUTH_ERROR_MESSAGE = "No autenticado.";
  * from an Authorization header or the URL - matching the "no token in
  * localStorage/sessionStorage/URLs" requirement, since there is
  * deliberately no client-readable copy of this token anywhere.
+ *
+ * US-008 permission-resolution/caching strategy: roles and permissions
+ * are resolved from the database on *every request* (the query below) -
+ * never embedded in the access token and never cached. This is a
+ * deliberate choice, not an oversight:
+ *   - Zero staleness window: a role/permission change (or account
+ *     status change) takes effect on the very next request from any
+ *     device, immediately - see guard-composition.integration.spec.ts's
+ *     "no caching/staleness" tests for a concrete demonstration.
+ *   - No cache-invalidation surface to get wrong: nothing to bust when
+ *     RoleAssignmentService changes an assignment, no stale-cache class
+ *     of bug to defend against.
+ *   - Cost is one indexed PK lookup with two cheap joins (User ->
+ *     UserRole -> Role -> RolePermission -> Permission, all walked via
+ *     already-indexed foreign/primary keys - see schema.prisma), which is
+ *     acceptable at this platform's scale.
+ * If this ever becomes a measured bottleneck, the documented next step
+ * is a short-TTL (30-60s) Redis cache keyed by userId, explicitly
+ * invalidated by RoleAssignmentService on every assignment change -
+ * not embedding permissions in the JWT itself, which would reintroduce
+ * exactly the staleness/revocation problem this design avoids.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { PermissionsGuard } from "./permissions.guard";
+import { SecurityEventService } from "../../../common/security-events/security-event.service";
 import type { RequestUser } from "../types/request-user.type";
 
 function buildContext(user?: RequestUser): ExecutionContext {
@@ -23,11 +24,13 @@ const BASE_USER: RequestUser = {
 
 describe("PermissionsGuard", () => {
   let reflector: Reflector;
+  let securityEventService: jest.Mocked<Pick<SecurityEventService, "record">>;
   let guard: PermissionsGuard;
 
   beforeEach(() => {
     reflector = new Reflector();
-    guard = new PermissionsGuard(reflector);
+    securityEventService = { record: jest.fn().mockResolvedValue(undefined) };
+    guard = new PermissionsGuard(reflector, securityEventService as unknown as SecurityEventService);
   });
 
   it("allows a route with no @RequirePermissions() metadata at all", () => {
@@ -63,5 +66,45 @@ describe("PermissionsGuard", () => {
     } catch (error) {
       expect((error as ForbiddenException).message).not.toContain("settings.manage");
     }
+  });
+
+  it("returns the identical safe message for two different missing permissions (US-008)", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["settings.manage"]);
+    let firstMessage: string | undefined;
+    try {
+      guard.canActivate(buildContext(BASE_USER));
+    } catch (error) {
+      firstMessage = (error as ForbiddenException).message;
+    }
+
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["users.manage"]);
+    let secondMessage: string | undefined;
+    try {
+      guard.canActivate(buildContext(BASE_USER));
+    } catch (error) {
+      secondMessage = (error as ForbiddenException).message;
+    }
+
+    expect(firstMessage).toBeDefined();
+    expect(firstMessage).toBe(secondMessage);
+  });
+
+  it("records an AUTHORIZATION_DENIED security event (internal audit only) when denying access", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["settings.manage"]);
+    expect(() => guard.canActivate(buildContext(BASE_USER))).toThrow(ForbiddenException);
+
+    expect(securityEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "AUTHORIZATION_DENIED",
+        userId: "user-1",
+        metadata: expect.objectContaining({ requiredPermissions: "settings.manage" }),
+      }),
+    );
+  });
+
+  it("does not record any security event when access is allowed", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(["payments.read"]);
+    guard.canActivate(buildContext(BASE_USER));
+    expect(securityEventService.record).not.toHaveBeenCalled();
   });
 });
