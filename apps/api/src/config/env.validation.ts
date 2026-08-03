@@ -61,6 +61,34 @@ export const envSchema = z.object({
   TRUST_PROXY: z.string().default("false"),
 
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+
+  // --- Auth (US-006) ---
+  // Cookie names are configurable (not hardcoded) so they can be changed
+  // without a code deploy; COOKIE_DOMAIN stays empty by default (no
+  // explicit Domain attribute - the cookie is scoped to whatever host
+  // actually served the response, which is exactly right for the
+  // single-domain, path-based asodef.com.co/api architecture and needs no
+  // hardcoded domain anywhere in the auth services).
+  COOKIE_ACCESS_TOKEN_NAME: z.string().default("asodef_at"),
+  COOKIE_REFRESH_TOKEN_NAME: z.string().default("asodef_rt"),
+  COOKIE_DOMAIN: z.string().default(""),
+
+  // OWASP-recommended argon2id minimums; the encoded hash itself carries
+  // whatever parameters were used, so raising these later is detected via
+  // PasswordService.needsRehash() without any migration.
+  ARGON2_MEMORY_COST: z.coerce.number().int().positive().default(19456),
+  ARGON2_TIME_COST: z.coerce.number().int().positive().default(2),
+  ARGON2_PARALLELISM: z.coerce.number().int().positive().default(1),
+
+  // Per-account lockout (checked against User.failedLoginAttempts/lockedUntil).
+  LOGIN_MAX_FAILED_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  LOGIN_LOCKOUT_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
+
+  // Coarser IP-based rate limiting (Redis-backed fixed window), independent
+  // of and in addition to per-account lockout - protects against
+  // distributed guessing across many different email addresses.
+  LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  LOGIN_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

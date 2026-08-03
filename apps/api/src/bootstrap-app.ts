@@ -1,6 +1,7 @@
 import { ValidationPipe, VersioningType } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigService } from "@nestjs/config";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { requestIdMiddleware } from "./common/logging/request-id.middleware";
@@ -21,6 +22,9 @@ export function configureApp(app: NestExpressApplication): void {
 
   app.use(requestIdMiddleware);
   app.use(helmet());
+  // Auth tokens live only in httpOnly cookies (never localStorage/
+  // sessionStorage/URLs) - cookie-parser is what makes req.cookies exist.
+  app.use(cookieParser());
 
   app.enableCors({
     origin: parseCorsOrigins(configService.get("CORS_ORIGIN", { infer: true })),

@@ -58,6 +58,7 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     const session = await prisma.session.create({
       data: {
         userId: user.id,
+        familyId: randomUUID(),
         refreshTokenHash: `hash-${randomUUID()}`,
         expiresAt: new Date(Date.now() + 60_000),
       },
@@ -91,6 +92,7 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     const session = await prisma.session.create({
       data: {
         userId: user.id,
+        familyId: randomUUID(),
         refreshTokenHash: `hash-${randomUUID()}`,
         expiresAt,
       },
@@ -112,12 +114,22 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     const sharedHash = `hash-${randomUUID()}`;
 
     await prisma.session.create({
-      data: { userId: user.id, refreshTokenHash: sharedHash, expiresAt: new Date(Date.now() + 60_000) },
+      data: {
+        userId: user.id,
+        familyId: randomUUID(),
+        refreshTokenHash: sharedHash,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
     });
 
     await expect(
       prisma.session.create({
-        data: { userId: user.id, refreshTokenHash: sharedHash, expiresAt: new Date(Date.now() + 60_000) },
+        data: {
+          userId: user.id,
+          familyId: randomUUID(),
+          refreshTokenHash: sharedHash,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
       }),
     ).rejects.toMatchObject({ code: "P2002" });
   });
@@ -171,7 +183,7 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
       SELECT indexname FROM pg_indexes
       WHERE schemaname = 'public'
-      AND tablename IN ('users', 'roles', 'permissions', 'sessions', 'password_resets', 'login_attempts')
+      AND tablename IN ('users', 'roles', 'permissions', 'sessions', 'password_resets', 'login_attempts', 'security_events')
     `;
     const indexNames = new Set(indexes.map((i) => i.indexname));
 
@@ -182,10 +194,15 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
       "sessions_refresh_token_hash_key",
       "sessions_user_id_idx",
       "sessions_expires_at_idx",
+      "sessions_family_id_idx",
+      "sessions_rotated_to_session_id_key",
       "password_resets_token_hash_key",
       "password_resets_user_id_idx",
       "login_attempts_email_created_at_idx",
       "login_attempts_ip_address_created_at_idx",
+      "login_attempts_user_id_created_at_idx",
+      "security_events_user_id_created_at_idx",
+      "security_events_type_created_at_idx",
     ]) {
       expect(indexNames.has(expected)).toBe(true);
     }

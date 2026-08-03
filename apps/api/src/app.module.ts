@@ -5,6 +5,7 @@ import { validateEnv } from "./config/env.validation";
 import { PrismaModule } from "./database/prisma.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { HealthModule } from "./health/health.module";
+import { AuthModule } from "./modules/auth/auth.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { HealthModule } from "./health/health.module";
     PrismaModule,
     RedisModule,
     HealthModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [],

@@ -37,9 +37,18 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  // US-006: account lifecycle / lockout state. Preferred over deriving
+  // lockout state by counting LoginAttempt rows on every request - this is
+  // the fast, authoritative source the login path checks and updates.
+  lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz(3)
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(3)
+
   roles          UserRole[]
   sessions       Session[]
   passwordResets PasswordReset[]
+  loginAttempts  LoginAttempt[]
+  securityEvents SecurityEvent[]
 
   @@map("users")
 }
@@ -96,22 +105,53 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-// Refresh-token session. Only a hash of the refresh token is ever stored;
+enum SessionRevocationReason {
+  LOGOUT
+  LOGOUT_ALL
+  REFRESH_TOKEN_REUSE_DETECTED
+  ADMIN_ACTION
+  PASSWORD_RESET
+  EXPIRED_CLEANUP
+
+  @@map("session_revocation_reason")
+}
+
+// A rotating refresh-token session (US-006). Each row represents exactly
+// one generation of a refresh token. On rotation the old row is stamped
+// rotatedAt + rotatedToSessionId and a *new* row is created sharing the
+// same familyId; the old row's refreshTokenHash is never reused. If a
+// refresh request ever matches a row that already has rotatedAt set, that
+// is conclusive proof of reuse of an already-superseded token (either a
+// client race or genuine theft) - REPLAY_DETECTED revokes every row
+// sharing that familyId. Only a hash of the refresh token is ever stored;
 // the raw token exists solely in the client's httpOnly cookie.
 model Session {
   id               String    @id @default(uuid()) @db.Uuid
   userId           String    @map("user_id") @db.Uuid
+  familyId         String    @map("family_id") @db.Uuid
   refreshTokenHash String    @unique @map("refresh_token_hash")
   ipAddress        String?   @map("ip_address")
   userAgent        String?   @map("user_agent")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  lastUsedAt       DateTime? @map("last_used_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Rotation chain
+  rotatedAt          DateTime? @map("rotated_at") @db.Timestamptz(3)
+  rotatedToSessionId String?   @unique @map("rotated_to_session_id") @db.Uuid
+
+  // Revocation (logout, logout-all, replay detection, admin action, ...)
+  revokedAt     DateTime?                @map("revoked_at") @db.Timestamptz(3)
+  revokedReason SessionRevocationReason? @map("revoked_reason")
+
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rotatedToSession   Session?        @relation("SessionRotationChain", fields: [rotatedToSessionId], references: [id], onDelete: SetNull)
+  rotatedFromSession Session?        @relation("SessionRotationChain")
+  securityEvents     SecurityEvent[]
 
   @@index([userId])
+  @@index([familyId])
   @@index([expiresAt])
   @@map("sessions")
 }
@@ -134,17 +174,81 @@ model PasswordReset {
   @@map("password_resets")
 }
 
-// Intentionally NOT linked to User by foreign key: attempts against
-// non-existent emails must still be recorded for lockout/rate-limiting
-// without leaking, via a constraint violation, which emails exist.
+enum LoginFailureCategory {
+  INVALID_CREDENTIALS
+  ACCOUNT_LOCKED
+  ACCOUNT_INACTIVE
+  ACCOUNT_SUSPENDED
+  RATE_LIMITED
+
+  @@map("login_failure_category")
+}
+
+// userId is a nullable, SetNull foreign key populated by server-side logic
+// *after* the login flow has already resolved the account internally - it
+// is never derived from unvalidated client input in a way that could
+// itself fail/error and leak whether an email exists. Attempts against
+// unknown emails are still fully recordable (userId simply stays null),
+// which is what makes IP/email-based rate limiting and lockout analysis
+// possible without ever revealing account existence in the public
+// response. Never cascade-deleted - login-attempt history is a security
+// record and must survive account deactivation.
 model LoginAttempt {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String
-  ipAddress String?  @map("ip_address")
-  success   Boolean
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id              String                @id @default(uuid()) @db.Uuid
+  email           String
+  userId          String?               @map("user_id") @db.Uuid
+  ipAddress       String?               @map("ip_address")
+  userAgent       String?               @map("user_agent")
+  success         Boolean
+  failureCategory LoginFailureCategory? @map("failure_category")
+  requestId       String?               @map("request_id")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([email, createdAt])
   @@index([ipAddress, createdAt])
+  @@index([userId, createdAt])
   @@map("login_attempts")
+}
+
+enum SecurityEventType {
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  SESSION_CREATED
+  SESSION_REFRESHED
+  REFRESH_TOKEN_REUSE_DETECTED
+  SESSION_REVOKED
+  LOGOUT
+  LOGOUT_ALL
+
+  @@map("security_event_type")
+}
+
+// Durable, append-only security event log (US-006). A full AuditLog module
+// is a later story - this table is the typed abstraction that story will
+// connect to (or subsume) without requiring the authentication domain to
+// be rewritten. Never cascade-deleted from User/Session: security history
+// must survive account deactivation and session cleanup alike. `metadata`
+// must never contain passwords, tokens, token hashes, or cookies - only
+// safe contextual fields (e.g. a familyId for a reuse-detected event).
+model SecurityEvent {
+  id        String            @id @default(uuid()) @db.Uuid
+  type      SecurityEventType
+  userId    String?           @map("user_id") @db.Uuid
+  sessionId String?           @map("session_id") @db.Uuid
+  ipAddress String?           @map("ip_address")
+  userAgent String?           @map("user_agent")
+  requestId String?           @map("request_id")
+  metadata  Json?
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
 }

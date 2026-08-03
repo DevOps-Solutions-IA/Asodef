@@ -1,0 +1,143 @@
+import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { JwtAuthGuard } from "./jwt-auth.guard";
+import { TokenService } from "../token.service";
+import { PrismaService } from "../../../database/prisma.service";
+import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
+
+function buildContext(cookies: Record<string, string> = {}): ExecutionContext {
+  const request = { cookies, headers: {} };
+  return {
+    switchToHttp: () => ({ getRequest: () => request, getResponse: () => ({}) }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
+  } as unknown as ExecutionContext;
+}
+
+describe("JwtAuthGuard", () => {
+  let reflector: Reflector;
+  let tokenService: jest.Mocked<Pick<TokenService, "verifyAccessToken">>;
+  let prisma: { user: { findUnique: jest.Mock } };
+  let configService: { get: jest.Mock };
+  let guard: JwtAuthGuard;
+
+  beforeEach(() => {
+    reflector = new Reflector();
+    tokenService = { verifyAccessToken: jest.fn() };
+    prisma = { user: { findUnique: jest.fn() } };
+    configService = { get: jest.fn().mockReturnValue("asodef_at") };
+    guard = new JwtAuthGuard(
+      reflector,
+      tokenService as unknown as TokenService,
+      prisma as unknown as PrismaService,
+      configService as never,
+    );
+  });
+
+  it("allows a route marked @Public() without checking for a token at all", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
+    const context = buildContext();
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(tokenService.verifyAccessToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request with no access-token cookie at all (missing authentication)", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    const context = buildContext({});
+
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it("rejects a malformed/garbage token without leaking why it failed", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    tokenService.verifyAccessToken.mockImplementation(() => {
+      throw new Error("jwt malformed");
+    });
+    const context = buildContext({ asodef_at: "not-a-real-jwt" });
+
+    let caught: unknown;
+    try {
+      await guard.canActivate(context);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(UnauthorizedException);
+    expect((caught as UnauthorizedException).message).not.toMatch(/jwt malformed/);
+  });
+
+  it("rejects a validly-signed token whose user no longer exists", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    tokenService.verifyAccessToken.mockReturnValue({ sub: "ghost-user-id", sid: "session-1" });
+    prisma.user.findUnique.mockResolvedValue(null);
+    const context = buildContext({ asodef_at: "a.valid.jwt" });
+
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it("rejects a valid token for a user whose status is no longer ACTIVE", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    tokenService.verifyAccessToken.mockReturnValue({ sub: "user-1", sid: "session-1" });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A",
+      status: "SUSPENDED",
+      roles: [],
+    });
+    const context = buildContext({ asodef_at: "a.valid.jwt" });
+
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it("populates request.user with safe fields (no password/token hash) for a valid token", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    tokenService.verifyAccessToken.mockReturnValue({ sub: "user-1", sid: "session-1" });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A User",
+      status: "ACTIVE",
+      passwordHash: "should-never-leak",
+      roles: [
+        {
+          role: {
+            name: "AUDITOR",
+            permissions: [{ permission: { key: "audit.read" } }],
+          },
+        },
+      ],
+    });
+    const request: { cookies: Record<string, string>; headers: Record<string, string>; user?: unknown } = {
+      cookies: { asodef_at: "a.valid.jwt" },
+      headers: {},
+    };
+    const context = {
+      switchToHttp: () => ({ getRequest: () => request, getResponse: () => ({}) }),
+      getHandler: () => undefined,
+      getClass: () => undefined,
+    } as unknown as ExecutionContext;
+
+    await guard.canActivate(context);
+
+    expect(request.user).toEqual({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A User",
+      status: "ACTIVE",
+      roles: ["AUDITOR"],
+      permissions: ["audit.read"],
+      sessionId: "session-1",
+    });
+    expect(JSON.stringify(request.user)).not.toContain("should-never-leak");
+  });
+
+  it("reads the IS_PUBLIC_KEY metadata via getAllAndOverride against both handler and class", async () => {
+    const spy = jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
+    const context = buildContext();
+
+    await guard.canActivate(context);
+
+    expect(spy).toHaveBeenCalledWith(IS_PUBLIC_KEY, expect.any(Array));
+  });
+});
