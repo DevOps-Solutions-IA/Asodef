@@ -32,6 +32,23 @@ export interface HeroProps {
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
+/** Explicit position per stat index, spread around the organic image
+ * shape (top-left / middle-right / bottom-left) rather than clustering.
+ * The left-anchored slots (0, 2) can safely spill outward past the
+ * image edge on sm+ - the image column sits on the right half of the
+ * page, so there's ample margin to its left. The right-anchored slot
+ * (1) deliberately stays a *positive* inset (never negative): the
+ * image's right edge sits close to the page's own right edge, so a
+ * negative offset there pushes the card past the viewport and gets
+ * silently clipped by the section's overflow-hidden (confirmed via
+ * browser verification, not just computed at random) - `right-6`
+ * keeps it safely overlapping the image instead of spilling past it. */
+const STAT_POSITION_CLASSES = [
+  "left-2 top-8 sm:-left-6",
+  "right-2 top-1/2 -translate-y-1/2 sm:right-6",
+  "left-2 bottom-10 sm:-left-6",
+] as const;
+
 const CTA_BASE_CLASS =
   "inline-flex h-12 items-center justify-center rounded-full px-6 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark focus-visible:ring-offset-2";
 const CTA_VARIANT_CLASS: Record<NonNullable<HeroCta["variant"]>, string> = {
@@ -129,7 +146,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
                   key={stat.label}
                   className={cn(
                     "absolute rounded-2xl border border-white/40 bg-white/80 px-5 py-3 text-center shadow-lg backdrop-blur-xl",
-                    index % 2 === 0 ? "-left-6 top-8" : "-right-6 bottom-10",
+                    STAT_POSITION_CLASSES[index % STAT_POSITION_CLASSES.length],
                   )}
                 >
                   <p className="font-display text-2xl font-semibold text-brand-dark">{stat.value}</p>

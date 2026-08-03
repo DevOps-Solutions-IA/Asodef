@@ -73,6 +73,23 @@ describe("Hero", () => {
     expect(screen.getByText("Etiqueta de prueba")).toBeInTheDocument();
   });
 
+  it("gives all three stat slots a distinct position (third-stat layout)", () => {
+    mockPrefersReducedMotion(false);
+    renderHero({
+      stats: [
+        { value: "Uno", label: "Primero" },
+        { value: "Dos", label: "Segundo" },
+        { value: "Tres", label: "Tercero" },
+      ],
+    });
+
+    const first = screen.getByText("Uno").closest("div")!;
+    const second = screen.getByText("Dos").closest("div")!;
+    const third = screen.getByText("Tres").closest("div")!;
+
+    expect(new Set([first.className, second.className, third.className]).size).toBe(3);
+  });
+
   it("renders the heading fully visible (opacity 1) immediately when reduced motion is preferred", () => {
     mockPrefersReducedMotion(true);
     renderHero({ heading: "Encabezado de prueba" });
