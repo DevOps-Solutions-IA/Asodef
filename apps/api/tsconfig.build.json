@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.integration.spec.ts",
+    "**/test-db-client.ts",
+    "src/test-setup.ts"
+  ]
+}
