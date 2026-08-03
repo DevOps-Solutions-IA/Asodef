@@ -308,3 +308,92 @@ describe("HomePage - approved CompanyBenefits and BenefitPortfolio copy (US-015)
     expect(benefits.compareDocumentPosition(portfolio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe("HomePage - approved Coverage and Alliance CTA copy (US-016)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders exactly one page-level h1 with Coverage/Alliance headings present", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Desde Cali, trabajamos cerca de ti" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Conviértete en aliado de ASODEF" })).toBeInTheDocument();
+  });
+
+  it("anchors Coverage at #cobertura and Alliance CTA at #aliados", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.querySelector("section#cobertura")).toBeInTheDocument();
+    expect(container.querySelector("section#aliados")).toBeInTheDocument();
+  });
+
+  it("renders all three approved Coverage cards, with Cali stated in visible text", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    const coverage = within(container.querySelector("section#cobertura")!);
+
+    expect(coverage.getByRole("heading", { level: 3, name: "Sede principal" })).toBeInTheDocument();
+    expect(coverage.getByRole("heading", { level: 3, name: "Acompañamiento institucional" })).toBeInTheDocument();
+    expect(coverage.getByText(/sede principal se encuentra en Cali/i)).toBeInTheDocument();
+
+    for (const otherCity of ["Bogotá", "Medellín", "Barranquilla"]) {
+      expect(coverage.queryByText(otherCity)).not.toBeInTheDocument();
+    }
+  });
+
+  it("renders the Alliance CTA's primary and WhatsApp actions with the approved copy", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getByRole("link", { name: "Quiero ser aliado" })).toHaveAttribute("href", "/#contacto");
+
+    const whatsappLink = screen.getByRole("link", { name: /Hablar por WhatsApp/ });
+    expect(whatsappLink).toHaveAttribute(
+      "href",
+      "https://wa.me/573232733927?text=" + encodeURIComponent("Hola, quiero conocer más información para ser aliado de ASODEF."),
+    );
+    expect(whatsappLink).toHaveAttribute("target", "_blank");
+    expect(whatsappLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("renders no lorem/placeholder text anywhere on the homepage", () => {
+    mockPrefersReducedMotion(false);
+    const { container } = renderHomePage();
+    expect(container.textContent).not.toMatch(/lorem ipsum/i);
+  });
+
+  it("renders every homepage section in the correct document order", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    const h1 = screen.getByRole("heading", { level: 1 });
+    const trustBar = screen.getByRole("region", { name: "Indicadores de confianza" });
+    const about = document.querySelector("section#quienes-somos")!;
+    const benefits = document.querySelector("section#beneficios")!;
+    const portfolio = document.querySelector("section#portafolio")!;
+    const coverage = document.querySelector("section#cobertura")!;
+    const alliance = document.querySelector("section#aliados")!;
+
+    expect(h1.compareDocumentPosition(trustBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trustBar.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(about.compareDocumentPosition(benefits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(benefits.compareDocumentPosition(portfolio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(portfolio.compareDocumentPosition(coverage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(coverage.compareDocumentPosition(alliance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders Coverage and Alliance content fully visible immediately under reduced motion", () => {
+    mockPrefersReducedMotion(true);
+    renderHomePage();
+
+    const coverageCard = screen.getByText("Sede principal").closest("article")!;
+    const allianceHeading = screen.getByRole("heading", { level: 2, name: "Conviértete en aliado de ASODEF" });
+    const allianceContainer = allianceHeading.closest("div")!.parentElement!;
+
+    expect(coverageCard.style.opacity === "" || coverageCard.style.opacity === "1").toBe(true);
+    expect(allianceContainer.style.opacity === "" || allianceContainer.style.opacity === "1").toBe(true);
+  });
+});

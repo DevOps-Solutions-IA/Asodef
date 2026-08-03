@@ -1,0 +1,32 @@
+<svg viewBox="0 0 300 480" xmlns="http://www.w3.org/2000/svg" role="presentation" focusable="false">
+  <!-- Stylized, non-cartographic silhouette - not a geographically precise
+       map. Deliberately abstract per US-016: no claim of exact borders,
+       routes, or service regions. -->
+  <path
+    d="M150 12
+       C 200 10, 232 48, 226 92
+       C 222 122, 196 132, 202 162
+       C 210 200, 254 210, 260 252
+       C 266 296, 228 312, 214 348
+       C 202 378, 220 402, 198 428
+       C 178 452, 142 460, 118 440
+       C 96 422, 104 396, 84 374
+       C 60 348, 30 342, 24 302
+       C 18 264, 48 244, 46 206
+       C 44 168, 12 150, 22 112
+       C 32 76, 76 66, 98 40
+       C 114 20, 130 14, 150 12 Z"
+    fill="url(#colombia-gradient)"
+  />
+  <circle cx="88" cy="356" r="7" fill="#F28A00" />
+  <circle cx="88" cy="356" r="13" fill="none" stroke="#F28A00" stroke-width="2" opacity="0.5" />
+  <text x="104" y="361" font-family="Outfit, system-ui, sans-serif" font-size="20" font-weight="600" fill="#FFFFFF">
+    Cali
+  </text>
+  <defs>
+    <linearGradient id="colombia-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#438B34" />
+      <stop offset="100%" stop-color="#064D38" />
+    </linearGradient>
+  </defs>
+</svg>

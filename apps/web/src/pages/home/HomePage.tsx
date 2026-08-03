@@ -4,17 +4,18 @@ import { TrustBar } from "./TrustBar";
 import { AboutSection } from "./AboutSection";
 import { CompanyBenefits } from "./CompanyBenefits";
 import { BenefitPortfolio } from "./BenefitPortfolio";
+import { CoverageSection } from "./CoverageSection";
+import { AllianceCta } from "./AllianceCta";
 
 /**
- * Institutional homepage. US-012 (Hero), US-013 (TrustBar + About), and
- * US-015 (Company Benefits + Benefit Portfolio) are all content-complete
- * with approved Spanish copy. US-014 (Statistics) is deferred by product
- * decision - no verified figures exist yet, so it isn't rendered here.
+ * Institutional homepage. US-012 (Hero), US-013 (TrustBar + About),
+ * US-015 (Company Benefits + Benefit Portfolio), and US-016 (Coverage +
+ * Alliance CTA) are all content-complete with approved Spanish copy.
+ * US-014 (Statistics) is deferred by product decision - no verified
+ * figures exist yet, so it isn't rendered here.
  *
- * Coverage/Alliance-CTA are separate, later stories and are not stubbed
- * here. Hero's CTA anchors (#portafolio, #contacto) remain stable ids -
- * #portafolio now resolves to a real section (US-015); #contacto is
- * still a future section's stable id.
+ * Hero's #contacto CTA anchor remains a stable id for a still-unbuilt
+ * future Contact section.
  */
 export function HomePage() {
   return (
@@ -96,6 +97,38 @@ export function HomePage() {
           { title: "Soluciones para empresas", description: "Propuestas dirigidas a organizaciones interesadas en fortalecer el bienestar de sus equipos.", icon: Building2, linkHref: "#contacto" },
           { title: "Servicios complementarios", description: "Alternativas adicionales que amplían las posibilidades de atención y acompañamiento.", icon: Grid2X2Plus, linkHref: "#contacto" },
         ]}
+      />
+
+      <CoverageSection
+        eyebrow="Presencia y acompañamiento"
+        heading="Desde Cali, trabajamos cerca de ti"
+        description="ASODEF tiene su sede principal en Cali y orienta su atención con cercanía, responsabilidad y vocación de servicio."
+        cards={[
+          {
+            title: "Sede principal",
+            body: "Nuestra sede principal se encuentra en Cali, desde donde coordinamos la atención y el acompañamiento institucional.",
+          },
+          {
+            title: "Atención cercana",
+            body: "Orientamos a personas, familias y organizaciones mediante canales de atención claros, humanos y responsables.",
+          },
+          {
+            title: "Acompañamiento institucional",
+            body: "Facilitamos información y orientación para que cada persona pueda conocer y acceder a los servicios disponibles.",
+          },
+        ]}
+      />
+
+      <AllianceCta
+        eyebrow="Construyamos juntos"
+        heading="Conviértete en aliado de ASODEF"
+        description="Trabajamos con organizaciones interesadas en aportar al bienestar de sus colaboradores, sus familias y sus comunidades."
+        primaryAction={{ label: "Quiero ser aliado", href: "#contacto" }}
+        whatsapp={{
+          label: "Hablar por WhatsApp",
+          phoneNumber: "573232733927",
+          message: "Hola, quiero conocer más información para ser aliado de ASODEF.",
+        }}
       />
     </>
   );
