@@ -49,8 +49,15 @@ describe("RBAC catalog data integrity", () => {
     expect(new Set(ROLE_PERMISSIONS.SUPER_ADMIN)).toEqual(permissionKeys);
   });
 
-  it("withholds the five platform-governance permissions from ADMIN (US-008: legal.approve joined this set)", () => {
-    const platformOnly = ["roles.manage", "permissions.manage", "settings.manage", "approvals.manage", "legal.approve"];
+  it("withholds the six platform-governance permissions from ADMIN (US-008: legal.approve, US-009: users.unlock)", () => {
+    const platformOnly = [
+      "roles.manage",
+      "permissions.manage",
+      "settings.manage",
+      "approvals.manage",
+      "legal.approve",
+      "users.unlock",
+    ];
     for (const key of platformOnly) {
       expect(ROLE_PERMISSIONS.ADMIN).not.toContain(key);
     }
@@ -58,8 +65,15 @@ describe("RBAC catalog data integrity", () => {
     expect(ROLE_PERMISSIONS.ADMIN.length).toBe(PERMISSION_CATALOG.length - platformOnly.length);
   });
 
-  describe("US-008 governance matrix rules", () => {
-    const GOVERNANCE_KEYS = ["roles.manage", "permissions.manage", "settings.manage", "approvals.manage", "legal.approve"];
+  describe("US-008/US-009 governance matrix rules", () => {
+    const GOVERNANCE_KEYS = [
+      "roles.manage",
+      "permissions.manage",
+      "settings.manage",
+      "approvals.manage",
+      "legal.approve",
+      "users.unlock",
+    ];
     const nonSuperAdminRoles = ROLE_CATALOG.map((r) => r.name).filter((name) => name !== "SUPER_ADMIN");
 
     it("grants every governance permission to SUPER_ADMIN", () => {
@@ -112,11 +126,12 @@ describe("RBAC catalog data integrity", () => {
       }
     });
 
-    it("denies CUSTOMER_SERVICE refunds, legal/policy approval, and permission management", () => {
+    it("denies CUSTOMER_SERVICE refunds, legal/policy approval, permission management, and account unlock", () => {
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("payments.refund");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("legal.approve");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("approvals.manage");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("permissions.manage");
+      expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("users.unlock");
       expect(ROLE_PERMISSIONS.CUSTOMER_SERVICE).not.toContain("roles.manage");
     });
   });

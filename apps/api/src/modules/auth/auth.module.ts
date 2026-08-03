@@ -14,6 +14,7 @@ import { RateLimiterService } from "./rate-limiter.service";
 import { PasswordPolicyService } from "./password-policy/password-policy.service";
 import { PasswordResetTokenService } from "./password-reset-token.service";
 import { PasswordRecoveryService } from "./password-recovery.service";
+import { AccountUnlockService } from "./account-unlock.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissionsGuard } from "./guards/permissions.guard";
 import { RolesGuard } from "./guards/roles.guard";
@@ -32,6 +33,7 @@ import { RolesGuard } from "./guards/roles.guard";
     PasswordPolicyService,
     PasswordResetTokenService,
     PasswordRecoveryService,
+    AccountUnlockService,
     // Global, deny-by-default: JwtAuthGuard runs first (populates
     // request.user or throws), then PermissionsGuard/RolesGuard, which
     // each no-op when a route declares no @RequirePermissions()/

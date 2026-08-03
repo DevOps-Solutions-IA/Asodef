@@ -55,23 +55,79 @@ export class LoginAttemptService {
   }
 
   /**
+   * True the moment a *stale* lockout is observed - lockedUntil is set,
+   * but has already passed. Exposed as a pure, synchronous check (US-009)
+   * so AuthService can detect and record the automatic-unlock transition
+   * exactly once, from the single call site that first sees the pre-
+   * attempt state, regardless of whether the attempt that follows
+   * succeeds or fails.
+   */
+  wasLockoutJustExpired(user: Pick<User, "lockedUntil">): boolean {
+    return !!user.lockedUntil && user.lockedUntil.getTime() <= Date.now();
+  }
+
+  /**
    * Increments the failure counter and locks the account once the
    * threshold is reached. Returns true the moment the account transitions
    * into a locked state (so the caller can emit ACCOUNT_LOCKED exactly
    * once, not on every subsequent failed attempt while still locked).
+   *
+   * Concurrency-safe (US-009): a naive read-then-write (read
+   * failedLoginAttempts, compute +1 in JS, write it back) loses updates
+   * under real concurrent failed attempts - two requests can both read
+   * the same count and both write the same incremented value, silently
+   * absorbing one failure. This uses Prisma's atomic `{ increment: 1 }`
+   * (a single `SET failed_login_attempts = failed_login_attempts + 1`
+   * statement, safe under Postgres row-level locking) for the counter,
+   * and the same null-guarded `updateMany` claim pattern already
+   * established by SessionService.rotateSession/PasswordResetTokenService
+   * for the one genuinely racy decision: which concurrent caller gets to
+   * be the one that actually activates the lockout (and therefore reports
+   * justLocked: true, so ACCOUNT_LOCKED is only ever recorded once).
    */
   async registerFailedAttempt(userId: string): Promise<{ justLocked: boolean; lockedUntil: Date | null }> {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const nextCount = user.failedLoginAttempts + 1;
-    const willLock = nextCount >= this.maxFailedAttempts && !this.isLocked(user);
-    const lockedUntil = willLock ? new Date(Date.now() + this.lockoutDurationMs) : user.lockedUntil;
+    const before = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
-    await this.prisma.user.update({
+    if (this.wasLockoutJustExpired(before)) {
+      // Idempotent reset of stale state - safe even if a concurrent
+      // request performs the exact same reset (both write the same
+      // fixed values, not a compute-from-current-value increment).
+      await this.prisma.user.updateMany({
+        where: { id: userId, lockedUntil: { not: null } },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
+    }
+
+    const afterIncrement = await this.prisma.user.update({
       where: { id: userId },
-      data: { failedLoginAttempts: nextCount, lockedUntil },
+      data: { failedLoginAttempts: { increment: 1 } },
     });
 
-    return { justLocked: willLock, lockedUntil: willLock ? lockedUntil : null };
+    if (afterIncrement.lockedUntil) {
+      // Already locked (either from before, or a concurrent request just
+      // won the race below) - this call did not just lock the account.
+      return { justLocked: false, lockedUntil: afterIncrement.lockedUntil };
+    }
+
+    if (afterIncrement.failedLoginAttempts < this.maxFailedAttempts) {
+      return { justLocked: false, lockedUntil: null };
+    }
+
+    const lockedUntil = new Date(Date.now() + this.lockoutDurationMs);
+    const claim = await this.prisma.user.updateMany({
+      where: { id: userId, lockedUntil: null },
+      data: { lockedUntil },
+    });
+
+    if (claim.count === 1) {
+      return { justLocked: true, lockedUntil };
+    }
+
+    // Lost the race to a concurrent request that locked the account in
+    // between our increment and this claim - re-read so the caller still
+    // gets an accurate lockedUntil, but must not report justLocked twice.
+    const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return { justLocked: false, lockedUntil: current.lockedUntil };
   }
 
   /** Successful authentication resets the lockout state and stamps

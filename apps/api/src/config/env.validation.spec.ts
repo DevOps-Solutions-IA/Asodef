@@ -59,6 +59,34 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...VALID_ENV, ENCRYPTION_KEY: "too-short" })).toThrow(/ENCRYPTION_KEY/);
   });
 
+  it("rejects a zero or negative LOGIN_MAX_FAILED_ATTEMPTS", () => {
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_MAX_FAILED_ATTEMPTS: "0" })).toThrow(/LOGIN_MAX_FAILED_ATTEMPTS/);
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_MAX_FAILED_ATTEMPTS: "-1" })).toThrow(/LOGIN_MAX_FAILED_ATTEMPTS/);
+  });
+
+  it("rejects an excessive LOGIN_MAX_FAILED_ATTEMPTS that would defeat the control", () => {
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_MAX_FAILED_ATTEMPTS: "100000" })).toThrow(/LOGIN_MAX_FAILED_ATTEMPTS/);
+  });
+
+  it("rejects a zero or negative LOGIN_LOCKOUT_DURATION_MINUTES", () => {
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_LOCKOUT_DURATION_MINUTES: "0" })).toThrow(/LOGIN_LOCKOUT_DURATION_MINUTES/);
+  });
+
+  it("rejects an excessive LOGIN_LOCKOUT_DURATION_MINUTES that could make accounts effectively permanently inaccessible", () => {
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_LOCKOUT_DURATION_MINUTES: "999999" })).toThrow(
+      /LOGIN_LOCKOUT_DURATION_MINUTES/,
+    );
+  });
+
+  it("rejects an invalid (zero/negative/excessive) LOGIN_RATE_LIMIT_WINDOW_SECONDS", () => {
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_RATE_LIMIT_WINDOW_SECONDS: "0" })).toThrow(
+      /LOGIN_RATE_LIMIT_WINDOW_SECONDS/,
+    );
+    expect(() => validateEnv({ ...VALID_ENV, LOGIN_RATE_LIMIT_WINDOW_SECONDS: "999999999" })).toThrow(
+      /LOGIN_RATE_LIMIT_WINDOW_SECONDS/,
+    );
+  });
+
   it("fails fast when PASSWORD_RESET_TOKEN_SECRET is missing", () => {
     const { PASSWORD_RESET_TOKEN_SECRET: _unused, ...withoutResetSecret } = VALID_ENV;
     void _unused;

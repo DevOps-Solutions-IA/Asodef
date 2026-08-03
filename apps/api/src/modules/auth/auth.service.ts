@@ -94,10 +94,38 @@ export class AuthService {
         failureCategory: "RATE_LIMITED",
         requestId: context.requestId,
       });
+      // Distinct from LOGIN_FAILED (US-009): this is the coarse IP-level
+      // control rejecting the request before any account-specific logic
+      // ran at all - userId is never known at this point, by design (see
+      // RateLimiterService's doc comment: an obviously-throttled request
+      // shouldn't cost a DB lookup).
+      await this.securityEventService.record({
+        type: "LOCKOUT_RATE_LIMITED",
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+      });
       throw new RateLimitedException(rateLimit.retryAfterSeconds);
     }
 
     const user = await this.prisma.user.findUnique({ where: { email } });
+
+    // US-009: detected here, once, from the pre-attempt state - regardless
+    // of whether the attempt that follows succeeds or fails. Whichever
+    // branch runs next (handleFailedLogin or the success path) will
+    // itself clear the stale counter/lockedUntil; this only records that
+    // the transition happened, exactly once (the DB write already
+    // guarantees the *next* login attempt no longer sees a set
+    // lockedUntil, so there is nothing to re-detect on a later call).
+    if (user && this.loginAttemptService.wasLockoutJustExpired(user)) {
+      await this.securityEventService.record({
+        type: "LOCKOUT_EXPIRED",
+        userId: user.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+      });
+    }
 
     // Always verify against *some* hash, real or a fixed dummy, so the
     // response time for "no such email" and "wrong password" is the same

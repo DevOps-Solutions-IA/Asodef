@@ -205,6 +205,55 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
       expect(lockedEvent).not.toBeNull();
     });
 
+    it("does not lock the account at one attempt below the configured threshold (US-009)", async () => {
+      const user = await createUser();
+      const maxAttempts = 5;
+
+      for (let i = 0; i < maxAttempts - 1; i++) {
+        await expect(
+          authService.login({ email: user.email, password: "wrong-password" }, uniqueContext()),
+        ).rejects.toThrow(UnauthorizedException);
+      }
+
+      const stillUnlocked = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(stillUnlocked.lockedUntil).toBeNull();
+      expect(stillUnlocked.failedLoginAttempts).toBe(maxAttempts - 1);
+
+      // The correct password still works - not locked yet.
+      const result = await authService.login({ email: user.email, password: TEST_PASSWORD }, uniqueContext());
+      expect(result.user.id).toBe(user.id);
+    });
+
+    it("locks the account correctly under real concurrent failed attempts (US-009 concurrency safety)", async () => {
+      const user = await createUser();
+      const maxAttempts = 5;
+
+      // Fire more concurrent failures than the threshold - a naive
+      // read-then-write counter would lose updates here and either
+      // under- or over-count, potentially never locking or locking with
+      // a wildly wrong count. Every one of these must still reject with
+      // the identical generic message regardless of internal accounting.
+      const attempts = Array.from({ length: maxAttempts + 3 }, () =>
+        authService.login({ email: user.email, password: "wrong-password" }, uniqueContext()),
+      );
+      const results = await Promise.allSettled(attempts);
+      expect(results.every((r) => r.status === "rejected")).toBe(true);
+
+      const lockedUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(lockedUser.lockedUntil).not.toBeNull();
+      expect(lockedUser.lockedUntil!.getTime()).toBeGreaterThan(Date.now());
+      // The counter must reflect every single concurrent failure, not a
+      // lower number from lost updates.
+      expect(lockedUser.failedLoginAttempts).toBe(maxAttempts + 3);
+
+      // Exactly one ACCOUNT_LOCKED event - the atomic claim must ensure
+      // only the single winning concurrent request reports justLocked.
+      const lockedEvents = await prisma.securityEvent.findMany({
+        where: { userId: user.id, type: "ACCOUNT_LOCKED" },
+      });
+      expect(lockedEvents).toHaveLength(1);
+    });
+
     it("does not extend the lockout window on further attempts against an already-locked account", async () => {
       const user = await createUser();
       await prisma.user.update({
@@ -274,6 +323,161 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
       await expect(authService.login({ email: user.email, password: TEST_PASSWORD }, context)).rejects.toThrow(
         RateLimitedException,
       );
+    });
+
+    it("records a LOCKOUT_RATE_LIMITED security event when the IP rate limit trips (US-009)", async () => {
+      const user = await createUser();
+      const context = { ipAddress: `198.51.100.${randomUUID().slice(0, 2)}`, userAgent: "rl-event-agent", requestId: null };
+
+      for (let i = 0; i < 10; i++) {
+        await expect(authService.login({ email: user.email, password: "wrong" }, context)).rejects.toThrow();
+      }
+      await expect(authService.login({ email: user.email, password: TEST_PASSWORD }, context)).rejects.toThrow(
+        RateLimitedException,
+      );
+
+      const event = await prisma.securityEvent.findFirst({
+        where: { type: "LOCKOUT_RATE_LIMITED", ipAddress: context.ipAddress },
+      });
+      expect(event).not.toBeNull();
+    });
+
+    it("preserves every historical LoginAttempt row through a full lock -> expire -> unlock cycle (US-009)", async () => {
+      const user = await createUser();
+      const maxAttempts = 5;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        await expect(
+          authService.login({ email: user.email, password: "wrong-password" }, uniqueContext()),
+        ).rejects.toThrow();
+      }
+      const attemptsAfterLock = await prisma.loginAttempt.count({ where: { userId: user.id } });
+      expect(attemptsAfterLock).toBe(maxAttempts);
+
+      // Force the lockout window into the past, then log in successfully.
+      await prisma.user.update({ where: { id: user.id }, data: { lockedUntil: new Date(Date.now() - 1000) } });
+      await authService.login({ email: user.email, password: TEST_PASSWORD }, uniqueContext());
+
+      // Automatic unlock/reset must never delete history - every prior
+      // failed attempt row, plus the new successful one, must still exist.
+      const attemptsAfterUnlock = await prisma.loginAttempt.count({ where: { userId: user.id } });
+      expect(attemptsAfterUnlock).toBe(maxAttempts + 1);
+    });
+
+    it("records LOCKOUT_EXPIRED exactly once when a stale lockout is first observed, regardless of outcome (US-009)", async () => {
+      const user = await createUser();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lockedUntil: new Date(Date.now() - 1000), failedLoginAttempts: 5 },
+      });
+
+      // First post-expiration attempt fails (wrong password) - the
+      // expiration is still detected and recorded exactly once.
+      await expect(
+        authService.login({ email: user.email, password: "still-wrong" }, uniqueContext()),
+      ).rejects.toThrow();
+
+      const events = await prisma.securityEvent.findMany({ where: { userId: user.id, type: "LOCKOUT_EXPIRED" } });
+      expect(events).toHaveLength(1);
+
+      // A second subsequent attempt (even if it also fails) must not
+      // re-record LOCKOUT_EXPIRED - lockedUntil is already null by now.
+      await expect(
+        authService.login({ email: user.email, password: "still-wrong-again" }, uniqueContext()),
+      ).rejects.toThrow();
+      const eventsAfterSecondAttempt = await prisma.securityEvent.findMany({
+        where: { userId: user.id, type: "LOCKOUT_EXPIRED" },
+      });
+      expect(eventsAfterSecondAttempt).toHaveLength(1);
+    });
+
+    it("resets the failed-attempt counter from an expired lockout rather than compounding it (US-009)", async () => {
+      const user = await createUser();
+      // Simulate a fully-elapsed prior lockout episode: counter still at
+      // the threshold, but the window has passed.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lockedUntil: new Date(Date.now() - 1000), failedLoginAttempts: 5 },
+      });
+
+      // A single new failure right after expiration must NOT immediately
+      // re-lock the account by compounding the stale counter (5 -> 6) -
+      // it must restart from a clean baseline (0 -> 1).
+      await expect(
+        authService.login({ email: user.email, password: "wrong-password" }, uniqueContext()),
+      ).rejects.toThrow(UnauthorizedException);
+
+      const afterOneNewFailure = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(afterOneNewFailure.failedLoginAttempts).toBe(1);
+      expect(afterOneNewFailure.lockedUntil).toBeNull();
+    });
+  });
+
+  describe("login lockout under Redis outage (US-009 section 5)", () => {
+    it("still enforces the database-backed account lockout when the IP rate limiter's Redis is unavailable", async () => {
+      const brokenRateLimiter = {
+        checkAndIncrement: async () => ({ limited: false, remaining: 999, retryAfterSeconds: 0 }),
+      } as unknown as RateLimiterService;
+
+      const isolatedModuleRef = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: validateEnv }),
+          JwtModule.register({}),
+          PrismaModule,
+          RedisModule,
+        ],
+        providers: [
+          AuthService,
+          PasswordService,
+          TokenService,
+          SessionService,
+          LoginAttemptService,
+          SecurityEventService,
+          { provide: RateLimiterService, useValue: brokenRateLimiter },
+        ],
+      }).compile();
+
+      const isolatedAuthService = isolatedModuleRef.get(AuthService);
+      const isolatedPrisma = isolatedModuleRef.get(PrismaService);
+      const isolatedPasswordService = isolatedModuleRef.get(PasswordService);
+
+      const user = await isolatedPrisma.user.create({
+        data: {
+          email: `redis-outage-${randomUUID()}@example.com`,
+          passwordHash: await isolatedPasswordService.hash(TEST_PASSWORD),
+          fullName: "Redis Outage Test User",
+          status: "ACTIVE",
+        },
+      });
+
+      try {
+        // The IP rate limiter fails open (as documented) - it never
+        // blocks these attempts. But the persistent, database-backed
+        // account lockout is a completely separate mechanism and must
+        // still activate exactly as it would with Redis healthy.
+        const maxAttempts = 5;
+        for (let i = 0; i < maxAttempts; i++) {
+          await expect(
+            isolatedAuthService.login({ email: user.email, password: "wrong" }, { ipAddress: "203.0.113.250", userAgent: "a", requestId: null }),
+          ).rejects.toThrow(UnauthorizedException);
+        }
+
+        const lockedUser = await isolatedPrisma.user.findUniqueOrThrow({ where: { id: user.id } });
+        expect(lockedUser.lockedUntil).not.toBeNull();
+        expect(lockedUser.lockedUntil!.getTime()).toBeGreaterThan(Date.now());
+
+        // Even the correct password is now rejected - Redis being down
+        // never bypassed the DB-backed lockout.
+        await expect(
+          isolatedAuthService.login(
+            { email: user.email, password: TEST_PASSWORD },
+            { ipAddress: "203.0.113.250", userAgent: "a", requestId: null },
+          ),
+        ).rejects.toThrow(UnauthorizedException);
+      } finally {
+        await isolatedPrisma.user.delete({ where: { id: user.id } });
+        await isolatedModuleRef.close();
+      }
     });
   });
 

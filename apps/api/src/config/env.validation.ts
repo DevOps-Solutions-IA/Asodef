@@ -87,14 +87,19 @@ export const envSchema = z.object({
   ARGON2_PARALLELISM: z.coerce.number().int().positive().default(1),
 
   // Per-account lockout (checked against User.failedLoginAttempts/lockedUntil).
-  LOGIN_MAX_FAILED_ATTEMPTS: z.coerce.number().int().positive().default(5),
-  LOGIN_LOCKOUT_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
+  // Upper bounds (US-009) exist specifically to reject startup
+  // configuration that would make an account *effectively* permanently
+  // inaccessible (e.g. a multi-year lockout duration) or so lenient it
+  // stops being a meaningful control - both are configuration mistakes,
+  // not values anyone would deliberately choose.
+  LOGIN_MAX_FAILED_ATTEMPTS: z.coerce.number().int().positive().max(50).default(5),
+  LOGIN_LOCKOUT_DURATION_MINUTES: z.coerce.number().int().positive().max(10_080).default(15), // max 7 days
 
   // Coarser IP-based rate limiting (Redis-backed fixed window), independent
   // of and in addition to per-account lockout - protects against
   // distributed guessing across many different email addresses.
-  LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
-  LOGIN_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().max(1_000).default(10),
+  LOGIN_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().max(86_400).default(60), // max 24h window
 
   // --- Password recovery (US-007) ---
   // A dedicated pepper, distinct from JWT_REFRESH_SECRET, so the blast

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { RedisService } from "../../common/redis/redis.service";
 
 export interface RateLimitResult {
@@ -17,6 +17,8 @@ export interface RateLimitResult {
  */
 @Injectable()
 export class RateLimiterService {
+  private readonly logger = new Logger(RateLimiterService.name);
+
   constructor(private readonly redisService: RedisService) {}
 
   async checkAndIncrement(key: string, max: number, windowSeconds: number): Promise<RateLimitResult> {
@@ -37,7 +39,14 @@ export class RateLimiterService {
       };
     } catch {
       // Fail open: an unavailable Redis must not itself become a denial
-      // of service against login.
+      // of service against login. US-009 section 10: this degradation is
+      // operationally significant (rate limiting is effectively disabled
+      // until Redis recovers) and worth a log line - deliberately without
+      // the key itself, which may embed an IP address or identifier hash
+      // (a high-cardinality label the instructions call out to avoid).
+      // One line per call during a sustained outage is accepted as a
+      // reasonable tradeoff rather than building a bespoke log throttle.
+      this.logger.warn("Redis unavailable for rate limiting - failing open (request not rate-limited)");
       return { limited: false, remaining: max, retryAfterSeconds: 0 };
     }
   }
@@ -62,6 +71,7 @@ export class RateLimiterService {
         retryAfterSeconds,
       };
     } catch {
+      this.logger.warn("Redis unavailable for rate limiting - failing open (request not rate-limited)");
       return { limited: false, remaining: max, retryAfterSeconds: 0 };
     }
   }
