@@ -6,6 +6,7 @@ const VALID_ENV: Record<string, string> = {
   JWT_SECRET: "a-secret-that-is-long-enough",
   JWT_REFRESH_SECRET: "a-refresh-secret-that-is-long-enough",
   ENCRYPTION_KEY: "an-encryption-key-that-is-at-least-32-characters",
+  PASSWORD_RESET_TOKEN_SECRET: "a-reset-token-secret-that-is-long-enough",
 };
 
 describe("validateEnv", () => {
@@ -56,6 +57,19 @@ describe("validateEnv", () => {
 
   it("rejects an ENCRYPTION_KEY shorter than 32 characters", () => {
     expect(() => validateEnv({ ...VALID_ENV, ENCRYPTION_KEY: "too-short" })).toThrow(/ENCRYPTION_KEY/);
+  });
+
+  it("fails fast when PASSWORD_RESET_TOKEN_SECRET is missing", () => {
+    const { PASSWORD_RESET_TOKEN_SECRET: _unused, ...withoutResetSecret } = VALID_ENV;
+    void _unused;
+
+    expect(() => validateEnv(withoutResetSecret)).toThrow(/PASSWORD_RESET_TOKEN_SECRET/);
+  });
+
+  it("rejects a PASSWORD_RESET_TOKEN_SECRET that is too short", () => {
+    expect(() => validateEnv({ ...VALID_ENV, PASSWORD_RESET_TOKEN_SECRET: "short" })).toThrow(
+      /PASSWORD_RESET_TOKEN_SECRET/,
+    );
   });
 
   it("rejects an unrecognized NODE_ENV value", () => {

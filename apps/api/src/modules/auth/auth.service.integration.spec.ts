@@ -9,7 +9,7 @@ import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
 import { SessionService } from "./session.service";
 import { LoginAttemptService } from "./login-attempt.service";
-import { SecurityEventService } from "./security-event.service";
+import { SecurityEventService } from "../../common/security-events/security-event.service";
 import { RateLimiterService } from "./rate-limiter.service";
 import { PrismaModule } from "../../database/prisma.module";
 import { PrismaService } from "../../database/prisma.service";

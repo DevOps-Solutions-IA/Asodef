@@ -41,4 +41,28 @@ export class RateLimiterService {
       return { limited: false, remaining: max, retryAfterSeconds: 0 };
     }
   }
+
+  /**
+   * Reads the current count without incrementing it - used where only
+   * *failures* should count against the limit (e.g. change-password: a
+   * correct current password must never move the counter). Callers
+   * increment explicitly via checkAndIncrement() on the failure path.
+   */
+  async peek(key: string, max: number): Promise<RateLimitResult> {
+    try {
+      const client = this.redisService.getClient();
+      const redisKey = `ratelimit:${key}`;
+      const [countRaw, ttl] = await Promise.all([client.get(redisKey), client.ttl(redisKey)]);
+      const count = countRaw ? Number(countRaw) : 0;
+      const retryAfterSeconds = ttl > 0 ? ttl : 0;
+
+      return {
+        limited: count > max,
+        remaining: Math.max(0, max - count),
+        retryAfterSeconds,
+      };
+    } catch {
+      return { limited: false, remaining: max, retryAfterSeconds: 0 };
+    }
+  }
 }

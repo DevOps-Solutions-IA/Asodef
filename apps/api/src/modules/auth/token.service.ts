@@ -9,6 +9,17 @@ export interface AccessTokenPayload {
   sid: string;
 }
 
+/** What jwtService.verify() actually returns: jsonwebtoken always adds
+ * `iat`/`exp` to the decoded payload when the token was signed with
+ * `expiresIn` (as signAccessToken does), regardless of the payload shape
+ * passed to sign(). `iat` is what JwtAuthGuard compares against
+ * User.passwordChangedAt (US-007) to reject an already-issued access
+ * token after a password reset/change. */
+export interface VerifiedAccessTokenPayload extends AccessTokenPayload {
+  iat: number;
+  exp: number;
+}
+
 /**
  * Access tokens are short-lived signed JWTs (stateless, verified without a
  * DB hit). Refresh tokens are opaque high-entropy random strings, never
@@ -37,8 +48,8 @@ export class TokenService {
 
   /** Throws if the token is missing, malformed, expired, or has an
    * invalid signature - callers must catch and map to a safe 401. */
-  verifyAccessToken(token: string): AccessTokenPayload {
-    return this.jwtService.verify<AccessTokenPayload>(token, {
+  verifyAccessToken(token: string): VerifiedAccessTokenPayload {
+    return this.jwtService.verify<VerifiedAccessTokenPayload>(token, {
       secret: this.configService.get("JWT_SECRET", { infer: true }),
     });
   }

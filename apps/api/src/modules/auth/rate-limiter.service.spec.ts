@@ -72,4 +72,51 @@ describe("RateLimiterService (real Redis)", () => {
     expect(result.limited).toBe(false);
     expect(result.remaining).toBe(5);
   });
+
+  describe("peek", () => {
+    it("does not increment the counter (unlike checkAndIncrement)", async () => {
+      const key = `test-${randomUUID()}`;
+      const before = await service.peek(key, 5);
+      expect(before.limited).toBe(false);
+      expect(before.remaining).toBe(5);
+
+      // Repeated peeks must never move the counter.
+      await service.peek(key, 5);
+      await service.peek(key, 5);
+      const stillZero = await service.peek(key, 5);
+      expect(stillZero.remaining).toBe(5);
+    });
+
+    it("reflects counts made by checkAndIncrement without adding its own", async () => {
+      const key = `test-${randomUUID()}`;
+      await service.checkAndIncrement(key, 5, 60);
+      await service.checkAndIncrement(key, 5, 60);
+
+      const peeked = await service.peek(key, 5);
+      expect(peeked.remaining).toBe(3);
+
+      const peekedAgain = await service.peek(key, 5);
+      expect(peekedAgain.remaining).toBe(3); // unchanged - peek never increments
+    });
+
+    it("reports limited once checkAndIncrement has pushed the count past max", async () => {
+      const key = `test-${randomUUID()}`;
+      for (let i = 0; i < 4; i++) {
+        await service.checkAndIncrement(key, 3, 60);
+      }
+      const peeked = await service.peek(key, 3);
+      expect(peeked.limited).toBe(true);
+    });
+
+    it("fails open when Redis is unavailable", async () => {
+      const brokenClient = { get: jest.fn().mockRejectedValue(new Error("Redis connection lost")), ttl: jest.fn() };
+      const brokenRedisService = { getClient: () => brokenClient } as unknown as RedisService;
+      const resilientService = new RateLimiterService(brokenRedisService);
+
+      const result = await resilientService.peek("any-key", 5);
+
+      expect(result.limited).toBe(false);
+      expect(result.remaining).toBe(5);
+    });
+  });
 });

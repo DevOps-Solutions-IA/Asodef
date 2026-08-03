@@ -69,6 +69,28 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
     }
 
+    // US-007 design decision: access tokens are otherwise stateless
+    // (verified by signature alone, no per-request session lookup), so an
+    // already-issued token would normally stay valid until its own short
+    // TTL lapses even after a password reset/change - exactly the gap
+    // section 9 of the US-007 spec calls out. Comparing the token's `iat`
+    // against User.passwordChangedAt closes that gap for this specific
+    // high-risk event at zero extra cost (the user row is already loaded
+    // here for roles/permissions on every request) without introducing a
+    // general per-request session/blocklist lookup for every route.
+    // `iat` has whole-second resolution (a JWT constraint) while
+    // passwordChangedAt has millisecond resolution, so both sides are
+    // compared at whole-second granularity - a token minted in the exact
+    // same second as the password change is treated as valid rather than
+    // rejected by sub-second luck. This matters in practice: the
+    // documented change-password flow relies on the acting session's very
+    // next /refresh call succeeding immediately, which can legitimately
+    // land in the same wall-clock second as the change itself.
+    const passwordChangedAtSeconds = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : null;
+    if (passwordChangedAtSeconds !== null && payload.iat < passwordChangedAtSeconds) {
+      throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
+    }
+
     const roleNames = user.roles.map((userRole) => userRole.role.name);
     const permissionKeys = new Set<string>();
     for (const userRole of user.roles) {

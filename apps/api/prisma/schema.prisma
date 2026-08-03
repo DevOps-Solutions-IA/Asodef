@@ -44,11 +44,20 @@ model User {
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(3)
 
-  roles          UserRole[]
-  sessions       Session[]
-  passwordResets PasswordReset[]
-  loginAttempts  LoginAttempt[]
-  securityEvents SecurityEvent[]
+  // US-007: stamped on every successful password reset/change. JwtAuthGuard
+  // rejects any already-issued access token whose `iat` predates this
+  // timestamp - see the guard's doc comment for the full design rationale
+  // (the smallest mechanism that gives near-immediate revocation of an
+  // otherwise-stateless access token without a per-request session lookup).
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
+
+  roles            UserRole[]
+  sessions         Session[]
+  passwordResets   PasswordReset[]
+  passwordHistory  PasswordHistoryEntry[]
+  loginAttempts    LoginAttempt[]
+  securityEvents   SecurityEvent[]
+  notificationJobs NotificationJob[]
 
   @@map("users")
 }
@@ -111,6 +120,7 @@ enum SessionRevocationReason {
   REFRESH_TOKEN_REUSE_DETECTED
   ADMIN_ACTION
   PASSWORD_RESET
+  PASSWORD_CHANGED
   EXPIRED_CLEANUP
 
   @@map("session_revocation_reason")
@@ -156,22 +166,98 @@ model Session {
   @@map("sessions")
 }
 
-// Password-reset token. Only a hash of the reset token is ever stored.
-// One-time-use is enforced at the application layer by checking usedAt
-// is null and expiresAt is in the future before honoring the token.
+// Password-reset token (US-003 skeleton, extended by US-007). Only a hash
+// of the reset token is ever stored - see PasswordResetTokenService. At
+// most one *active* (unused, unexpired, non-superseded) token exists per
+// user at a time: requesting a new one supersedes every previous unused
+// token (supersededAt stamped) - that is the documented invalidation
+// policy. One-time-use is enforced atomically at the application layer
+// (an updateMany claim with `usedAt: null` in the WHERE clause, the same
+// concurrency-safe pattern SessionService.rotateSession uses). Never
+// cascade-deleted from User, matching LoginAttempt/SecurityEvent: this is
+// a security record and must survive account deactivation.
 model PasswordReset {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  tokenHash String    @unique @map("token_hash")
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
-  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String?   @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  requestIp    String?   @map("request_ip")
+  userAgent    String?   @map("user_agent")
+  requestId    String?   @map("request_id")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(3)
+  supersededAt DateTime? @map("superseded_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([expiresAt])
   @@map("password_resets")
+}
+
+// One prior password hash per row, inserted immediately before the
+// User's passwordHash is overwritten by a reset or change (US-007). Lets
+// PasswordPolicyService reject reuse of a recent password
+// (PASSWORD_HISTORY_LIMIT most recent rows) without keeping the check
+// coupled to any single flow. Rows are never pruned by this story -
+// retention/cleanup is a future governance-module concern, matching the
+// "do not delete security evidence prematurely" instruction.
+model PasswordHistoryEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("password_history")
+}
+
+enum NotificationType {
+  PASSWORD_RESET
+  PASSWORD_CHANGED
+  SECURITY_ALERT
+
+  @@map("notification_type")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+
+  @@map("notification_status")
+}
+
+// Durable outbox row for every notification the platform attempts to send
+// (US-007). Created synchronously in the same request with status
+// QUEUED; a fire-and-forget dispatch immediately afterward (never awaited
+// by the HTTP response) updates it to SENT or FAILED+failureReason - this
+// row IS the queue, and its existence/terminal status is exactly what
+// tests and future operational tooling inspect. Never stores the raw
+// content of a password-reset link/token - only safe metadata.
+model NotificationJob {
+  id              String             @id @default(uuid()) @db.Uuid
+  type            NotificationType
+  status          NotificationStatus @default(QUEUED)
+  recipientEmail  String             @map("recipient_email")
+  userId          String?            @map("user_id") @db.Uuid
+  correlationId   String             @map("correlation_id")
+  templateVersion String             @map("template_version")
+  retryCount      Int                @default(0) @map("retry_count")
+  failureReason   String?            @map("failure_reason")
+  sentAt          DateTime?          @map("sent_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([correlationId])
+  @@map("notification_jobs")
 }
 
 enum LoginFailureCategory {
@@ -223,6 +309,16 @@ enum SecurityEventType {
   SESSION_REVOKED
   LOGOUT
   LOGOUT_ALL
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_TOKEN_CREATED
+  PASSWORD_RESET_SUCCEEDED
+  PASSWORD_RESET_FAILED
+  PASSWORD_RESET_TOKEN_EXPIRED
+  PASSWORD_RESET_TOKEN_REUSED
+  PASSWORD_CHANGED
+  PASSWORD_CHANGE_FAILED
+  PASSWORD_SESSIONS_REVOKED
+  PASSWORD_NOTIFICATION_FAILED
 
   @@map("security_event_type")
 }

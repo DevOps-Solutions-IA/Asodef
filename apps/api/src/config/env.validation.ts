@@ -53,9 +53,15 @@ export const envSchema = z.object({
 
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_SECURE: booleanFromString.default("false"),
   SMTP_USER: z.string().default(""),
   SMTP_PASSWORD: z.string().default(""),
   SMTP_FROM: z.string().default(""),
+
+  // Institutional contact address - used as the notification "from" name
+  // and inside email templates. Not itself proof that SMTP delivery is
+  // configured/tested; see NotificationsModule's mail-transport selection.
+  CORPORATE_EMAIL: z.string().email().default("info@asodef.com.co"),
 
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   TRUST_PROXY: z.string().default("false"),
@@ -89,6 +95,42 @@ export const envSchema = z.object({
   // distributed guessing across many different email addresses.
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   LOGIN_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+  // --- Password recovery (US-007) ---
+  // A dedicated pepper, distinct from JWT_REFRESH_SECRET, so the blast
+  // radius of a leaked secret stays scoped to the token family it protects.
+  PASSWORD_RESET_TOKEN_SECRET: z
+    .string({ required_error: "PASSWORD_RESET_TOKEN_SECRET is required" })
+    .min(16, "PASSWORD_RESET_TOKEN_SECRET must be at least 16 characters"),
+  PASSWORD_RESET_TOKEN_TTL: z.string().default("1h"),
+
+  // Centralized, configurable password policy (PasswordPolicyService).
+  PASSWORD_MIN_LENGTH: z.coerce.number().int().positive().default(12),
+  PASSWORD_MAX_LENGTH: z.coerce.number().int().positive().default(128),
+  // How many of the user's most recent passwords (including the current
+  // one) are rejected as a new password.
+  PASSWORD_HISTORY_LIMIT: z.coerce.number().int().positive().default(5),
+
+  // forgot-password is rate limited on two independent axes: by requesting
+  // IP (coarse, cross-account abuse) and by a hash of the normalized email
+  // (protects a single account from being flooded with reset emails from
+  // many different IPs). Both fail open if Redis is unavailable, exactly
+  // like LOGIN_RATE_LIMIT_*.
+  FORGOT_PASSWORD_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
+  FORGOT_PASSWORD_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
+  FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_MAX: z.coerce.number().int().positive().default(3),
+  FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
+
+  // reset-password: coarse per-IP throttle on token-redemption attempts
+  // (defense in depth; the token itself already has 256 bits of entropy).
+  RESET_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  RESET_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
+
+  // change-password: counts only *failed* current-password attempts by the
+  // authenticated user's id - a correct current password never increments
+  // this counter (see PasswordRecoveryService.changePassword).
+  CHANGE_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  CHANGE_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

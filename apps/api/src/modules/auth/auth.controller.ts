@@ -3,12 +3,24 @@ import type { Response } from "express";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthService, RateLimitedException, type RequestContext } from "./auth.service";
 import { AuthCookieService } from "./auth-cookie.service";
+import { PasswordRecoveryService } from "./password-recovery.service";
+import { PasswordRecoveryErrorCode, PasswordRecoveryException } from "./password-recovery.types";
 import { LoginDto } from "./dto/login.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import type { AuthenticatedRequest, RequestUser } from "./types/request-user.type";
 
 const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más tarde.";
+
+/** Maps the password-recovery domain's safe error codes to HTTP status:
+ * token/policy problems are 400 (bad request input), rate limiting is
+ * 429, matching the existing RateLimitedException convention below. */
+function passwordRecoveryHttpStatus(code: PasswordRecoveryErrorCode): number {
+  return code === PasswordRecoveryErrorCode.RATE_LIMITED ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_REQUEST;
+}
 
 function buildRequestContext(request: AuthenticatedRequest): RequestContext {
   const userAgent = request.headers["user-agent"];
@@ -25,6 +37,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly cookieService: AuthCookieService,
+    private readonly passwordRecoveryService: PasswordRecoveryService,
   ) {}
 
   @Public()
@@ -108,4 +121,56 @@ export class AuthController {
       session: sessionMetadata,
     };
   }
+
+  @Public()
+  @Post("forgot-password")
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() request: AuthenticatedRequest) {
+    return this.passwordRecoveryService.forgotPassword(dto, buildRequestContext(request));
+  }
+
+  @Public()
+  @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() request: AuthenticatedRequest) {
+    try {
+      return await this.passwordRecoveryService.resetPassword(dto, buildRequestContext(request));
+    } catch (error) {
+      throw mapPasswordRecoveryError(error);
+    }
+  }
+
+  @Post("change-password")
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser() user: RequestUser | undefined,
+    @Body() dto: ChangePasswordDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    // JwtAuthGuard guarantees `user` is defined here (this route is not
+    // @Public()); the check exists only to satisfy the type checker.
+    if (!user) {
+      throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    }
+    try {
+      return await this.passwordRecoveryService.changePassword(
+        user.id,
+        user.sessionId,
+        dto,
+        buildRequestContext(request),
+      );
+    } catch (error) {
+      throw mapPasswordRecoveryError(error);
+    }
+  }
+}
+
+/** Only PasswordRecoveryException gets a bespoke {message, code} mapping;
+ * anything else propagates untouched so the global exception filter
+ * (US-004) handles it exactly like every other unexpected error. */
+function mapPasswordRecoveryError(error: unknown): unknown {
+  if (error instanceof PasswordRecoveryException) {
+    return new HttpException({ message: error.message, code: error.code }, passwordRecoveryHttpStatus(error.code));
+  }
+  return error;
 }

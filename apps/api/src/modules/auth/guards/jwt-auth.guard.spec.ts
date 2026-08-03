@@ -5,6 +5,10 @@ import { TokenService } from "../token.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 function buildContext(cookies: Record<string, string> = {}): ExecutionContext {
   const request = { cookies, headers: {} };
   return {
@@ -68,7 +72,12 @@ describe("JwtAuthGuard", () => {
 
   it("rejects a validly-signed token whose user no longer exists", async () => {
     jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-    tokenService.verifyAccessToken.mockReturnValue({ sub: "ghost-user-id", sid: "session-1" });
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "ghost-user-id",
+      sid: "session-1",
+      iat: nowSeconds(),
+      exp: nowSeconds() + 900,
+    });
     prisma.user.findUnique.mockResolvedValue(null);
     const context = buildContext({ asodef_at: "a.valid.jwt" });
 
@@ -77,7 +86,12 @@ describe("JwtAuthGuard", () => {
 
   it("rejects a valid token for a user whose status is no longer ACTIVE", async () => {
     jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-    tokenService.verifyAccessToken.mockReturnValue({ sub: "user-1", sid: "session-1" });
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: nowSeconds(),
+      exp: nowSeconds() + 900,
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "a@example.com",
@@ -92,7 +106,12 @@ describe("JwtAuthGuard", () => {
 
   it("populates request.user with safe fields (no password/token hash) for a valid token", async () => {
     jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-    tokenService.verifyAccessToken.mockReturnValue({ sub: "user-1", sid: "session-1" });
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: nowSeconds(),
+      exp: nowSeconds() + 900,
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "a@example.com",
@@ -130,6 +149,77 @@ describe("JwtAuthGuard", () => {
       sessionId: "session-1",
     });
     expect(JSON.stringify(request.user)).not.toContain("should-never-leak");
+  });
+
+  it("rejects an access token issued before the user's most recent password change (US-007)", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    const tokenIssuedAt = nowSeconds() - 3600; // one hour ago
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: tokenIssuedAt,
+      exp: tokenIssuedAt + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A",
+      status: "ACTIVE",
+      // Changed *after* the token's iat - the token must now be rejected
+      // even though its signature and expiry are both still valid.
+      passwordChangedAt: new Date((tokenIssuedAt + 1800) * 1000),
+      roles: [],
+    });
+    const context = buildContext({ asodef_at: "a.valid.jwt" });
+
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it("accepts an access token issued after the user's most recent password change", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    const tokenIssuedAt = nowSeconds();
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: tokenIssuedAt,
+      exp: tokenIssuedAt + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A",
+      status: "ACTIVE",
+      passwordChangedAt: new Date((tokenIssuedAt - 3600) * 1000),
+      roles: [],
+    });
+    const context = buildContext({ asodef_at: "a.valid.jwt" });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it("accepts an access token issued in the exact same whole second as passwordChangedAt (iat has only second precision)", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    const sharedSecond = nowSeconds();
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: sharedSecond,
+      exp: sharedSecond + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A",
+      status: "ACTIVE",
+      // A few hundred milliseconds into the *same* second as iat - must
+      // not be rejected just because the sub-second ordering is
+      // unknowable from a second-granularity `iat`.
+      passwordChangedAt: new Date(sharedSecond * 1000 + 750),
+      roles: [],
+    });
+    const context = buildContext({ asodef_at: "a.valid.jwt" });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
   it("reads the IS_PUBLIC_KEY metadata via getAllAndOverride against both handler and class", async () => {

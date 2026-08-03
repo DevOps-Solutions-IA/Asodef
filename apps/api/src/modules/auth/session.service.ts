@@ -117,6 +117,29 @@ export class SessionService {
     });
   }
 
+  /**
+   * Revokes every other session's *refresh token* for the user,
+   * deliberately leaving `exceptSessionId`'s row untouched - used by
+   * change-password (US-007), where the documented decision is that the
+   * session performing the change keeps its refresh token (the user
+   * already proved both the old and new password in that same session),
+   * while every *other* session's refresh token is revoked outright.
+   * This is independent of JwtAuthGuard's passwordChangedAt check, which
+   * is universal and invalidates *every* already-issued access token
+   * including this one - so the acting device still needs one /refresh
+   * call to mint a new access token, it just never needs a full
+   * re-login. Password *reset* is different: revokeAllForUser() applies
+   * there with no exception, since a reset proves identity only via
+   * possibly-compromised email access, not an active authenticated
+   * session.
+   */
+  async revokeAllForUserExcept(userId: string, exceptSessionId: string, reason: SessionRevocationReason): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: { userId, id: { not: exceptSessionId }, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: reason },
+    });
+  }
+
   isUsable(session: Session): boolean {
     if (session.revokedAt) return false;
     if (session.rotatedAt) return false;

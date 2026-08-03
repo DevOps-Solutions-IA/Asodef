@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
-import type { RecordSecurityEventInput } from "./types/security-event.types";
+import type { RecordSecurityEventInput } from "./security-event.types";
 
 /**
  * The typed abstraction the full AuditLog module (a later story) connects

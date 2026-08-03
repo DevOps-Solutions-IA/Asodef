@@ -10,6 +10,7 @@ import { PasswordService } from "./password.service";
 import { AuthService, RateLimitedException } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
+import { PasswordRecoveryService } from "./password-recovery.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -181,6 +182,7 @@ describe("AuthController -> 429 mapping (RateLimitedException, isolated from rea
           provide: AuthCookieService,
           useValue: { setAccessTokenCookie: jest.fn(), setRefreshTokenCookie: jest.fn(), clearAuthCookies: jest.fn() },
         },
+        { provide: PasswordRecoveryService, useValue: {} },
       ],
     }).compile();
 

@@ -50,7 +50,7 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     } satisfies Partial<Prisma.PrismaClientKnownRequestError>);
   });
 
-  it("cascades deletion of UserRole, Session, and PasswordReset when the owning User is deleted", async () => {
+  it("cascades deletion of UserRole and Session when the owning User is deleted", async () => {
     const user = await createUser(uniqueEmail("cascade"));
     const role = await prisma.role.findFirstOrThrow();
 
@@ -63,26 +63,59 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
         expiresAt: new Date(Date.now() + 60_000),
       },
     });
+
+    await prisma.user.delete({ where: { id: user.id } });
+    createdUserIds.splice(createdUserIds.indexOf(user.id), 1);
+
+    const [orphanUserRole, orphanSession] = await Promise.all([
+      prisma.userRole.findUnique({ where: { userId_roleId: { userId: user.id, roleId: role.id } } }),
+      prisma.session.findUnique({ where: { id: session.id } }),
+    ]);
+
+    expect(orphanUserRole).toBeNull();
+    expect(orphanSession).toBeNull();
+  });
+
+  it("keeps PasswordReset, PasswordHistoryEntry, and NotificationJob rows (with userId set to null) when the owning User is deleted - security/delivery evidence must survive account deletion", async () => {
+    const user = await createUser(uniqueEmail("password-reset-survives"));
+
     const reset = await prisma.passwordReset.create({
+      data: { userId: user.id, tokenHash: `reset-hash-${randomUUID()}`, expiresAt: new Date(Date.now() + 60_000) },
+    });
+    const history = await prisma.passwordHistoryEntry.create({
+      data: { userId: user.id, passwordHash: `hash-${randomUUID()}` },
+    });
+    const job = await prisma.notificationJob.create({
       data: {
+        type: "PASSWORD_RESET",
+        recipientEmail: user.email,
         userId: user.id,
-        tokenHash: `reset-hash-${randomUUID()}`,
-        expiresAt: new Date(Date.now() + 60_000),
+        correlationId: randomUUID(),
+        templateVersion: "v1",
       },
     });
 
     await prisma.user.delete({ where: { id: user.id } });
     createdUserIds.splice(createdUserIds.indexOf(user.id), 1);
 
-    const [orphanUserRole, orphanSession, orphanReset] = await Promise.all([
-      prisma.userRole.findUnique({ where: { userId_roleId: { userId: user.id, roleId: role.id } } }),
-      prisma.session.findUnique({ where: { id: session.id } }),
+    const [survivingReset, survivingHistory, survivingJob] = await Promise.all([
       prisma.passwordReset.findUnique({ where: { id: reset.id } }),
+      prisma.passwordHistoryEntry.findUnique({ where: { id: history.id } }),
+      prisma.notificationJob.findUnique({ where: { id: job.id } }),
     ]);
 
-    expect(orphanUserRole).toBeNull();
-    expect(orphanSession).toBeNull();
-    expect(orphanReset).toBeNull();
+    expect(survivingReset).not.toBeNull();
+    expect(survivingReset?.userId).toBeNull();
+    expect(survivingHistory).not.toBeNull();
+    expect(survivingHistory?.userId).toBeNull();
+    expect(survivingJob).not.toBeNull();
+    expect(survivingJob?.userId).toBeNull();
+
+    await Promise.all([
+      prisma.passwordReset.delete({ where: { id: reset.id } }),
+      prisma.passwordHistoryEntry.delete({ where: { id: history.id } }),
+      prisma.notificationJob.delete({ where: { id: job.id } }),
+    ]);
   });
 
   it("stores Session expiration and starts unrevoked, then reflects revocation once set", async () => {
@@ -183,7 +216,7 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
     const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
       SELECT indexname FROM pg_indexes
       WHERE schemaname = 'public'
-      AND tablename IN ('users', 'roles', 'permissions', 'sessions', 'password_resets', 'login_attempts', 'security_events')
+      AND tablename IN ('users', 'roles', 'permissions', 'sessions', 'password_resets', 'login_attempts', 'security_events', 'password_history', 'notification_jobs')
     `;
     const indexNames = new Set(indexes.map((i) => i.indexname));
 
@@ -197,12 +230,17 @@ describe("Auth/RBAC schema constraints (integration, real Postgres)", () => {
       "sessions_family_id_idx",
       "sessions_rotated_to_session_id_key",
       "password_resets_token_hash_key",
-      "password_resets_user_id_idx",
+      "password_resets_user_id_created_at_idx",
+      "password_resets_expires_at_idx",
       "login_attempts_email_created_at_idx",
       "login_attempts_ip_address_created_at_idx",
       "login_attempts_user_id_created_at_idx",
       "security_events_user_id_created_at_idx",
       "security_events_type_created_at_idx",
+      "password_history_user_id_created_at_idx",
+      "notification_jobs_user_id_created_at_idx",
+      "notification_jobs_status_created_at_idx",
+      "notification_jobs_correlation_id_idx",
     ]) {
       expect(indexNames.has(expected)).toBe(true);
     }
