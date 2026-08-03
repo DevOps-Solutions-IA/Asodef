@@ -1,0 +1,36 @@
+name: asodef
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-asodef}
+      POSTGRES_USER: ${POSTGRES_USER:-asodef}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asodef_dev_password}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - asodef_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asodef} -d ${POSTGRES_DB:-asodef}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - asodef_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  asodef_postgres_data:
+  asodef_redis_data:

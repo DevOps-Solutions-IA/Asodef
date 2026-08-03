@@ -1,0 +1,1102 @@
+{
+  "version": 1,
+  "project": "ASODEF Digital Platform — Phase 1",
+  "overview": "Build the complete ASODEF S.A.S. digital platform as a single production-oriented delivery: a premium institutional website (React/Vite/TS), a modular NestJS/PostgreSQL backend, staff authentication with RBAC, a real Payment Center backed by a Bold PaymentProvider adapter built against Bold's official API docs, a full commercial CRM (prospects, leads, companies, business partners, affiliates, customers, beneficiaries, opportunities, proposals, agreements, contracts, plans/services), a full legal and policy center with versioned/approved documents, consent management, data-subject rights, data retention, cookie governance, PQR case management, commercial communications with suppression lists, refund/reversal/reconciliation workflows, an administrative platform, real reporting/dashboards, and audit logging throughout. Bold calls run in mock mode (no live network calls, no real credentials) until sandbox keys are supplied, and PRODUCTION_PAYMENTS_ENABLED stays false until every legal/commercial approval gate is APPROVED. Generated legal content is built as a real, versioned, admin-editable system populated with DRAFT content using only confirmed facts (company name, city, contact) — unconfirmed fields (legal representative, exact legal address, judicial notification email, prices, guarantees) stay explicitly unpublished/configurable rather than invented. The build ends with local Docker Compose verification, then — as a final gated milestone requiring explicit go-ahead — deployment to the existing ASODEF VPS under the new domain asodef.com.co, without touching the unrelated existing services already running on app.asodef.com.co, api.asodef.com.co, and webhook.asodef.com.co.",
+  "goals": [
+    "Ship a premium, fully responsive, ASODEF-branded institutional website (Inicio, Quiénes somos, Beneficios, Portafolio, Cobertura, Empresas, Contacto) with real backend-served lead capture and content for key sections",
+    "Ship a working Payment Center (/pagos) covering lookup → order → provider handoff → result → receipt, backed by real domain modeling (obligations, orders, attempts, transactions, events, receipts) and a PaymentProvider adapter built to Bold's documented API shapes",
+    "Implement staff authentication (login, logout, password recovery, lockout) with seeded roles/permissions and an audit log foundation reusable by later phases",
+    "Verify the entire stack locally via Docker Compose (web, api, postgres, redis) with passing health checks before any deployment",
+    "Deploy Phase 1 to the ASODEF VPS under asodef.com.co (with www redirect) using paths /, /api, /pagos, /admin — while leaving the pre-existing app./api./webhook. subdomains and their services completely untouched",
+    "Establish patterns (status mapping, provider adapter interface, RBAC, audit) that the CRM, legal, and admin modules all reuse without rework",
+    "Ship a full commercial CRM covering the 14-stage pipeline (prospect through renewal/expiration) for prospects, leads, companies, business partners, affiliates, customers, and beneficiaries, with real dashboards backed by live data",
+    "Ship a full Legal & Policy Center (/legal/*) with versioned, approval-gated legal documents (privacy policy, data-processing policy, privacy notice, terms & conditions, payment terms, refund/reversal policy, cookie policy, PQR, accessibility, security) populated with DRAFT content from only confirmed facts",
+    "Ship consent management (purpose-scoped consent records with full evidence), a cookie preference center, and a data-subject-rights request workflow",
+    "Ship a PQR (peticiones/quejas/reclamos/sugerencias) case-management workflow with public submission and admin case handling",
+    "Ship contracts, plans/services versioning, business-partner lifecycle management, refunds/reversals, and reconciliation as real, persisted, audited workflows",
+    "Ship an administrative platform (/admin) exposing all of the above to authorized staff, backed entirely by real data — no fake dashboards",
+    "Enforce legal/commercial approval gates that keep PRODUCTION_PAYMENTS_ENABLED=false until every mandatory gate (NIT, legal address, corporate email, legal representative, policies, Bold production credentials, HTTPS, webhook validation, customer-service ownership) is APPROVED"
+  ],
+  "nonGoals": [
+    "No live Bold production payments — the adapter is built to the documented schema and runs in mock mode; PRODUCTION_PAYMENTS_ENABLED stays false until all legal/commercial approval gates are APPROVED and real sandbox/production credentials are supplied",
+    "No real outbound WhatsApp Business API or SMTP email dispatch — commercial/transactional notifications are fully modeled (templates, delivery records, suppression lists, retries) but the actual transport is a logging/persisting stub until real provider credentials are supplied",
+    "No invented legal representative, judicial notification email, final legal address, approved legal wording, refund guarantees, coverage guarantees, prices, partner companies, or plan conditions — these fields exist in the schema as configurable and stay unpublished/DRAFT until the user supplies validated values",
+    "No electronic-signature provider integration — ContractAcceptance supports recording acceptance evidence now; wiring a real e-signature vendor is out of scope until one is chosen",
+    "No customer/company self-service login portals (/mi-cuenta/*, /empresa/*) — all CRM, contracts, and legal-request handling in this build is operated by authorized staff through /admin; self-service portals are a distinct future build",
+    "No changes to the VPS's existing app.asodef.com.co, api.asodef.com.co, or webhook.asodef.com.co services, containers, ports, or Nginx server blocks"
+  ],
+  "successMetrics": [
+    "All Phase 1 routes render correctly at 320px, tablet, and 1440px+ without horizontal scroll",
+    "A full payment lookup → order → mock-Bold handoff → result → receipt flow completes end-to-end locally with correct status mapping and an audit trail entry per transition",
+    "docker compose up brings web, api, postgres, and redis to healthy status with zero manual intervention",
+    "lint, typecheck, unit/integration tests, production build, and the Playwright smoke test all pass in CI",
+    "After deployment, https://asodef.com.co and https://asodef.com.co/pagos respond over HTTPS, /api/v1/health returns 200, Postgres/Redis are not publicly reachable, and app.asodef.com.co / api.asodef.com.co / webhook.asodef.com.co remain reachable and unchanged"
+  ],
+  "openQuestions": [
+    "Bold webhook signature/authentication header format could not be found in the publicly fetched docs (webhook-specific page returned 404) — must be verified against the merchant's Bold dashboard or updated docs before enabling real webhook signature validation",
+    "Whether the /pagos/procesar mock-Bold handoff screen should visually mimic Bold's real checkout or use a clearly-labeled ASODEF 'modo prueba' placeholder — defaulting to the latter until real sandbox access exists",
+    "Exact copy/imagery for real ASODEF brand assets (logo, photography) — to be supplied later; Phase 1 wires placeholder assets at the final file paths"
+  ],
+  "stack": {
+    "framework": "React 18 + Vite + TypeScript + Tailwind CSS (apps/web); NestJS + TypeScript (apps/api); Turborepo + pnpm workspaces monorepo",
+    "hosting": "Self-managed Contabo VPS (169.58.36.138, user asodefadmin) via Docker Compose + Nginx; new domain asodef.com.co (www redirects to apex); existing app./api./webhook. subdomains belong to another application and must not be modified",
+    "database": "PostgreSQL 16 via Prisma ORM; Redis for rate limiting, login-lockout counters, and webhook idempotency locks",
+    "auth": "Staff-only login in Phase 1. JWT access + refresh tokens carried in httpOnly, secure, SameSite cookies; server-side Session table for revocation; bcrypt password hashing; RBAC via seeded Roles/Permissions tables enforced by NestJS guards; login-attempt monitoring with Redis-backed lockout."
+  },
+  "routes": [
+    { "path": "/", "name": "Inicio", "purpose": "Institutional homepage: Navbar, Hero, TrustBar, About, Statistics, CompanyBenefits, BenefitPortfolio, Coverage, PartnershipCTA, Contact, Footer, WhatsApp button" },
+    { "path": "/quienes-somos", "name": "Quiénes somos", "purpose": "Deep-linkable anchor/section for institutional history, mission, vision" },
+    { "path": "/beneficios", "name": "Beneficios", "purpose": "Deep-linkable anchor/section for company benefits (why partner with ASODEF)" },
+    { "path": "/portafolio", "name": "Portafolio", "purpose": "Deep-linkable anchor/section for the benefit portfolio grid" },
+    { "path": "/cobertura", "name": "Cobertura", "purpose": "Deep-linkable anchor/section for national coverage messaging and map" },
+    { "path": "/empresas", "name": "Empresas", "purpose": "Deep-linkable anchor/section framing the alliance CTA for companies" },
+    { "path": "/contacto", "name": "Contacto", "purpose": "Deep-linkable anchor/section with commercial contact info and lead form" },
+    { "path": "/pagos", "name": "Centro de Pagos", "purpose": "Payment lookup by document type+number or by payment reference" },
+    { "path": "/pagos/orden/:publicReference", "name": "Resumen de orden", "purpose": "Shows the selected obligation/order summary before proceeding to payment" },
+    { "path": "/pagos/procesar/:publicReference", "name": "Procesar pago", "purpose": "Bold checkout handoff screen (mock mode in Phase 1, clearly labeled as test mode)" },
+    { "path": "/pagos/resultado", "name": "Resultado de pago", "purpose": "Approved / Pending / Rejected / Failed / Expired result states" },
+    { "path": "/pagos/comprobante/:publicReference", "name": "Comprobante", "purpose": "View and download the ASODEF payment receipt (only for verified-approved orders)" },
+    { "path": "/iniciar-sesion", "name": "Iniciar sesión", "purpose": "Staff login" },
+    { "path": "/recuperar-clave", "name": "Recuperar clave", "purpose": "Request a password reset" },
+    { "path": "/restablecer-clave", "name": "Restablecer clave", "purpose": "Complete a password reset via emailed token" },
+    { "path": "/legal", "name": "Centro legal", "purpose": "Index of all published legal/policy documents, searchable" },
+    { "path": "/legal/informacion-empresarial", "name": "Información empresarial", "purpose": "Confirmed corporate identity facts only; unconfirmed fields omitted, not invented" },
+    { "path": "/legal/politica-de-privacidad", "name": "Política de privacidad", "purpose": "Published version of the privacy policy" },
+    { "path": "/legal/tratamiento-de-datos", "name": "Tratamiento de datos", "purpose": "Personal data processing policy" },
+    { "path": "/legal/aviso-de-privacidad", "name": "Aviso de privacidad", "purpose": "Privacy notice" },
+    { "path": "/legal/terminos-y-condiciones", "name": "Términos y condiciones", "purpose": "Platform terms and conditions" },
+    { "path": "/legal/terminos-de-pago", "name": "Términos de pago", "purpose": "Payment terms" },
+    { "path": "/legal/reversiones-y-reembolsos", "name": "Reversiones y reembolsos", "purpose": "Refund and reversal policy" },
+    { "path": "/legal/politica-de-cookies", "name": "Política de cookies", "purpose": "Cookie policy, linked to the cookie preference center" },
+    { "path": "/legal/pqr", "name": "PQR", "purpose": "Public PQR submission form and process explanation" },
+    { "path": "/legal/seguridad", "name": "Seguridad", "purpose": "Security information for users" },
+    { "path": "/legal/accesibilidad", "name": "Accesibilidad", "purpose": "Accessibility policy" },
+    { "path": "/legal/solicitudes-de-datos", "name": "Solicitudes de datos", "purpose": "Public data-subject-rights request submission" },
+    { "path": "/admin", "name": "Panel administrativo", "purpose": "Staff-only dashboard entry point, RBAC-gated" },
+    { "path": "/admin/crm/prospectos", "name": "Prospectos y leads", "purpose": "CRM prospect/lead list and detail" },
+    { "path": "/admin/crm/oportunidades", "name": "Oportunidades", "purpose": "Pipeline board across the 14 commercial stages" },
+    { "path": "/admin/crm/empresas", "name": "Empresas y aliados", "purpose": "Company and business-partner management" },
+    { "path": "/admin/planes", "name": "Planes y servicios", "purpose": "Plan/service versioning and status management" },
+    { "path": "/admin/contratos", "name": "Contratos", "purpose": "Contract lifecycle management" },
+    { "path": "/admin/pagos", "name": "Pagos", "purpose": "Payment search, manual notes, refund/reversal initiation" },
+    { "path": "/admin/conciliacion", "name": "Conciliación", "purpose": "Reconciliation differences and resolution" },
+    { "path": "/admin/legal", "name": "Gestión legal", "purpose": "Legal document versioning, review, and approval workflow" },
+    { "path": "/admin/consentimientos", "name": "Consentimientos", "purpose": "Consent record search and evidence review" },
+    { "path": "/admin/solicitudes-de-datos", "name": "Solicitudes de datos (admin)", "purpose": "Data-subject-rights case management" },
+    { "path": "/admin/pqr", "name": "PQR (admin)", "purpose": "PQR case management" },
+    { "path": "/admin/aprobaciones", "name": "Aprobaciones", "purpose": "Legal/commercial approval-gate management and PRODUCTION_PAYMENTS_ENABLED control" },
+    { "path": "/admin/reportes", "name": "Reportes", "purpose": "Real-data reports and dashboards with CSV/XLSX export" },
+    { "path": "/admin/auditoria", "name": "Auditoría", "purpose": "Audit log search" },
+    { "path": "/admin/usuarios", "name": "Usuarios y roles", "purpose": "Staff user, role, and permission management" }
+  ],
+  "uiNotes": [
+    "Design tokens per master prompt section 3: --color-brand-dark #064D38, --color-brand-deep #003F2D, --color-brand-green #438B34, --color-brand-light #80AE3A, --color-brand-orange #F28A00, --color-brand-orange-light #FFAA28, --color-bg-base #F4F5F1, --color-bg-soft #EDF3EC, --color-bg-elevated #FFFFFF, --color-text-main #14201B, --color-text-muted #66736D, --color-border-soft rgba(20,32,27,0.08), plus success/warning/danger/info tokens",
+    "Fonts: Inter for body/UI, Outfit for headings/display/numbers, Caveat only for short handwritten accents — never for paragraphs or critical UI",
+    "Global CSS: smooth scroll, orange text selection, subtle custom scrollbar, visible focus rings, prefers-reduced-motion support",
+    "Layout system: max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 container, 12-column grid, py-20 md:py-28 section rhythm, rounded-[28px] cards with border-black/[0.06], bg-white/80, backdrop-blur-xl, soft shadow — avoid stacking excessive glass/shadow/rounded-pill effects",
+    "Navbar: fixed, transparent pre-scroll, bg-[#F4F5F1]/85 + backdrop-blur-xl post-scroll, animated hover underlines, prominent 'Pagos' pill button, dark 'Quiero ser aliado' primary button, AnimatePresence mobile drawer with focus trap and Escape-to-close",
+    "Hero: min-h-[100svh] split layout, clamp()-sized Outfit heading with orange-highlighted phrase, organic image framing via asymmetric border-radius, floating glass stat labels, motion easing [0.22,1,0.36,1], respects reduced motion",
+    "Payment Center screens must feel visually distinct from the marketing site: simpler chrome, large readable totals, masked identity data only, centralized Spanish status labels — never raw enum strings in the UI",
+    "Use motion/react for component-level animation (navbar, drawer, cards, payment states) and reserve GSAP ScrollTrigger only for the hero sequence, statistics counters, and coverage-map reveal per the skill orchestration instructions",
+    "All user-facing copy is in Spanish; no lorem ipsum; no invented addresses, prices, or legal claims"
+  ],
+  "dataModel": [
+    { "entity": "User", "fields": ["id (uuid)", "email", "passwordHash", "fullName", "status", "createdAt", "updatedAt"] },
+    { "entity": "Role", "fields": ["id (uuid)", "name", "description"] },
+    { "entity": "Permission", "fields": ["id (uuid)", "key", "description"] },
+    { "entity": "UserRole", "fields": ["userId", "roleId"] },
+    { "entity": "RolePermission", "fields": ["roleId", "permissionId"] },
+    { "entity": "Session", "fields": ["id (uuid)", "userId", "refreshTokenHash", "ipAddress", "userAgent", "expiresAt", "revokedAt", "createdAt"] },
+    { "entity": "PasswordReset", "fields": ["id (uuid)", "userId", "tokenHash", "expiresAt", "usedAt", "createdAt"] },
+    { "entity": "LoginAttempt", "fields": ["id (uuid)", "email", "ipAddress", "success", "createdAt"] },
+    { "entity": "Customer", "fields": ["id (uuid)", "documentType", "documentNumber", "fullName", "email", "phone", "createdAt"] },
+    { "entity": "Affiliate", "fields": ["id (uuid)", "customerId", "affiliateNumber", "status", "createdAt"] },
+    { "entity": "Company", "fields": ["id (uuid)", "name", "nit", "contactName", "contactEmail", "sector", "status", "createdAt"] },
+    { "entity": "Plan", "fields": ["id (uuid)", "name", "description", "active"] },
+    { "entity": "Obligation", "fields": ["id (uuid)", "customerId", "planId", "concept", "amountCents", "currency", "dueDate", "status"] },
+    { "entity": "PaymentOrder", "fields": ["id (uuid)", "publicReference (non-sequential)", "obligationId", "customerId", "amountCents", "currency", "status", "createdAt", "expiresAt"] },
+    { "entity": "PaymentAttempt", "fields": ["id (uuid)", "paymentOrderId", "providerReferenceId", "status", "createdAt"] },
+    { "entity": "PaymentTransaction", "fields": ["id (uuid)", "paymentAttemptId", "boldTransactionId", "status", "rawResponse (jsonb)", "createdAt"] },
+    { "entity": "PaymentEvent", "fields": ["id (uuid)", "paymentOrderId", "source", "eventType", "idempotencyKey (unique)", "payload (jsonb)", "receivedAt", "processedAt"] },
+    { "entity": "PaymentReceipt", "fields": ["id (uuid)", "paymentOrderId", "receiptNumber", "verificationCode", "issuedAt", "pdfPath"] },
+    { "entity": "AuditLog", "fields": ["id (uuid)", "userId (nullable)", "action", "entityType", "entityId", "previousValue (jsonb)", "newValue (jsonb)", "ipAddress", "requestId", "createdAt"] },
+    { "entity": "ContentEntry", "fields": ["id (uuid)", "key (unique)", "locale", "value (jsonb)", "status", "updatedAt"] },
+    { "entity": "LeadSubmission", "fields": ["id (uuid)", "fullName", "company", "position", "city", "phone", "email", "sector", "message", "consentAccepted", "createdAt", "prospectId (nullable link into CRM)"] },
+    { "entity": "Prospect", "fields": ["id (uuid)", "type (INDIVIDUAL/COMPANY)", "fullNameOrLegalName", "documentOrNit", "sector", "city", "source", "assignedUserId", "stage (14-stage enum)", "estimatedValueCents", "probability", "expectedClosingDate", "createdAt", "updatedAt"] },
+    { "entity": "CommercialContact", "fields": ["id (uuid)", "prospectId", "companyId (nullable)", "fullName", "role", "phone", "email", "isPrimary"] },
+    { "entity": "Opportunity", "fields": ["id (uuid)", "prospectId", "companyId (nullable)", "assignedUserId", "stage", "estimatedValueCents", "proposedBenefit", "expectedClosingDate", "probability", "wonLostReason (nullable)", "createdAt", "updatedAt"] },
+    { "entity": "OpportunityStatusHistory", "fields": ["id (uuid)", "opportunityId", "fromStage", "toStage", "changedByUserId", "note", "createdAt"] },
+    { "entity": "CommercialActivity", "fields": ["id (uuid)", "opportunityId", "type (call/meeting/email/task)", "dueDate", "completedAt", "assignedUserId", "note", "createdAt"] },
+    { "entity": "Proposal", "fields": ["id (uuid)", "opportunityId", "version", "content (jsonb)", "status", "sentAt", "createdAt"] },
+    { "entity": "Agreement", "fields": ["id (uuid)", "opportunityId", "companyId", "status", "signedDate", "createdAt"] },
+    { "entity": "BusinessPartner", "fields": ["id (uuid)", "legalName", "tradeName", "nit", "sector", "city", "address", "phone", "corporateEmail", "website", "legalRepresentative (nullable, unconfirmed)", "commercialContactId", "agreementType", "benefitsOffered (jsonb)", "discountConditions", "geographicCoverage", "validFrom", "validUntil", "logoPath", "status (9-state enum)", "approvalStatus", "publicationStatus", "internalNotes", "createdAt"] },
+    { "entity": "Contract", "fields": ["id (uuid)", "type", "relatedCompanyId (nullable)", "relatedCustomerId (nullable)", "internalReference", "currentVersionId", "status (7-state enum)", "effectiveDate", "expirationDate", "notes", "createdAt"] },
+    { "entity": "ContractVersion", "fields": ["id (uuid)", "contractId", "version", "documentPath", "changeSummary", "createdByUserId", "createdAt"] },
+    { "entity": "ContractSigner", "fields": ["id (uuid)", "contractVersionId", "fullName", "role", "email"] },
+    { "entity": "ContractAcceptance", "fields": ["id (uuid)", "contractVersionId", "signerId", "acceptedAt", "ipAddress", "evidenceReference"] },
+    { "entity": "LegalDocument", "fields": ["id (uuid)", "type", "title", "slug (unique)", "currentVersionId", "createdAt"] },
+    { "entity": "LegalDocumentVersion", "fields": ["id (uuid)", "legalDocumentId", "version", "status (7-state enum)", "draftContent (jsonb)", "approvedContent (jsonb, nullable)", "effectiveDate", "expirationDate", "changeSummary", "approvedByUserId (nullable)", "approvalDate (nullable)", "publicationDate (nullable)", "createdAt"] },
+    { "entity": "ConsentPurpose", "fields": ["id (uuid)", "key (unique)", "name", "isEssential (bool)", "description"] },
+    { "entity": "ConsentRecord", "fields": ["id (uuid)", "subjectType", "subjectId (nullable for anonymous)", "purposeId", "policyVersionId", "status (5-state enum)", "ipAddress", "userAgent", "source", "acceptanceMethod", "grantedAt", "revokedAt", "evidenceReference"] },
+    { "entity": "DataSubjectRequest", "fields": ["id (uuid)", "type (11 request types)", "requesterName", "requesterEmail", "requesterDocument", "identityVerificationStatus", "description", "assignedUserId", "dueDate", "status (7-state enum)", "resolution", "createdAt"] },
+    { "entity": "RetentionPolicy", "fields": ["id (uuid)", "recordCategory", "retentionPeriodDays", "legalHold (bool)", "lastReviewedAt", "notes"] },
+    { "entity": "AnonymizationLog", "fields": ["id (uuid)", "recordCategory", "recordId", "action (anonymize/delete)", "approvedByUserId", "evidenceReference", "createdAt"] },
+    { "entity": "PqrCase", "fields": ["id (uuid)", "caseNumber (unique)", "category (P/Q/R/S + incident types)", "applicantName", "applicantContact", "relatedCustomerId (nullable)", "relatedPaymentOrderId (nullable)", "relatedContractId (nullable)", "description", "assignedTeam", "priority", "dueDate", "status (7-state enum)", "resolution", "satisfactionScore (nullable)", "createdAt"] },
+    { "entity": "CommunicationTemplate", "fields": ["id (uuid)", "key (unique)", "channel", "kind (transactional/marketing)", "subject", "body (jsonb)", "active"] },
+    { "entity": "CommunicationLog", "fields": ["id (uuid)", "templateId", "recipient", "channel", "status", "attempts", "errorCategory (nullable)", "createdAt", "sentAt (nullable)"] },
+    { "entity": "SuppressionListEntry", "fields": ["id (uuid)", "channel", "recipient (unique per channel)", "reason", "createdAt"] },
+    { "entity": "ApprovalGate", "fields": ["id (uuid)", "key (unique, e.g. bold_production_credentials)", "description", "status (5-state enum)", "approvedByUserId (nullable)", "approvalDate (nullable)", "supportingDocumentPath (nullable)", "notes", "expirationDate (nullable)"] },
+    { "entity": "Refund", "fields": ["id (uuid)", "paymentOrderId", "amountCents", "reason", "evidencePath (nullable)", "status", "approvedByUserId (nullable)", "providerReference (nullable)", "createdAt"] },
+    { "entity": "Reconciliation", "fields": ["id (uuid)", "runDate", "responsibleUserId", "differencesFound (int)", "resolutionStatus", "notes", "createdAt"] },
+    { "entity": "ReconciliationDifference", "fields": ["id (uuid)", "reconciliationId", "paymentOrderId (nullable)", "kind (mismatch type)", "details (jsonb)", "resolutionStatus", "resolutionNotes"] }
+  ],
+  "importFormat": {
+    "description": "Local/dev seed data shape used by the Prisma seed script to populate demo customers, obligations, and institutional content for Phase 1 testing. Not an end-user import feature.",
+    "example": {
+      "customers": [
+        { "documentType": "CC", "documentNumber": "1234567890", "fullName": "María Fernanda Rojas", "email": "demo@example.com" }
+      ],
+      "obligations": [
+        { "customerDocumentNumber": "1234567890", "concept": "Plan exequial familiar - cuota mensual", "amountCents": 3500000, "currency": "COP", "dueDate": "2026-08-15" }
+      ],
+      "contentEntries": [
+        { "key": "hero.eyebrow", "value": "PROTECCIÓN · BIENESTAR · ALIANZAS" }
+      ]
+    }
+  },
+  "rules": [
+    "All monetary values are stored and computed as integer minor units (amountCents); never use floating-point arithmetic for money",
+    "A PaymentOrder transitions to APPROVED only after a verified provider confirmation (webhook event or authenticated status poll) — never from URL params, frontend state, or browser redirect alone",
+    "Public payment references are non-sequential, cryptographically random tokens — never expose the internal auto-increment/uuid ordering as a guessable sequence",
+    "Payment status enum is centrally defined once (DRAFT/PENDING/PROCESSING/APPROVED/REJECTED/FAILED/EXPIRED/CANCELLED/REFUNDED/PARTIALLY_REFUNDED) and mapped to Spanish labels in exactly one shared module consumed by both API responses and the frontend — no scattered string comparisons",
+    "Bold webhook events are processed idempotently keyed on a stable idempotency key derived from the provider transaction id + event type; duplicate deliveries must not double-process a transition",
+    "Webhook signature validation is implemented per Bold's documented pattern where available; because the specific webhook signature header could not be confirmed from public docs in this session, validation failures are logged and the event is still stored for later reconciliation — but no PaymentOrder transitions to APPROVED from an unverified signature once real signature validation ships (tracked as an open question)",
+    "PaymentReceipt records are created only for orders that have reached a verified APPROVED status — receipts are never generated for pending/rejected/failed orders",
+    "Payment lookup responses mask customer identification (e.g. show only last 4 digits) and never return full customer PII beyond what's needed to confirm identity",
+    "Every privileged or state-changing action (login, failed login, password reset, manual payment note, status transition) is written to AuditLog with actor, action, entity, and timestamp",
+    "Passwords are hashed with bcrypt (or argon2) and never logged; JWTs, session cookies, and Bold credentials are never written to logs",
+    "Bold API integration follows the fetched official docs verbatim: base URL https://api.online.payments.bold.co, POST /v1/payment-intent, GET /v1/payment-intent/{reference_id}, POST /v1/payment, GET /v1/payment/{reference_id}, header Authorization: x-api-key <llave_de_identidad>; any field not confirmed by docs is marked UNVERIFIED in code comments rather than invented",
+    "In Phase 1, BoldPaymentProvider makes no real outbound HTTP calls — it runs against an internal mock transport returning documented response shapes — until real sandbox credentials are supplied and explicitly enabled",
+    "The VPS deployment must never stop, restart, reconfigure, or overwrite the existing services on app.asodef.com.co, api.asodef.com.co, or webhook.asodef.com.co, their containers, or their Nginx server blocks",
+    "www.asodef.com.co must redirect (301) to https://asodef.com.co; the new platform is served under the apex domain using path-based routing (/, /api, /pagos, /admin), not new subdomains",
+    "A LegalDocumentVersion's approvedContent is only set (and only then can it move to PUBLISHED) after an authorized user with legal-approval permission explicitly approves it — draftContent may exist and be edited freely without ever implying public approval",
+    "The public /legal/* routes render only PUBLISHED LegalDocumentVersions; DRAFT/LEGAL_REVIEW/PENDING_APPROVAL content is never served publicly",
+    "No confirmed-missing legal fact (legal representative, exact registered address, judicial notification email, prices, guarantees, partner names, plan conditions) is ever invented as placeholder-that-looks-real; such fields are either omitted from public content or rendered as an explicit 'pendiente de confirmación' state in the admin view",
+    "Marketing/optional communications are sent only when a ConsentRecord for that purpose is GRANTED and the recipient is not present in SuppressionListEntry for that channel; transactional/service communications (payment result, PQR update) do not require marketing consent but always respect an explicit unsubscribe-from-marketing distinct from service messages",
+    "Cookie categories: 'strictly necessary' cookies always run; 'preferences', 'analytics', and 'marketing' cookies require an explicit, non-preselected ConsentRecord before any corresponding third-party script loads",
+    "PRODUCTION_PAYMENTS_ENABLED remains false and is enforced at the application layer (not just documented) until every ApprovalGate row is status=APPROVED and not expired; the BoldPaymentProvider refuses to switch out of mock mode while any gate is not APPROVED",
+    "A Refund or Reversal can only be created by a user holding payments.refund permission, requires a reason and links to the original PaymentOrder/PaymentTransaction, and is always audited; it never silently mutates the original transaction record",
+    "A BusinessPartner cannot move to a publication status visible on the public site until legal validation, commercial validation, benefit confirmation, agreement-validity confirmation, logo authorization, contact confirmation, and coverage confirmation are all recorded as complete",
+    "Every DataSubjectRequest and PqrCase carries a due date and status history; identity verification is required before any access/deletion/correction request is fulfilled",
+    "RetentionPolicy-driven anonymization/deletion requires an explicit approval before execution and always writes an AnonymizationLog evidence entry; legal-hold records are excluded from automatic retention actions regardless of elapsed retention period"
+  ],
+  "qualityGates": [
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm test",
+    "pnpm build",
+    "pnpm test:e2e"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Scaffold monorepo, tooling, and local Docker Compose environment",
+      "status": "open",
+      "dependsOn": [],
+      "description": "As a developer, I want a working Turborepo + pnpm workspaces monorepo with apps/web (Vite+React+TS), apps/api (NestJS+TS), and shared packages, plus a local Docker Compose stack, so that all later stories have a consistent foundation.",
+      "acceptanceCriteria": [
+        "Run `pnpm install` at the repo root; `pnpm -w run dev` starts both apps/web (Vite dev server) and apps/api (NestJS in watch mode) concurrently via Turborepo",
+        "docker-compose.yml defines postgres:16 and redis:7 services with named volumes and healthchecks; `docker compose up -d postgres redis` reaches 'healthy' status for both",
+        "Repo contains apps/web, apps/api, packages/ui, packages/config, packages/typescript-config, packages/eslint-config with working package.json + tsconfig references between them",
+        ".env.example lists all Phase 1 variables (DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_REFRESH_SECRET, BOLD_* placeholders, APP_DOMAIN, PUBLIC_APP_URL) with no real values",
+        "Example: `pnpm build` at root builds both apps without errors on a clean checkout",
+        "Negative case: running `pnpm -w run dev` with DATABASE_URL unset causes apps/api to fail fast at startup with a clear config-validation error, not a silent crash later"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Design tokens, Tailwind config, fonts, and global CSS baseline",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As a designer/developer, I want ASODEF's color tokens, fonts, and global CSS rules wired into Tailwind so every later UI story inherits a consistent visual baseline.",
+      "acceptanceCriteria": [
+        "tailwind.config.ts in apps/web exposes all brand/bg/text/status color tokens from the PRD's uiNotes as Tailwind theme colors",
+        "Inter, Outfit, and Caveat are loaded from Google Fonts and mapped to --font-sans/--font-display/--font-accent; body uses font-sans by default",
+        "Global CSS implements smooth scroll, orange ::selection, custom scrollbar, visible focus-visible rings, and a prefers-reduced-motion media query that disables non-essential animation",
+        "Example: a `<h1 className=\"font-display\">` renders in Outfit; a `<p>` renders in Inter",
+        "Negative case: with prefers-reduced-motion enabled in the browser, hero/mobile-menu transitions are instant/disabled rather than animated"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Prisma schema and migration for auth/RBAC core entities + role/permission seed",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As a backend developer, I want the User/Role/Permission/Session/PasswordReset/LoginAttempt schema migrated and seeded so authentication and authorization stories have real tables to work against.",
+      "acceptanceCriteria": [
+        "Prisma schema defines User, Role, Permission, UserRole, RolePermission, Session, PasswordReset, LoginAttempt matching the PRD dataModel, with UUID primary keys and createdAt/updatedAt timestamps",
+        "`pnpm --filter api prisma migrate dev` applies cleanly against the local postgres container",
+        "Seed script creates the 9 roles (SUPER_ADMIN, ADMIN, FINANCE, COMMERCIAL, CUSTOMER_SERVICE, COMPANY_PARTNER, AFFILIATE, CUSTOMER, AUDITOR) and the Phase 1-relevant permission keys (payments.read, payments.create, payments.reconcile, payments.refund, customers.read, audit.read, etc.)",
+        "Example: after seeding, querying Role where name='SUPER_ADMIN' returns exactly one row with all Phase 1 permissions attached",
+        "Negative case: re-running the seed script is idempotent — it does not create duplicate roles/permissions on a second run"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "NestJS bootstrap: config validation, structured logging, health checks, Swagger",
+      "status": "open",
+      "dependsOn": ["US-001", "US-003"],
+      "description": "As a backend developer, I want apps/api to validate its environment at startup, log in structured JSON, expose health endpoints, and publish an OpenAPI doc so the service is operable from day one.",
+      "acceptanceCriteria": [
+        "ConfigModule validates required env vars (DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_REFRESH_SECRET) at boot using zod or class-validator; missing/invalid values throw a startup error naming the offending variable (not its value)",
+        "GET /api/v1/health, /api/v1/health/live, /api/v1/health/ready are implemented; /ready checks Postgres and Redis connectivity",
+        "Swagger UI is served at /api/docs in non-production environments only",
+        "Structured logs (pino or nestjs built-in logger configured for JSON) include timestamp, level, context, and request id; no secrets are ever logged",
+        "Example: `curl :3000/api/v1/health/ready` returns 200 with `{status:'ok'}` when postgres/redis are up",
+        "Negative case: stopping the postgres container causes /api/v1/health/ready to return 503 within one health-check interval"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Frontend app shell: routing, TanStack Query, layouts, base UI components",
+      "status": "open",
+      "dependsOn": ["US-002"],
+      "description": "As a frontend developer, I want the full Phase 1 route tree, a TanStack Query client, and base layout/UI components so feature stories can slot in pages without re-plumbing routing.",
+      "acceptanceCriteria": [
+        "React Router route tree covers all Phase 1 routes from the PRD's routes list, split into PublicLayout, AuthLayout, and PaymentLayout wrapper layouts",
+        "TanStack Query's QueryClientProvider wraps the app with sane defaults (retry, staleTime) and React Query Devtools enabled only in development",
+        "packages/ui exports at least Button, Card, Input, and FormField components styled per the design tokens from US-002, consumed by apps/web via workspace dependency",
+        "Example: navigating to /pagos/orden/abc123 renders inside PaymentLayout without the marketing Navbar/Footer",
+        "Negative case: navigating to an undefined route (e.g. /no-existe) renders a styled 404 page, not a blank screen or router crash"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Backend auth module: login, logout, JWT + refresh cookies, password hashing",
+      "status": "open",
+      "dependsOn": ["US-003", "US-004"],
+      "description": "As a staff user, I want to log in and out securely so that protected areas of the platform can identify me.",
+      "acceptanceCriteria": [
+        "POST /api/v1/auth/login validates credentials with bcrypt, issues a short-lived JWT access token and a longer-lived refresh token, both set as httpOnly, secure, SameSite=strict cookies; POST /api/v1/auth/logout revokes the Session row and clears cookies",
+        "Session entity persists a hash of the refresh token (never the raw token) with expiresAt/revokedAt",
+        "Install: `pnpm --filter api add @nestjs/jwt bcrypt` (and `@types/bcrypt` as a dev dependency)",
+        "Example: logging in with a seeded test user returns 200 and sets both cookies; a subsequent authenticated request succeeds using the access token",
+        "Negative case: logging in with a wrong password returns 401 with a generic 'credenciales inválidas' message that does not reveal whether the email exists"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Password recovery flow with rate limiting",
+      "status": "open",
+      "dependsOn": ["US-006"],
+      "description": "As a staff user who forgot their password, I want to request and complete a reset so I can regain access without admin intervention.",
+      "acceptanceCriteria": [
+        "POST /api/v1/auth/password-reset/request creates a PasswordReset row with a hashed, time-limited token and logs (stub, not real email) the reset link; always returns a generic success response regardless of whether the email exists",
+        "POST /api/v1/auth/password-reset/confirm validates the token, sets a new bcrypt-hashed password, marks the token usedAt, and revokes all existing Sessions for that user",
+        "Rate limiting (NestJS ThrottlerModule) caps reset requests per IP/email within a time window",
+        "Example: requesting a reset, then confirming with the correct token and a strong new password succeeds and old sessions are revoked",
+        "Negative case: confirming with an expired or already-used token returns a 400 error and does not change the password"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "RBAC guards and audit log foundation",
+      "status": "open",
+      "dependsOn": ["US-003", "US-006"],
+      "description": "As a backend developer, I want reusable Permissions/Roles guards and an AuditService so every protected/privileged endpoint in later stories enforces access control and leaves a trail.",
+      "acceptanceCriteria": [
+        "A @RequirePermissions() decorator + PermissionsGuard reads the authenticated user's roles→permissions and allows/denies the request; applied via a simple example endpoint",
+        "AuditLog entity + AuditService.record(action, entityType, entityId, actorUserId, previous, next, req) is implemented and unit-testable independent of any specific module",
+        "Example: a request to a permission-guarded test endpoint from a user without the required permission returns 403",
+        "Negative case: a request with a valid but expired/tampered JWT is rejected by the guard chain before the permission check runs"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Login-attempt monitoring and account lockout",
+      "status": "open",
+      "dependsOn": ["US-006"],
+      "description": "As a security-conscious operator, I want repeated failed logins to trigger a temporary lockout so brute-force attempts are slowed down.",
+      "acceptanceCriteria": [
+        "Every login attempt (success/failure) is recorded in LoginAttempt; a Redis-backed counter locks the account for a configurable window after N consecutive failures",
+        "Install: `pnpm --filter api add ioredis`",
+        "Example: 5 consecutive failed logins for the same email trigger a 429 'cuenta bloqueada temporalmente' response on the 6th attempt even with the correct password",
+        "Negative case: a successful login resets the failure counter for that email"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Frontend auth pages (login, forgot password, reset password)",
+      "status": "open",
+      "dependsOn": ["US-005", "US-007"],
+      "description": "As a staff user, I want usable login/recovery screens so I can access protected areas from a browser.",
+      "acceptanceCriteria": [
+        "/iniciar-sesion, /recuperar-clave, /restablecer-clave are implemented with React Hook Form + Zod validation, calling the US-006/US-007 endpoints via TanStack Query mutations",
+        "Install: `pnpm --filter web add react-hook-form zod @hookform/resolvers`",
+        "Forms show inline field errors, a loading state during submission, and a success/failure banner after submit",
+        "Example: submitting /iniciar-sesion with valid seeded credentials redirects to a protected placeholder route",
+        "Negative case: submitting /restablecer-clave with mismatched password/confirm-password fields shows an inline validation error and does not call the API"
+      ]
+    },
+    {
+      "id": "US-011",
+      "title": "Navbar component (desktop + mobile drawer)",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a visitor, I want a polished, accessible navigation bar so I can reach any section or the payment center from anywhere on the site.",
+      "acceptanceCriteria": [
+        "Navbar transitions from transparent to bg-[#F4F5F1]/85 backdrop-blur-xl on scroll, per uiNotes; desktop nav shows Inicio/Quiénes somos/Cifras/Beneficios/Portafolio/Cobertura/Pagos/Contacto with animated hover underlines",
+        "Mobile drawer uses AnimatePresence, traps focus while open, closes on Escape and on route selection, and lists 'Pagos' near the top plus a WhatsApp contact link",
+        "Install: `pnpm --filter web add motion` (motion/react)",
+        "Example: on a 375px viewport, opening the hamburger menu shows all nav items and closing via Escape returns focus to the hamburger button",
+        "Negative case: tabbing through the open mobile drawer never moves focus to elements behind it (focus trap holds)"
+      ]
+    },
+    {
+      "id": "US-012",
+      "title": "Hero section with premium animation",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a visitor, I want an impactful hero section so I immediately understand ASODEF's value proposition and can act on it.",
+      "acceptanceCriteria": [
+        "Hero implements the split layout, clamp()-sized heading with an orange-highlighted phrase, eyebrow badge, three CTAs (#contacto, #portafolio, /pagos), and floating glass stat labels per uiNotes",
+        "Heading and image animate in using motion/react with the specified easing curve; a placeholder image is wired at apps/web/src/assets/hero-family.webp so a real asset can drop in later without code changes",
+        "Example: on initial load, the heading fades/slides in once and does not re-trigger on scroll",
+        "Negative case: with reduced motion enabled, the hero renders fully visible immediately with no animated entrance"
+      ]
+    },
+    {
+      "id": "US-013",
+      "title": "TrustBar and About (Quiénes somos) sections",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a visitor, I want to see ASODEF's institutional credibility markers and history/mission/vision so I trust the organization.",
+      "acceptanceCriteria": [
+        "TrustBar renders the 4 floating trust items over a dark-green rounded container with staggered entrance animation",
+        "About section renders the two-column layout with Nuestra historia / Nuestra misión / Nuestra visión cards using the exact copy from the master prompt section 12",
+        "Example: scrolling the About section into view triggers each card's entrance animation once, not on every scroll pass",
+        "Negative case: with JavaScript animation disabled/reduced-motion, all TrustBar and About content is still fully visible and readable (no content hidden behind an unfired animation state)"
+      ]
+    },
+    {
+      "id": "US-014",
+      "title": "Statistics section with animated counters",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a visitor, I want to see ASODEF's scale (affiliates, beneficiaries, coverage) presented with an animated, trustworthy counter so the numbers feel credible.",
+      "acceptanceCriteria": [
+        "Counters animate from 0 to 8.405 / 54.692 / etc. once when the section enters the viewport, formatted with Colombian Spanish thousands separators (e.g. '8.405')",
+        "Install: `pnpm --filter web add gsap` if using GSAP for the counter/ScrollTrigger per the orchestration instructions",
+        "Example: scrolling past the section and back up does not re-trigger the count-up animation a second time",
+        "Negative case: with reduced motion enabled, the final numbers render immediately without an intermediate counting animation"
+      ]
+    },
+    {
+      "id": "US-015",
+      "title": "Company Benefits and Benefit Portfolio sections",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a prospective corporate partner or affiliate, I want to see why partnering with ASODEF matters and what benefits are included so I can evaluate the offer.",
+      "acceptanceCriteria": [
+        "Company Benefits renders the asymmetric layout with the 6 numbered benefit cards (copy from master prompt section 14) with hover elevation and accessible focus states",
+        "Benefit Portfolio renders the 8-category editorial grid (section 15) using Lucide icons, each with a 'Conocer más' micro-link and hover animation",
+        "Example: focusing a portfolio card via keyboard Tab shows a visible focus ring matching the design tokens",
+        "Negative case: all 8 portfolio categories render with real copy from the master prompt — none show placeholder/lorem text"
+      ]
+    },
+    {
+      "id": "US-016",
+      "title": "Coverage section and Alliance CTA",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a visitor, I want to understand ASODEF's national presence and be prompted to become a partner.",
+      "acceptanceCriteria": [
+        "Coverage section shows a stylized Colombia map placeholder SVG at apps/web/src/assets/colombia-map.svg with Cali highlighted as headquarters and the three info cards from section 16, without inventing additional office locations",
+        "Alliance CTA renders the dark-green container with orange glow, heading/copy from section 17, and Primary ('Quiero ser aliado') + Secondary ('Hablar por WhatsApp') actions",
+        "Example: clicking 'Hablar por WhatsApp' opens https://wa.me/573232733927 with the specified prefilled message in a new tab",
+        "Negative case: the coverage section does not render any city, branch address, or coverage claim not present in the master prompt content"
+      ]
+    },
+    {
+      "id": "US-017",
+      "title": "Backend lead capture endpoint",
+      "status": "open",
+      "dependsOn": ["US-004", "US-008"],
+      "description": "As ASODEF's commercial team, I want inbound partnership inquiries validated, rate-limited, and persisted so I can follow up on real leads.",
+      "acceptanceCriteria": [
+        "POST /api/v1/leads validates all required fields (nombre completo, empresa, cargo, ciudad, teléfono/whatsapp, correo, sector, mensaje, consentAccepted) via class-validator, persists a LeadSubmission, and returns 201",
+        "A honeypot field plus ThrottlerModule rate limiting rejects obvious spam/bot submissions; a notification stub (persisted 'pending' Notification-style log entry) is created for the commercial team",
+        "Example: a well-formed submission returns 201 with the created lead's public-safe fields (no internal id echoed unnecessarily)",
+        "Negative case: submitting without consentAccepted=true returns 400 and does not persist a LeadSubmission"
+      ]
+    },
+    {
+      "id": "US-018",
+      "title": "Frontend Contact form, Footer, and WhatsApp button",
+      "status": "open",
+      "dependsOn": ["US-005", "US-017"],
+      "description": "As a prospective partner, I want a working contact form and easy access to WhatsApp/footer navigation so I can reach ASODEF.",
+      "acceptanceCriteria": [
+        "Contact section form (RHF + Zod) posts to POST /api/v1/leads, shows inline validation errors, a submitting state, and a clear success/failure banner",
+        "Footer renders navigation, contact info (Juan Pablo Filigrana, Director Comercial, WhatsApp 323 273 3927, Cali Colombia), legal placeholder links, and the dynamic copyright year",
+        "Floating WhatsApp button is fixed bottom-5 right-5, has a tooltip, aria-label, subtle non-distracting pulse, and respects reduced motion",
+        "Example: submitting the contact form successfully clears the form and shows a Spanish success message",
+        "Negative case: a backend 500/network failure shows a Spanish error message and preserves the user's entered field values (no data loss)"
+      ]
+    },
+    {
+      "id": "US-019",
+      "title": "SEO metadata, sitemap, robots, and structured data",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As ASODEF, I want the public site to be discoverable and correctly represented in search/social previews, while keeping transactional and future-admin routes out of the index.",
+      "acceptanceCriteria": [
+        "index.html sets the specified title/description, Open Graph, and Twitter Card metadata; Organization JSON-LD is embedded with ASODEF's real, confirmed details only",
+        "sitemap.xml lists only public marketing routes; robots.txt disallows /pagos/orden, /pagos/procesar, /pagos/resultado, /pagos/comprobante, and any future /admin, /mi-cuenta, /empresa paths",
+        "Example: viewing page source shows the exact specified <title> and meta description",
+        "Negative case: /pagos/comprobante/:publicReference is confirmed absent from sitemap.xml and disallowed in robots.txt"
+      ]
+    },
+    {
+      "id": "US-020",
+      "title": "Backend content module + frontend hydration for key homepage fields",
+      "status": "open",
+      "dependsOn": ["US-004", "US-005"],
+      "description": "As ASODEF, I want a few key homepage fields (hero eyebrow, statistics figures) served from the database rather than hardcoded, so future content updates don't require a code deploy.",
+      "acceptanceCriteria": [
+        "ContentEntry table + seed script populates hero.eyebrow, stats.affiliates, stats.beneficiaries, stats.experienceYears (and similar) with the master prompt's real copy/numbers",
+        "GET /api/v1/content returns all published entries; the frontend Hero and Statistics sections fetch and render these values via TanStack Query, falling back to the same hardcoded copy if the request fails",
+        "Example: changing a ContentEntry's value directly in the database and reloading the homepage reflects the new value without a frontend rebuild",
+        "Negative case: if /api/v1/content is unreachable, the homepage still renders complete, correct fallback copy — no blank sections"
+      ]
+    },
+    {
+      "id": "US-021",
+      "title": "Payments domain schema and seed data",
+      "status": "open",
+      "dependsOn": ["US-003"],
+      "description": "As a backend developer, I want the full payments domain (customers, affiliates, companies, plans, obligations, orders, attempts, transactions, events, receipts) modeled and migrated so the payment flow stories have real persistence.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Customer, Affiliate, Company, Plan, Obligation, PaymentOrder, PaymentAttempt, PaymentTransaction, PaymentEvent, PaymentReceipt exactly matching the PRD dataModel, with amountCents as integer and a unique index on PaymentEvent.idempotencyKey",
+        "Migration applies cleanly; seed script creates at least 2 demo customers with outstanding obligations for local testing",
+        "Example: querying Obligation for the seeded demo customer's document number returns at least one PENDING obligation",
+        "Negative case: attempting to insert a PaymentEvent with a duplicate idempotencyKey violates the unique constraint at the database level"
+      ]
+    },
+    {
+      "id": "US-022",
+      "title": "PaymentProvider interface and BoldPaymentProvider adapter (mock mode)",
+      "status": "open",
+      "dependsOn": ["US-004"],
+      "description": "As a backend developer, I want a provider-agnostic PaymentProvider interface and a Bold implementation matching Bold's documented API shapes, so the payment domain isn't coupled to Bold and future providers can be added.",
+      "acceptanceCriteria": [
+        "PaymentProvider interface (createPayment, getPaymentStatus, validateNotification, optional createRefund) is defined in apps/api/src/modules/payment-providers exactly as specified in the master prompt section 25",
+        "BoldPaymentProvider implements the interface against the verified schema: POST /v1/payment-intent (reference_id, amount{currency,total_amount}), POST /v1/payment, GET /v1/payment/{reference_id} with status values ACTIVE/PROCESSING/PENDING/DISABLED/PAID/EXPIRED (intent) and APPROVED/REJECTED/RUNNING/PROCESSING/PENDING (attempt), auth header Authorization: x-api-key <llave_de_identidad>",
+        "A BOLD_MODE=mock config flag routes all calls through an in-memory mock transport returning documented response shapes instead of real HTTP calls; no real network call to api.online.payments.bold.co happens in Phase 1",
+        "Example: calling createPayment() in mock mode returns a well-formed CreatePaymentResult without any outbound HTTP request being made (verifiable via a test double/spy)",
+        "Negative case: instantiating BoldPaymentProvider without BOLD_MODE=mock and without real credentials configured throws a clear startup/config error rather than silently attempting a live call"
+      ]
+    },
+    {
+      "id": "US-023",
+      "title": "Payment order creation service with status mapping and duplicate prevention",
+      "status": "open",
+      "dependsOn": ["US-021"],
+      "description": "As a customer looking up a debt, I want an internal payment order created for the obligation I choose, with a safe, non-guessable reference, so I can proceed to pay.",
+      "acceptanceCriteria": [
+        "PaymentOrdersService.create(obligationId) validates the obligation is outstanding, reuses an existing non-expired PENDING order for the same obligation if one exists (no duplicates), and otherwise creates a new order with a crypto-random publicReference",
+        "A single shared statusMap module maps the 10 internal statuses to Spanish labels (Borrador/Pendiente/Procesando/Aprobado/Rechazado/Fallido/Vencido/Cancelado/Reembolsado/Reembolso parcial), imported by both API responses and (later) the frontend",
+        "Example: calling create() twice in a row for the same obligation returns the same publicReference both times",
+        "Negative case: calling create() for an obligation that's already fully paid returns a 409 error and creates no order"
+      ]
+    },
+    {
+      "id": "US-024",
+      "title": "Payment lookup and order retrieval API",
+      "status": "open",
+      "dependsOn": ["US-021", "US-023"],
+      "description": "As a customer, I want to look up my outstanding obligations by document or payment reference so I can choose what to pay.",
+      "acceptanceCriteria": [
+        "POST /api/v1/payment-orders creates an order from a chosen obligation (per US-023); GET /api/v1/payment-orders/:reference returns order details by public reference",
+        "A lookup endpoint accepts either {documentType, documentNumber} or {reference} and returns masked customer info + outstanding obligations (or the specific order) without exposing unrelated customer data",
+        "Example: looking up a seeded demo customer's document returns their outstanding obligation(s) with a masked identification number",
+        "Negative case: looking up a non-existent document or reference returns a 404 with a generic 'no se encontraron resultados' message (no information leakage about which identifier failed)"
+      ]
+    },
+    {
+      "id": "US-025",
+      "title": "Bold payment creation and status endpoints",
+      "status": "open",
+      "dependsOn": ["US-022", "US-024"],
+      "description": "As the payment center, I want to initiate a Bold payment attempt for a given order and poll its status, so the customer can complete payment.",
+      "acceptanceCriteria": [
+        "POST /api/v1/payments/bold/create creates a PaymentAttempt for a PaymentOrder via BoldPaymentProvider.createPayment() (mock mode) and returns the provider's next-action info",
+        "GET /api/v1/payments/:reference/status calls BoldPaymentProvider.getPaymentStatus() and returns the mapped internal status",
+        "Example: creating a Bold payment for a valid PENDING order returns a PaymentAttempt in RUNNING/PROCESSING state with a mock redirect/next-action payload",
+        "Negative case: requesting Bold payment creation for an already-APPROVED order returns a 409 without creating a new attempt"
+      ]
+    },
+    {
+      "id": "US-026",
+      "title": "Bold webhook endpoint with idempotent async processing",
+      "status": "open",
+      "dependsOn": ["US-025"],
+      "description": "As the payment system, I want to receive and safely process Bold's status notifications so orders update to their true final state without double-processing.",
+      "acceptanceCriteria": [
+        "POST /api/v1/webhooks/bold validates payload shape, computes an idempotencyKey, stores a PaymentEvent, responds fast (202) before heavy processing, then asynchronously updates the related PaymentOrder/PaymentAttempt status",
+        "A duplicate webhook delivery (same idempotencyKey) is detected and processed at most once; the endpoint still returns 202 for duplicates without re-applying the state transition",
+        "Signature validation is implemented per documented Bold patterns where confirmed; because the exact webhook signature header wasn't confirmable in this session (see PRD openQuestions), unverified-signature events are stored and logged as a warning but do not alone drive an APPROVED transition — this gap is called out in code comments as TODO: verify against Bold merchant dashboard",
+        "Example: POSTing the same mock 'APPROVED' event payload twice results in exactly one AuditLog entry for the status transition",
+        "Negative case: POSTing a malformed payload (missing reference_id) returns 400 and creates no PaymentEvent"
+      ]
+    },
+    {
+      "id": "US-027",
+      "title": "Receipt generation and retrieval",
+      "status": "open",
+      "dependsOn": ["US-026"],
+      "description": "As a customer who successfully paid, I want a receipt I can view and download so I have proof of payment.",
+      "acceptanceCriteria": [
+        "A PaymentReceipt is created automatically only when a PaymentOrder transitions to a verified APPROVED status, with a unique receiptNumber and verificationCode",
+        "GET /api/v1/receipts/:reference returns the receipt JSON (customer name, masked id, concept, amount, status, dates, verification code) for approved orders only",
+        "Install: `pnpm --filter api add pdf-lib`; a PDF is generated and stored, downloadable via the same endpoint with an Accept/format param",
+        "Example: fetching the receipt for a mock-approved demo order returns 200 with correct amount/date/reference matching the order",
+        "Negative case: requesting a receipt for a PENDING or REJECTED order returns 404 — no receipt exists to generate"
+      ]
+    },
+    {
+      "id": "US-028",
+      "title": "Audit wiring for the payment domain",
+      "status": "open",
+      "dependsOn": ["US-008", "US-026"],
+      "description": "As an auditor, I want every payment status transition and manual action recorded so the payment history is fully traceable.",
+      "acceptanceCriteria": [
+        "AuditService.record() is called on order creation, every status transition, and webhook processing, capturing previous/new status and the triggering source (webhook/poll/manual)",
+        "Example: a full lookup→order→mock-Bold-approve flow produces a chronologically ordered AuditLog trail matching each transition",
+        "Negative case: a failed/rejected webhook payload that doesn't result in a state change still logs an audit entry indicating no-op, not silence"
+      ]
+    },
+    {
+      "id": "US-029",
+      "title": "Frontend Payment Center: lookup screen",
+      "status": "open",
+      "dependsOn": ["US-010", "US-024"],
+      "description": "As a customer, I want to search for my obligation by document or reference on /pagos so I can start paying.",
+      "acceptanceCriteria": [
+        "/pagos renders a lookup form (tipo de documento + número, or referencia) using RHF + Zod, calling the US-024 lookup endpoint, and lists matching outstanding obligations with masked customer info",
+        "Example: searching with the seeded demo customer's document returns their obligation(s) with a 'Pagar' action per obligation",
+        "Negative case: searching with an unknown document shows a clear 'no se encontraron resultados' state, not a raw error or blank screen"
+      ]
+    },
+    {
+      "id": "US-030",
+      "title": "Frontend order summary and mock Bold handoff screens",
+      "status": "open",
+      "dependsOn": ["US-025", "US-029"],
+      "description": "As a customer, I want to review my order before paying and be handed off to the (mock) Bold checkout so I understand what I'm about to pay.",
+      "acceptanceCriteria": [
+        "/pagos/orden/:publicReference shows concept, amount, due date, and status, with a clear 'modo prueba' badge since Bold runs in mock mode",
+        "/pagos/procesar/:publicReference triggers POST /api/v1/payments/bold/create and simulates the provider handoff (e.g. a clearly-labeled mock confirmation step standing in for the real Bold redirect)",
+        "Example: proceeding from order summary to the process screen for a valid PENDING order successfully creates a PaymentAttempt",
+        "Negative case: navigating directly to /pagos/procesar/:publicReference for a non-existent reference shows a not-found state without crashing"
+      ]
+    },
+    {
+      "id": "US-031",
+      "title": "Frontend payment result screens",
+      "status": "open",
+      "dependsOn": ["US-030"],
+      "description": "As a customer, I want clear, appropriately-toned feedback after attempting payment (approved/pending/rejected/failed/expired) so I know what to do next.",
+      "acceptanceCriteria": [
+        "/pagos/resultado renders the 5 states from master prompt section 27 using the shared statusMap for labels, each with the correct visual tone (green/orange/neutral) and next action (download receipt, retry, contact support, refresh status)",
+        "No raw provider error, stack trace, or internal service name is ever rendered to the user",
+        "Example: simulating a mock-approved order shows the green confirmation state with a working 'Descargar comprobante' link",
+        "Negative case: simulating a mock-failed order shows the failure state with a retry action and does not imply the customer was charged twice if they retry"
+      ]
+    },
+    {
+      "id": "US-032",
+      "title": "Frontend receipt view and PDF download",
+      "status": "open",
+      "dependsOn": ["US-027", "US-031"],
+      "description": "As a customer with a successful payment, I want to view and download my receipt.",
+      "acceptanceCriteria": [
+        "/pagos/comprobante/:publicReference renders the receipt fields from US-027 and a working PDF download button",
+        "Example: viewing the receipt for a mock-approved demo order shows matching amount/date/reference and downloads a valid PDF",
+        "Negative case: navigating to the receipt route for a non-approved order shows an appropriate empty/error state, not a broken render"
+      ]
+    },
+    {
+      "id": "US-033",
+      "title": "Frontend unit tests (Vitest + Testing Library)",
+      "status": "open",
+      "dependsOn": ["US-011", "US-012", "US-018", "US-029"],
+      "description": "As a developer, I want automated frontend tests for key interactive components so regressions are caught before merge.",
+      "acceptanceCriteria": [
+        "Install: `pnpm --filter web add -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom`; `pnpm --filter web test` runs the suite",
+        "Tests cover: Navbar mobile drawer open/close/focus-trap, Hero renders required copy, Contact form validation errors, Payment lookup form success and not-found paths",
+        "Example: the Navbar test asserts pressing Escape while the drawer is open removes it from the DOM",
+        "Negative case: a test asserting the contact form does NOT submit when consentAccepted is false passes"
+      ]
+    },
+    {
+      "id": "US-034",
+      "title": "Backend unit/integration tests (Jest)",
+      "status": "open",
+      "dependsOn": ["US-006", "US-007", "US-008", "US-009", "US-022", "US-023", "US-026", "US-027", "US-028"],
+      "description": "As a developer, I want automated backend tests covering auth, RBAC, and the full payment domain (with Bold mocked) so core business rules are protected.",
+      "acceptanceCriteria": [
+        "`pnpm --filter api test` runs Jest unit/integration tests using NestJS's testing module and a test database (or transactional rollback strategy)",
+        "Coverage includes: login success/failure/lockout, permission guard allow/deny, payment order creation + duplicate prevention, Bold adapter mock request/response shape, webhook idempotency (duplicate event processed once), status mapping correctness, receipt-only-after-approved rule, and financial precision (amountCents arithmetic never introduces float error)",
+        "Example: a test creates an order, sends the same mock webhook event twice, and asserts exactly one status transition and one AuditLog entry occurred",
+        "Negative case: a test asserts that calling the receipt endpoint for a REJECTED order returns 404 and creates no PaymentReceipt row"
+      ]
+    },
+    {
+      "id": "US-035",
+      "title": "Playwright end-to-end smoke test",
+      "status": "open",
+      "dependsOn": ["US-033", "US-034"],
+      "description": "As a developer, I want a browser-level smoke test covering the critical golden paths so a broken build is caught before deploy.",
+      "acceptanceCriteria": [
+        "Install: `pnpm add -D -w @playwright/test`; `pnpm test:e2e` runs against the local Docker Compose stack",
+        "Test script covers: homepage loads with hero visible, navigating to /pagos and completing a lookup for the seeded demo customer reaches the order summary screen, and /iniciar-sesion rejects invalid credentials with a visible error message",
+        "Example: the e2e run passes headlessly in CI against a freshly seeded database",
+        "Negative case: a deliberately broken lookup (wrong document number) is asserted to show the not-found state, not silently pass through to an order screen"
+      ]
+    },
+    {
+      "id": "US-036",
+      "title": "CI pipeline (lint, typecheck, test, build, e2e)",
+      "status": "open",
+      "dependsOn": ["US-035"],
+      "description": "As a developer, I want CI to run all quality gates on every push/PR so regressions can't merge silently.",
+      "acceptanceCriteria": [
+        "A CI workflow (e.g. GitHub Actions) runs, in order: install, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, then `pnpm test:e2e` against a docker-compose-based service stack in the CI runner",
+        "The workflow fails the build (non-zero exit) if any gate fails, and does not use --no-verify/skip flags",
+        "Example: introducing a deliberate TypeScript error in a throwaway branch causes the CI run to fail at the typecheck step specifically",
+        "Negative case: a PR with a failing unit test is blocked from showing a green CI status"
+      ]
+    },
+    {
+      "id": "US-037",
+      "title": "Full local Docker Compose verification",
+      "status": "open",
+      "dependsOn": ["US-036"],
+      "description": "As a developer, I want the complete stack (web, api, postgres, redis) verified healthy locally before considering any deployment, so we deploy only working software.",
+      "acceptanceCriteria": [
+        "`docker compose up -d` brings up web, api, postgres, and redis, all reaching Docker healthcheck 'healthy' status within a reasonable timeout",
+        "A documented manual verification pass confirms: homepage loads, /pagos lookup works end-to-end through mock-Bold approval, /api/v1/health/ready returns 200, and login/logout works",
+        "Example: `docker compose ps` shows all 4 services as healthy simultaneously",
+        "Negative case: intentionally misconfiguring REDIS_URL causes the api service's healthcheck to fail and `docker compose ps` reflects it as unhealthy rather than silently appearing fine"
+      ]
+    },
+    {
+      "id": "US-043",
+      "title": "Legal document schema and versioning/approval workflow",
+      "status": "open",
+      "dependsOn": ["US-003", "US-008"],
+      "description": "As ASODEF's legal/admin team, I want legal documents modeled with real versioning and an approval workflow so nothing is ever presented as approved before a human actually approves it.",
+      "acceptanceCriteria": [
+        "Prisma schema adds LegalDocument + LegalDocumentVersion with status enum DRAFT/LEGAL_REVIEW/PENDING_APPROVAL/APPROVED/PUBLISHED/REPLACED/ARCHIVED, draftContent and approvedContent stored separately (jsonb), approvedByUserId/approvalDate/publicationDate nullable until set",
+        "Backend endpoints (permission-gated: content.manage) support creating a new draft version, moving it through review states, and an explicit approve action that requires legal.approve permission and sets approvedContent = draftContent snapshot + approvedByUserId + approvalDate",
+        "A publish action is only permitted on an APPROVED version and sets publicationDate + marks any prior PUBLISHED version of the same document as REPLACED",
+        "Example: creating a new draft, submitting for review, and approving it produces exactly one APPROVED version with a full status-history audit trail",
+        "Negative case: attempting to publish a version still in DRAFT or PENDING_APPROVAL returns 409 and does not change its status"
+      ]
+    },
+    {
+      "id": "US-044",
+      "title": "Seed legal documents with confirmed-facts-only DRAFT content",
+      "status": "open",
+      "dependsOn": ["US-043"],
+      "description": "As ASODEF, I want the 10 required legal document types seeded as real, structured DRAFT content covering every topic the master prompt requires, using only confirmed facts, so the legal center has real substance to review rather than an empty shell.",
+      "acceptanceCriteria": [
+        "Seed script creates LegalDocument + initial DRAFT LegalDocumentVersion for: información empresarial, política de privacidad, tratamiento de datos, aviso de privacidad, términos y condiciones, términos de pago, reversiones y reembolsos, política de cookies, PQR, seguridad, accesibilidad — each with structured section content covering the topics listed in the master prompt (e.g. terms & conditions covers company identification, definitions, eligibility, prices/taxes/payments, refunds/reversals, cancellations, renewals, IP, liability, applicable law, contact, version)",
+        "Only COMPANY_NAME=ASODEF S.A.S., CORPORATE_EMAIL, commercial contact, city=Cali, country=Colombia are used as confirmed facts; every field requiring legal representative, exact registered address, judicial notification email, prices, or guarantees is rendered as an explicit 'Pendiente de confirmación legal' placeholder value in the admin view, never as invented real-looking text",
+        "Example: querying the seeded 'terminos-y-condiciones' document returns DRAFT status with all required sections present and non-empty",
+        "Negative case: none of the 10 seeded documents has status APPROVED or PUBLISHED immediately after seeding — all start in DRAFT awaiting real review"
+      ]
+    },
+    {
+      "id": "US-045",
+      "title": "Public Legal Center frontend",
+      "status": "open",
+      "dependsOn": ["US-005", "US-044"],
+      "description": "As a visitor, customer, or partner, I want to read ASODEF's current legal/policy documents from a searchable, linked Legal Center so I understand my rights and obligations before registering, paying, or accepting a contract.",
+      "acceptanceCriteria": [
+        "/legal and its 12 subpages render only PUBLISHED LegalDocumentVersions fetched from the backend; an unpublished document type shows a clear 'aún no publicado' state instead of 404 or blank",
+        "Legal Center links appear in the Footer, before the payment flow (/pagos lookup screen), and before any consent-capturing form (contact form, PQR, data-subject-request)",
+        "/legal offers simple client-side search/filter across document titles",
+        "Example: navigating from the Contact form's consent checkbox to 'Política de tratamiento de datos' opens the correct published document in a new tab",
+        "Negative case: before any document has been approved and published, /legal renders all 12 categories in the 'aún no publicado' state without erroring"
+      ]
+    },
+    {
+      "id": "US-046",
+      "title": "Consent purposes and consent record capture",
+      "status": "open",
+      "dependsOn": ["US-043"],
+      "description": "As ASODEF, I want every consent (terms, data processing, marketing, cookies, etc.) captured as durable evidence tied to the exact policy version accepted, so consent is provable and auditable.",
+      "acceptanceCriteria": [
+        "Prisma schema adds ConsentPurpose (seeded with: terms_and_conditions, data_processing, commercial_communications, electronic_notifications, cookie_preferences, payment_terms, contract_acceptance, optional_marketing) and ConsentRecord (status GRANTED/DENIED/REVOKED/EXPIRED/REPLACED) linked to a specific LegalDocumentVersion where applicable",
+        "A ConsentService.record(purposeKey, subject, policyVersionId, req) captures ipAddress, userAgent, source, and acceptanceMethod; a ConsentService.revoke() sets status=REVOKED with revokedAt",
+        "The contact form (US-018) and payment-order creation flow (US-023/024) now record a ConsentRecord for data_processing (and payment_terms for orders) instead of just a boolean field, while keeping optional_marketing fully separate and never bundled with essential processing",
+        "Example: submitting the contact form creates one ConsentRecord for data_processing tied to the currently PUBLISHED tratamiento-de-datos version",
+        "Negative case: attempting to record consent for a purpose that doesn't exist, or without a resolvable policy version where one is required, returns a validation error rather than silently succeeding"
+      ]
+    },
+    {
+      "id": "US-047",
+      "title": "Cookie preference center",
+      "status": "open",
+      "dependsOn": ["US-005", "US-046"],
+      "description": "As a website visitor, I want to choose which non-essential cookies run, with no dark patterns, so my browsing preferences are respected.",
+      "acceptanceCriteria": [
+        "A cookie banner appears on first visit with four categories (strictly necessary — always on/disabled toggle, preferences, analytics, marketing), none of the optional categories preselected, plus an 'Aceptar todas' / 'Rechazar opcionales' / 'Personalizar' set of actions",
+        "Choices persist via ConsentRecord for the cookie_preferences purpose (one record per category) and are re-editable anytime from a footer-linked 'Preferencias de cookies' control",
+        "No analytics/marketing script tag is injected into the DOM until its corresponding category is GRANTED",
+        "Example: choosing 'Rechazar opcionales' persists DENIED for preferences/analytics/marketing and no third-party script loads on reload",
+        "Negative case: reloading the page after granting only 'analytics' does not load any marketing script"
+      ]
+    },
+    {
+      "id": "US-048",
+      "title": "Data-subject-rights request workflow",
+      "status": "open",
+      "dependsOn": ["US-005", "US-008", "US-045"],
+      "description": "As a data subject (prospect, customer, affiliate, etc.), I want to submit access/correction/deletion/revocation requests and track their resolution, so my data rights are honored with evidence.",
+      "acceptanceCriteria": [
+        "Prisma schema adds DataSubjectRequest with type enum (access, consultation, update, correction, deletion, revocation, proof-of-authorization, data-use-information, complaint, identity-verification, incident-report), status enum (RECEIVED/IDENTITY_VERIFICATION/IN_REVIEW/INFORMATION_REQUIRED/RESOLVED/REJECTED_WITH_REASON/CLOSED), dueDate, assignedUserId",
+        "/legal/solicitudes-de-datos public form posts to POST /api/v1/data-subject-requests (rate-limited, validated) creating a request in RECEIVED status and returning a tracking reference; an admin endpoint (data.manage permission) supports assignment, status transitions with required notes, and resolution",
+        "Every status transition is audited via AuditService",
+        "Example: submitting a deletion request returns a tracking reference; looking it up (public, reference-only, no auth) shows current status without exposing other requesters' data",
+        "Negative case: transitioning a request straight from RECEIVED to RESOLVED without an identity-verification step recorded is rejected by the service layer with a clear validation error"
+      ]
+    },
+    {
+      "id": "US-049",
+      "title": "Data retention policies and anonymization/deletion evidence",
+      "status": "open",
+      "dependsOn": ["US-008", "US-021"],
+      "description": "As ASODEF's compliance owner, I want configurable retention periods per data category with legal-hold support and auditable anonymization/deletion, so data isn't kept indefinitely by default.",
+      "acceptanceCriteria": [
+        "Prisma schema adds RetentionPolicy (per recordCategory: leads, opportunities, contracts, payment_orders, approved_transactions, failed_transactions, receipts, pqr_cases, audit_logs, documents, consent_records) with retentionPeriodDays and legalHold flag, plus AnonymizationLog for executed actions",
+        "A scheduled job (documented cron/worker, runnable on-demand for verification) identifies records past their retention window and NOT under legal hold, and requires an explicit admin approval (retention.manage permission) before anonymizing/deleting, writing an AnonymizationLog entry as evidence",
+        "Example: running the retention-review job against seeded data older than its configured window flags it for review without auto-deleting anything without approval",
+        "Negative case: a record flagged with legalHold=true is excluded from the retention-review candidate list even if past its retention window"
+      ]
+    },
+    {
+      "id": "US-050",
+      "title": "PQR case management",
+      "status": "open",
+      "dependsOn": ["US-005", "US-008", "US-045"],
+      "description": "As a customer or affiliate, I want to submit a petición/queja/reclamo/sugerencia and track it to resolution, so my concerns are formally handled.",
+      "acceptanceCriteria": [
+        "Prisma schema adds PqrCase with caseNumber (unique, non-sequential-looking), category, status enum (RECEIVED/ASSIGNED/IN_REVIEW/INFORMATION_REQUIRED/RESOLVED/CLOSED/REOPENED), priority, dueDate, optional links to customer/payment-order/contract",
+        "/legal/pqr public form posts to POST /api/v1/pqr-cases (validated, rate-limited) and returns the caseNumber; an admin endpoint (pqr.manage permission) supports assignment, status transitions with notes, resolution text, and capturing satisfactionScore after resolution",
+        "Every transition is audited; case creation triggers a CommunicationLog entry (US-059) acknowledging receipt",
+        "Example: submitting a PQR with category='reclamo' and a linked payment reference creates a case visible in the admin queue with that payment linked",
+        "Negative case: attempting to close a case still in INFORMATION_REQUIRED without a resolution note returns a validation error"
+      ]
+    },
+    {
+      "id": "US-051",
+      "title": "CRM core: Prospects, commercial contacts, opportunities, and the 14-stage pipeline",
+      "status": "open",
+      "dependsOn": ["US-008", "US-017", "US-021"],
+      "description": "As ASODEF's commercial team, I want every prospect and opportunity tracked through the full commercial lifecycle with a real, queryable pipeline, so nothing falls through the cracks.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Prospect, CommercialContact, Opportunity, OpportunityStatusHistory, CommercialActivity with a shared 14-stage enum (new_prospect, contacted, qualified, commercial_meeting, proposal_preparation, proposal_submitted, negotiation, legal_review, contract_pending, active_partner, inactive, lost_opportunity, renewal_pending, contract_expired)",
+        "Existing LeadSubmission rows can be promoted into a Prospect (linking prospectId) via an admin endpoint (crm.manage permission); Opportunity stage changes always write an OpportunityStatusHistory row and an AuditLog entry",
+        "CommercialActivity supports scheduling and completing follow-up tasks tied to an opportunity, with an assigned user and due date",
+        "Example: promoting a lead to a Prospect, creating an Opportunity in new_prospect stage, and moving it to qualified produces one OpportunityStatusHistory row reflecting exactly that transition",
+        "Negative case: attempting to move an Opportunity directly from new_prospect to active_partner (skipping legal_review/contract_pending) is allowed at the data layer but the API surfaces a warning flag on the response so the UI can prompt confirmation — the transition itself is still fully audited either way"
+      ]
+    },
+    {
+      "id": "US-052",
+      "title": "Proposals and agreements",
+      "status": "open",
+      "dependsOn": ["US-051"],
+      "description": "As a commercial user, I want to version proposals and record agreements per opportunity, so the negotiation history and final terms are preserved.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Proposal (versioned content per opportunity, status draft/sent/accepted/rejected) and Agreement (linking an opportunity + company once terms are settled, with signedDate)",
+        "Backend endpoints (crm.manage permission) create/list proposal versions per opportunity and create an Agreement once an opportunity reaches contract_pending or active_partner",
+        "Example: creating two Proposal versions for the same opportunity preserves both, with the latest flagged as current",
+        "Negative case: creating an Agreement for an opportunity still in qualified stage (before legal_review) returns a 409 with a clear stage-requirement message"
+      ]
+    },
+    {
+      "id": "US-053",
+      "title": "Business partner lifecycle and publication gate",
+      "status": "open",
+      "dependsOn": ["US-051"],
+      "description": "As ASODEF, I want business partners fully modeled with a strict publication gate, so no partner appears publicly before legal/commercial/benefit/logo/contact/coverage validation is complete.",
+      "acceptanceCriteria": [
+        "Prisma schema adds BusinessPartner with the full field set (legal/trade name, NIT, sector, city, address, phone, corporateEmail, website, legalRepresentative nullable, agreementType, benefitsOffered, discountConditions, geographicCoverage, validFrom/Until, logoPath, status 9-state enum PROSPECT..ARCHIVED, approvalStatus, publicationStatus, internalNotes)",
+        "A publish action (partners.manage permission) is only permitted when legal validation, commercial validation, benefit confirmation, agreement-validity confirmation, logo authorization, contact confirmation, and coverage confirmation are all recorded true; otherwise it returns 409 listing which checks are missing",
+        "Example: a partner with all six validations recorded true can be published and then appears via a public read-only partners endpoint",
+        "Negative case: a partner missing 'coverage confirmation' cannot be published — the API response names that specific missing validation"
+      ]
+    },
+    {
+      "id": "US-054",
+      "title": "Plan/service versioning and pre-payment disclosure",
+      "status": "open",
+      "dependsOn": ["US-021", "US-043"],
+      "description": "As a customer, I want the exact plan/service terms I'm accepting to be shown and stored at the moment I pay, so there's no ambiguity about what I agreed to.",
+      "acceptanceCriteria": [
+        "Plan schema expands to the full field set (internal/public name, description, coverage, includedServices, exclusions, eligibility, beneficiaryRules, priceCents, billingFrequency, taxes, startDate/endDate, version, status DRAFT/UNDER_REVIEW/ACTIVE/SUSPENDED/RETIRED/ARCHIVED, terms, cancellationRules, renewalRules, paymentConditions)",
+        "A pre-payment disclosure endpoint returns the exact ACTIVE plan/service version for a given obligation (name, description, total, currency, taxes, concept, frequency, terms, renewal/cancellation conditions, contact channel, PQR channel) and the PaymentOrder creation flow stores which exact plan version was disclosed/accepted",
+        "Example: creating a payment order for an obligation tied to Plan v2 records planVersionAcceptedId=2 on the order even if the plan is later edited to v3",
+        "Negative case: attempting to create a payment order for an obligation whose plan is not ACTIVE (e.g. SUSPENDED) returns 409"
+      ]
+    },
+    {
+      "id": "US-055",
+      "title": "Contracts: versioning, signers, acceptance, and private document storage",
+      "status": "open",
+      "dependsOn": ["US-052", "US-053"],
+      "description": "As ASODEF's legal/commercial team, I want contracts tracked with versioned documents and recorded acceptance so partner/customer agreements are enforceable and auditable.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Contract (status 7-state enum DRAFT/UNDER_REVIEW/PENDING_ACCEPTANCE/ACTIVE/EXPIRED/CANCELLED/ARCHIVED), ContractVersion (private document path, checksum, uploadedBy), ContractSigner, ContractAcceptance (acceptance evidence: ipAddress, timestamp, evidenceReference)",
+        "Contract documents are stored outside any public web root; download requires an authenticated, permission-checked, time-limited signed URL (contracts.read permission) — never a public static path",
+        "Recording a ContractAcceptance requires the contract to be in PENDING_ACCEPTANCE and moves it to ACTIVE once all required signers have accepted",
+        "Example: uploading a new ContractVersion, adding two signers, and recording both acceptances transitions the contract from PENDING_ACCEPTANCE to ACTIVE",
+        "Negative case: requesting a contract document download without contracts.read permission returns 403; requesting an expired signed download URL returns 410"
+      ]
+    },
+    {
+      "id": "US-056",
+      "title": "Refund and reversal workflow",
+      "status": "open",
+      "dependsOn": ["US-026", "US-028"],
+      "description": "As finance staff, I want refunds/reversals to require justification, evidence, and approval, and to be fully traceable back to the original payment.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Refund (amountCents, reason, evidencePath nullable, status, approvedByUserId nullable, providerReference nullable) linked to a PaymentOrder/PaymentTransaction",
+        "POST /api/v1/payments/:reference/refund (payments.refund permission) validates eligibility (order must be APPROVED, amount not exceeding original), requires a reason, creates a Refund in a pending-approval state, and only an approval action (separate permission) calls BoldPaymentProvider.createRefund (mock mode) and updates PaymentOrder status to REFUNDED or PARTIALLY_REFUNDED",
+        "Every refund/reversal step (request, evidence upload, approval, provider call, customer-facing communication trigger) is audited",
+        "Example: requesting and then approving a full refund for a mock-approved order transitions it to REFUNDED and logs a CommunicationLog entry notifying the customer",
+        "Negative case: a user with only payments.read (no payments.refund) attempting to request a refund gets 403; requesting a refund larger than the original amount returns 400"
+      ]
+    },
+    {
+      "id": "US-057",
+      "title": "Reconciliation module",
+      "status": "open",
+      "dependsOn": ["US-025", "US-026", "US-056"],
+      "description": "As finance staff, I want internal payment orders reconciled against provider transactions so mismatches (duplicate events, amount differences, unmatched approvals) are caught and tracked to resolution.",
+      "acceptanceCriteria": [
+        "Prisma schema adds Reconciliation (runDate, responsibleUserId, differencesFound, resolutionStatus) and ReconciliationDifference (kind: provider-approved-internally-pending / internal-approved-no-provider-confirmation / duplicate-event / amount-mismatch / reference-mismatch / unprocessed-notification / refund-inconsistency)",
+        "A reconciliation run (payments.reconcile permission) compares PaymentOrder+PaymentTransaction+PaymentEvent+PaymentReceipt+Refund records for a date range and persists any differences found, each independently resolvable with notes",
+        "Example: manually creating a PaymentEvent that updates provider status to APPROVED without a corresponding internal transition, then running reconciliation, surfaces exactly one 'internal-approved-no-provider-confirmation' or matching difference record",
+        "Negative case: running reconciliation twice over the same already-resolved period does not duplicate previously-resolved ReconciliationDifference rows"
+      ]
+    },
+    {
+      "id": "US-058",
+      "title": "Legal/commercial approval gates and PRODUCTION_PAYMENTS_ENABLED enforcement",
+      "status": "open",
+      "dependsOn": ["US-022", "US-043", "US-053"],
+      "description": "As ASODEF's leadership, I want real payments hard-blocked until every legal/commercial prerequisite is formally approved, so the platform can't accidentally go live before it's ready.",
+      "acceptanceCriteria": [
+        "Prisma schema adds ApprovalGate seeded with the 15 required gates (NIT, legal address, corporate email, legal representative, commercial registration, privacy policy, data-processing policy, terms and conditions, payment policy, refund/reversal procedure, PQR process, plan/service conditions, Bold production credentials, HTTPS, webhook validation, customer-service ownership), each starting PENDING",
+        "A config service exposes isProductionPaymentsEnabled() that returns true only when every ApprovalGate.status=APPROVED and none is expired; BoldPaymentProvider consults this before ever allowing BOLD_MODE to be anything other than mock",
+        "Admin endpoints (approvals.manage permission) transition gates through PENDING/UNDER_REVIEW/APPROVED/REJECTED/EXPIRED, each requiring approver, date, and optional supporting document/notes",
+        "Example: approving 14 of 15 gates still leaves isProductionPaymentsEnabled() returning false",
+        "Negative case: attempting to force BOLD_MODE=live via config while any gate is not APPROVED causes the API to fail startup/config validation rather than silently allowing live payments"
+      ]
+    },
+    {
+      "id": "US-059",
+      "title": "Commercial communications, templates, and suppression lists",
+      "status": "open",
+      "dependsOn": ["US-046", "US-050"],
+      "description": "As ASODEF, I want all outbound communications (transactional and marketing) templated, logged, and consent/suppression-aware, so marketing never ignores an opt-out and every message is traceable.",
+      "acceptanceCriteria": [
+        "Prisma schema adds CommunicationTemplate (key, channel, kind transactional/marketing, subject, body) and CommunicationLog (recipient, channel, status, attempts, errorCategory) and SuppressionListEntry (channel, recipient, reason)",
+        "A NotificationService.send(templateKey, recipient, data) stub persists a CommunicationLog row and logs the rendered content (no real SMTP/WhatsApp dispatch yet); for kind=marketing it checks ConsentRecord(optional_marketing)=GRANTED and SuppressionListEntry absence before persisting as 'would-send', otherwise records status=suppressed with a reason",
+        "An unsubscribe endpoint adds a SuppressionListEntry and revokes the optional_marketing ConsentRecord",
+        "Example: sending a marketing-kind template to a recipient with GRANTED consent and no suppression entry logs status='sent' (stub); the same call for a suppressed recipient logs status='suppressed'",
+        "Negative case: a transactional template (e.g. payment result) is still sent/logged even if the recipient revoked optional_marketing — the two are independent"
+      ]
+    },
+    {
+      "id": "US-060",
+      "title": "Admin platform shell",
+      "status": "open",
+      "dependsOn": ["US-010", "US-008"],
+      "description": "As authorized staff, I want a single RBAC-gated admin shell so every module built for staff (CRM, legal, payments, PQR, approvals, reports) lives behind one consistent, protected surface.",
+      "acceptanceCriteria": [
+        "/admin and all /admin/* routes require an authenticated session and render only the navigation sections the current user's permissions allow; unauthorized direct navigation to a permission-gated section redirects to a clear 'sin autorización' state, not just a hidden nav item",
+        "Admin shell includes a persistent nav (Dashboard, CRM, Empresas y aliados, Planes, Contratos, Pagos, Conciliación, Legal, Consentimientos, Solicitudes de datos, PQR, Aprobaciones, Reportes, Auditoría, Usuarios) matching the routes list",
+        "Example: a user with only payments.read can open /admin/pagos but attempting /admin/usuarios (requires users.manage) shows the unauthorized state",
+        "Negative case: an unauthenticated request to any /admin/* route redirects to /iniciar-sesion and returns to the originally requested page after login"
+      ]
+    },
+    {
+      "id": "US-061",
+      "title": "Admin CRM interface",
+      "status": "open",
+      "dependsOn": ["US-060", "US-051", "US-052"],
+      "description": "As commercial staff, I want to work prospects, opportunities, companies, and partners from real screens backed by the CRM API.",
+      "acceptanceCriteria": [
+        "/admin/crm/prospectos lists/searches/filters Prospects and LeadSubmissions with promote-to-opportunity action; /admin/crm/oportunidades renders a pipeline board across the 14 stages with drag-or-click stage transitions calling the real API",
+        "/admin/crm/empresas lists Companies/BusinessPartners with detail pages showing benefits, agreement status, and the publication-gate checklist from US-053",
+        "Opportunity detail view shows activities, notes, proposal versions, and full status history",
+        "Example: moving an opportunity card from 'negotiation' to 'legal_review' on the board persists via the API and appears in that opportunity's status history",
+        "Negative case: a user without crm.manage permission sees the CRM screens in read-only mode with all mutating actions disabled, not hidden-but-still-clickable"
+      ]
+    },
+    {
+      "id": "US-062",
+      "title": "Admin legal, consent, data-subject-request, and PQR management interfaces",
+      "status": "open",
+      "dependsOn": ["US-060", "US-043", "US-046", "US-048", "US-050"],
+      "description": "As legal/compliance and customer-service staff, I want real screens to review/approve legal documents, inspect consent evidence, and work data-subject-request and PQR queues.",
+      "acceptanceCriteria": [
+        "/admin/legal supports editing draft content, moving documents through the review/approval workflow, and publishing — with approve/publish actions visibly requiring the correct permissions and confirmations",
+        "/admin/consentimientos supports searching consent records by subject/purpose and viewing full evidence (policy version, ip, timestamp, method)",
+        "/admin/solicitudes-de-datos and /admin/pqr render queues with assignment, status transition (with required notes), due dates, and resolution entry",
+        "Example: approving and publishing a legal document from the UI makes it immediately visible at its public /legal/* route",
+        "Negative case: attempting to resolve a PQR case from the UI without entering resolution text is blocked client-side and server-side"
+      ]
+    },
+    {
+      "id": "US-063",
+      "title": "Admin payments, refunds, and reconciliation interfaces",
+      "status": "open",
+      "dependsOn": ["US-060", "US-056", "US-057"],
+      "description": "As finance/customer-service staff, I want to search payments, manage refunds, and review reconciliation from real admin screens.",
+      "acceptanceCriteria": [
+        "/admin/pagos supports search by document/reference/transaction, status filtering, viewing the full PaymentEvent history for an order, downloading receipts, and initiating/approving refunds with the required reason/evidence fields",
+        "/admin/conciliacion lists ReconciliationDifference records with filters and a resolution workflow (notes, resolved-by, resolved-at)",
+        "Manual status overrides (if ever needed) require a reason, elevated permission, and are clearly distinguished in the UI from provider-driven transitions",
+        "Example: initiating a refund from /admin/pagos for a mock-approved order, then approving it, updates the order's visible status to Reembolsado",
+        "Negative case: a user with payments.read only sees a disabled refund button with a tooltip explaining the missing permission"
+      ]
+    },
+    {
+      "id": "US-064",
+      "title": "Real-data commercial and operational dashboards/reports",
+      "status": "open",
+      "dependsOn": ["US-060", "US-051", "US-057"],
+      "description": "As leadership/operations, I want dashboards and exportable reports computed from real, current data — never sample/fake numbers.",
+      "acceptanceCriteria": [
+        "/admin (dashboard) shows: new prospects, opportunities by stage, conversion rate, active companies/agreements, contracts pending signature, contracts nearing expiration, commercial activity, leads without follow-up, opportunities won/lost, and (from the payments domain) recaudo diario/mensual, pagos aprobados/pendientes/rechazados, tasa de aprobación, obligaciones pendientes/vencidas, reconciliation differences — every figure computed from a live DB query, not a constant",
+        "/admin/reportes supports the report list from master prompt section 40 (payments by date/status, collection totals, outstanding/overdue obligations, transactions by provider, refunds, reconciliation differences, affiliates/beneficiaries/companies/partnerships, contract expiration, user activity, audit events) with CSV export; large exports (>1000 rows) run via a background job with a downloadable-when-ready state",
+        "Example: creating a new seeded PENDING obligation and reloading the dashboard increases the 'obligaciones pendientes' count by exactly one",
+        "Negative case: a report requested for a date range with zero matching records returns an empty-but-valid CSV/response, not an error"
+      ]
+    },
+    {
+      "id": "US-065",
+      "title": "Backend tests for CRM, legal, consent, PQR, retention, and approval-gate modules",
+      "status": "open",
+      "dependsOn": ["US-043", "US-046", "US-048", "US-049", "US-050", "US-051", "US-053", "US-055", "US-056", "US-057", "US-058", "US-059"],
+      "description": "As a developer, I want the expanded commercial/legal/compliance domain covered by automated backend tests to the same standard as the payments domain.",
+      "acceptanceCriteria": [
+        "Jest tests cover: legal document approval/publish state machine (including the 'never publish unapproved' rule), consent record creation/revocation, data-subject-request status-transition rules, PQR resolution-requires-notes rule, opportunity pipeline transitions + audit, business-partner publication gate (all 6 checks), refund eligibility/approval flow, reconciliation difference detection, and ApprovalGate → isProductionPaymentsEnabled() logic",
+        "Example: a test asserts isProductionPaymentsEnabled() is false with 14/15 gates approved and true only when all 15 are APPROVED and unexpired",
+        "Negative case: a test asserts publishing a LegalDocumentVersion still in PENDING_APPROVAL throws/returns an error and the document's public-facing query still returns the previous PUBLISHED version unaffected"
+      ]
+    },
+    {
+      "id": "US-066",
+      "title": "Frontend and E2E tests for legal center, cookie banner, PQR/data-request forms, and admin shell",
+      "status": "open",
+      "dependsOn": ["US-045", "US-047", "US-048", "US-050", "US-060", "US-033", "US-035"],
+      "description": "As a developer, I want the new public and admin surfaces covered by frontend and end-to-end tests so regressions in legal/compliance UX are caught.",
+      "acceptanceCriteria": [
+        "Vitest/RTL tests cover: cookie banner default state (no optional category preselected), Legal Center 'aún no publicado' fallback, PQR form validation, data-subject-request submission success/failure states",
+        "Playwright e2e coverage adds: visiting the site for the first time shows the cookie banner and rejecting optional cookies persists on reload; submitting a PQR case returns a visible case number; an unauthenticated visit to /admin redirects to /iniciar-sesion",
+        "Example: an e2e run confirms that after 'Rechazar opcionales', reloading the homepage does not re-show the cookie banner and does not load any marketing script tag",
+        "Negative case: an e2e test confirms that navigating directly to /admin/usuarios while logged in as a CUSTOMER_SERVICE role (no users.manage) shows the unauthorized state rather than the user list"
+      ]
+    },
+    {
+      "id": "US-067",
+      "title": "Full local verification of the expanded platform",
+      "status": "open",
+      "dependsOn": ["US-036", "US-037", "US-061", "US-062", "US-063", "US-064", "US-065", "US-066"],
+      "description": "As a developer, I want the complete expanded platform (institutional site, payments, CRM, legal/consent/PQR, admin, reports) verified together locally before any VPS deployment is considered.",
+      "acceptanceCriteria": [
+        "`docker compose up -d` brings up web, api, postgres, redis all healthy; CI (lint/typecheck/test/build/e2e) passes green across the full expanded scope",
+        "A documented end-to-end manual pass confirms: full commercial pipeline (prospect→opportunity→proposal→agreement→partner published), full payment lifecycle including refund and reconciliation, a PQR case and a data-subject-request resolved start to finish, a legal document authored/approved/published and visible publicly, and PRODUCTION_PAYMENTS_ENABLED confirmed false with the 15 approval gates all still PENDING (as expected pre-launch)",
+        "Example: the verification doc shows the exact commands/screens used for each confirmed flow",
+        "Negative case: if any quality gate or manual verification step fails, this story is not marked done and no deployment story may start"
+      ]
+    },
+    {
+      "id": "US-038",
+      "title": "Read-only VPS inspection and existing-services report",
+      "status": "open",
+      "dependsOn": ["US-067"],
+      "description": "As the deployer, I want to inspect the ASODEF VPS non-destructively and document what's already running (especially app./api./webhook.asodef.com.co) so deployment never collides with or damages the existing application.",
+      "acceptanceCriteria": [
+        "SSH in using `ssh -o IdentitiesOnly=yes -i ~/.ssh/kali_contabo_ed25519 asodefadmin@169.58.36.138` and, using only read-only commands, document: OS/distro, resources, existing Docker containers and their ports, existing Nginx server blocks/config, existing SSL certs, and firewall rules",
+        "Produce a written inspection report (e.g. docs/vps-inspection.md) explicitly listing the container/service/port/Nginx-block backing app.asodef.com.co, api.asodef.com.co, and webhook.asodef.com.co so later steps know exactly what not to touch",
+        "Example: the report includes the exact `docker ps` output and Nginx server_name blocks found for the three protected subdomains",
+        "Negative case: if the SSH key at ~/.ssh/kali_contabo_ed25519 is missing or connection fails, the story stops, reports the failure clearly, and does not attempt any further deployment steps"
+      ]
+    },
+    {
+      "id": "US-039",
+      "title": "Production Docker Compose, Dockerfiles, and Nginx config for asodef.com.co",
+      "status": "open",
+      "dependsOn": ["US-038"],
+      "description": "As the deployer, I want production build/serve configuration for the new platform scoped strictly to asodef.com.co (apex + www redirect) and path-based routing, without touching any existing Nginx server block.",
+      "acceptanceCriteria": [
+        "Multi-stage Dockerfiles for apps/web (static build served via Nginx or a small Node server) and apps/api (production NestJS build) are added",
+        "docker-compose.production.yml defines web, api, postgres, redis (and nginx if not using the host's existing Nginx) with `restart: unless-stopped`, healthchecks, a private network, and no public ports beyond what's proxied",
+        "A new Nginx server block (separate file, e.g. asodef.com.co.conf) routes / to web, /api to api, /pagos to the web SPA (client-side routing fallback), redirects www.asodef.com.co → https://asodef.com.co, and does not modify any existing server block or file",
+        "Example: `nginx -t` validates the new config alongside the existing configuration without conflicts",
+        "Negative case: the new config does not bind to any port or server_name already used by the existing app./api./webhook. services (confirmed against the US-038 report)"
+      ]
+    },
+    {
+      "id": "US-040",
+      "title": "Production env template, deployment script, and backup/restore scripts",
+      "status": "open",
+      "dependsOn": ["US-039"],
+      "description": "As the deployer, I want a safe, repeatable deployment script with backups and rollback-friendly releases so production changes are low-risk.",
+      "acceptanceCriteria": [
+        "scripts/deploy-production.sh uses `set -Eeuo pipefail`, validates required files/env, backs up the database before migrating, runs `prisma migrate deploy`, starts/updates containers, waits for health checks, and preserves the previous release directory under /opt/asodef/releases for rollback",
+        "scripts/backup-production.sh and scripts/restore-production.sh back up/restore Postgres data and any private uploaded files",
+        "/opt/asodef/shared/.env.production is referenced as the runtime secrets location; no secrets are committed to the repo",
+        "Example: running the deploy script against a scratch/staging-like environment completes all steps and prints a concise, secret-free summary",
+        "Negative case: if a health check fails after starting new containers, the script exits non-zero and leaves the previous release running rather than leaving the system in a half-updated state"
+      ]
+    },
+    {
+      "id": "US-041",
+      "title": "Deploy Phase 1 to the ASODEF VPS under asodef.com.co",
+      "status": "open",
+      "dependsOn": ["US-040"],
+      "description": "As ASODEF, I want the verified Phase 1 platform live at asodef.com.co with HTTPS, without disrupting the existing app./api./webhook. services.",
+      "acceptanceCriteria": [
+        "Immediately before running scripts/deploy-production.sh against the real VPS, explicitly confirm with the user that it's safe to proceed (shared production infrastructure, hard to fully reverse) — do not run it unattended",
+        "Execute the deployment: build/ship images, run `prisma migrate deploy` against production, start containers under docker-compose.production.yml, obtain/apply a Let's Encrypt certificate for asodef.com.co and www.asodef.com.co (redirecting to apex) without disrupting any existing certificate",
+        "Confirm no port or Nginx server_name conflicts occurred with the existing app./api./webhook. services per the US-038 report",
+        "Example: after deployment, `docker ps` shows the new asodef web/api/postgres/redis containers running alongside the pre-existing, untouched containers",
+        "Negative case: if any step fails (e.g. cert issuance, migration failure, health check failure), the script/process halts, reports the failure, and does not leave the existing services stopped or reconfigured"
+      ]
+    },
+    {
+      "id": "US-042",
+      "title": "Post-deployment verification report",
+      "status": "open",
+      "dependsOn": ["US-041"],
+      "description": "As ASODEF, I want documented proof the production deployment actually works and the existing application is unaffected, before calling Phase 1 done.",
+      "acceptanceCriteria": [
+        "Verify and document: https://asodef.com.co loads the homepage, https://asodef.com.co/pagos loads and completes a lookup, https://www.asodef.com.co redirects to the apex domain, /api/v1/health returns 200 over HTTPS, Postgres and Redis are not publicly reachable (port scan or direct connection attempt fails from outside), and containers restart automatically after `docker restart` of one service",
+        "Verify and document that app.asodef.com.co, api.asodef.com.co, and webhook.asodef.com.co still respond exactly as they did in the US-038 inspection (same status codes/behavior)",
+        "Produce a written verification report (e.g. docs/deployment-verification.md) with timestamps and command output for each check",
+        "Example: the report shows a curl -I https://asodef.com.co/api/v1/health output with `200 OK` and correct security headers",
+        "Negative case: if any existing subdomain's behavior changed from the US-038 baseline, the report flags it as a regression requiring immediate investigation rather than being omitted"
+      ]
+    }
+  ]
+}
