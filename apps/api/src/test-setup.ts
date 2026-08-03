@@ -1,5 +1,14 @@
-// Jest setupFiles entry: ensures DATABASE_URL falls back to the local
-// docker-compose Postgres for any spec that instantiates PrismaClient
-// directly (e.g. via NestJS DI), mirroring test-db-client.ts's fallback
-// for specs that build their own PrismaClient explicitly.
+// Jest setupFiles entry: fills in a fully valid local-dev environment for
+// any spec that instantiates PrismaClient or boots the real NestJS app
+// (e.g. via NestFactory.create(AppModule) or Nest's TestingModule), so
+// `pnpm test` works out of the box against the local docker-compose
+// stack without extra setup. Tests that deliberately want to exercise a
+// *missing* variable must explicitly `delete process.env.X` themselves
+// (and restore it afterwards) - see bootstrap.integration.spec.ts.
 process.env.DATABASE_URL ??= "postgresql://asodef:asodef_dev_password@localhost:5433/asodef?schema=public";
+process.env.REDIS_URL ??= "redis://localhost:6379";
+process.env.JWT_SECRET ??= "test_jwt_secret_at_least_16_chars";
+process.env.JWT_REFRESH_SECRET ??= "test_refresh_secret_at_least_16_chars";
+process.env.ENCRYPTION_KEY ??= "test_encryption_key_needs_32_characters_min";
+process.env.CORS_ORIGIN ??= "http://localhost:5173";
+process.env.NODE_ENV ??= "test";
