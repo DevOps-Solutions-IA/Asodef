@@ -1,10 +1,23 @@
-import { ASODEF_COMPANY } from "@asodef/config";
+import { Suspense, useState } from "react";
+import { RouterProvider } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { router } from "./routes/router";
+import { createQueryClient } from "./lib/query-client";
+import { AppErrorBoundary } from "./layouts/shared/AppErrorBoundary";
+import { RouteLoadingFallback } from "./layouts/shared/RouteLoadingFallback";
+import { ReactQueryDevtoolsLazy } from "./lib/ReactQueryDevtoolsLazy";
 
 export function App() {
+  const [queryClient] = useState(createQueryClient);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-bg-base px-4 text-center">
-      <h1 className="font-display text-4xl font-semibold text-brand-dark">{ASODEF_COMPANY.legalName}</h1>
-      <p className="font-sans text-text-muted">{ASODEF_COMPANY.tagline}</p>
-    </main>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <RouterProvider router={router} future={{ v7_startTransition: true }} />
+        </Suspense>
+        <ReactQueryDevtoolsLazy />
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }

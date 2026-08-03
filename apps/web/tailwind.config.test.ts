@@ -32,7 +32,11 @@ describe("tailwind.config.ts design tokens", () => {
     expect(fontFamily.accent?.[0]).toBe("Caveat");
   });
 
-  it("scans index.html and all src TS/TSX files for utility classes", () => {
-    expect(tailwindConfig.content).toEqual(["./index.html", "./src/**/*.{ts,tsx}"]);
+  it("scans index.html, all src TS/TSX files, and the shared @asodef/ui component package for utility classes", () => {
+    expect(tailwindConfig.content).toEqual([
+      "./index.html",
+      "./src/**/*.{ts,tsx}",
+      "../../packages/ui/src/**/*.{ts,tsx}",
+    ]);
   });
 });

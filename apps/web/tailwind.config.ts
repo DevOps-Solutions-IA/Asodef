@@ -6,7 +6,11 @@ import type { Config } from "tailwindcss";
  * --color-brand-dark -> theme color "brand-dark" -> utility "bg-brand-dark".
  */
 export default {
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // packages/ui's components are consumed by this app but built/authored
+  // outside src/ - without scanning them here too, Tailwind's JIT scanner
+  // would never see their utility classes and would silently omit that
+  // CSS from the final build (the components would render unstyled).
+  content: ["./index.html", "./src/**/*.{ts,tsx}", "../../packages/ui/src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {

@@ -1,0 +1,15 @@
+import { describe, expect, it } from "vitest";
+import { queryKeys } from "./query-keys";
+
+describe("queryKeys factory", () => {
+  it("produces a stable, serializable key for the health readiness query", () => {
+    expect(queryKeys.health.ready()).toEqual(["health", "ready"]);
+  });
+
+  it("returns a new array reference each call but with equal contents (safe for TanStack Query's key comparison)", () => {
+    const first = queryKeys.health.ready();
+    const second = queryKeys.health.ready();
+    expect(first).not.toBe(second);
+    expect(first).toEqual(second);
+  });
+});

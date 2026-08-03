@@ -1,3 +1,8 @@
+// @vitest-environment node
+// Reads the real CSS file from disk via a file:// URL - jsdom's URL
+// handling doesn't resolve import.meta.url compatibly with that, so this
+// file specifically opts back into the node environment (the project
+// default is jsdom, for component tests that need a DOM).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
