@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
+import { LogoutButton } from "./shared/LogoutButton";
 
 const NAV_ITEMS = [
   { to: "/empresa", label: "Panel", end: true },
@@ -48,6 +49,9 @@ export function CompanyLayout() {
             ))}
           </ul>
         </nav>
+        <div className="border-t border-white/10 px-3 py-3">
+          <LogoutButton className="w-full justify-center text-white/70 hover:bg-white/10 hover:text-white" />
+        </div>
       </aside>
 
       <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8">

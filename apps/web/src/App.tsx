@@ -6,6 +6,7 @@ import { createQueryClient } from "./lib/query-client";
 import { AppErrorBoundary } from "./layouts/shared/AppErrorBoundary";
 import { RouteLoadingFallback } from "./layouts/shared/RouteLoadingFallback";
 import { ReactQueryDevtoolsLazy } from "./lib/ReactQueryDevtoolsLazy";
+import { AuthProvider } from "./lib/auth/AuthProvider";
 
 export function App() {
   const [queryClient] = useState(createQueryClient);
@@ -13,9 +14,11 @@ export function App() {
   return (
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <RouterProvider router={router} future={{ v7_startTransition: true }} />
-        </Suspense>
+        <AuthProvider>
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <RouterProvider router={router} future={{ v7_startTransition: true }} />
+          </Suspense>
+        </AuthProvider>
         <ReactQueryDevtoolsLazy />
       </QueryClientProvider>
     </AppErrorBoundary>

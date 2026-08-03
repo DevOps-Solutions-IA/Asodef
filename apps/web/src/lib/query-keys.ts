@@ -10,4 +10,11 @@ export const queryKeys = {
   health: {
     ready: () => ["health", "ready"] as const,
   },
+  auth: {
+    /** The single query key for session discovery (GET /auth/me) - every
+     * consumer (AuthProvider, route guards) reads/invalidates through this
+     * one key, never an inline literal (US-010: "avoid duplicating session
+     * state in multiple global stores"). */
+    me: () => ["auth", "me"] as const,
+  },
 } as const;

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
+import { LogoutButton } from "./shared/LogoutButton";
 
 const NAV_ITEMS = [
   { to: "/mi-cuenta", label: "Resumen", end: true },
@@ -49,6 +50,9 @@ export function AccountLayout() {
             ))}
           </ul>
         </nav>
+        <div className="border-t border-border-soft px-3 py-3">
+          <LogoutButton className="w-full justify-center" />
+        </div>
       </aside>
 
       <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8">

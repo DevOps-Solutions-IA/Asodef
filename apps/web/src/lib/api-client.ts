@@ -12,14 +12,24 @@ export interface ApiRequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Set on the auth endpoints that must never trigger a refresh-and-retry
+   * cycle (login, refresh itself, logout, forgot-password, reset-password)
+   * - see auth-api.ts. Also set internally on the single retry attempt
+   * apiRequest makes after a successful refresh, so that retry's own 401
+   * (if any) can never recurse into another refresh (US-010 section 5:
+   * "do not enter infinite refresh loops").
+   */
+  skipAuthRefresh?: boolean;
 }
 
-type UnauthorizedHandler = () => void;
+/** Returns true if a refresh just succeeded (safe to retry the original
+ * request once), false otherwise. Registered by AuthProvider (US-010) so
+ * this client keeps zero auth-flow knowledge of its own - it only knows
+ * "ask the handler, retry once if it says so". */
+type UnauthorizedHandler = () => Promise<boolean>;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
-/** Registered by the auth module (a later story) to react to a 401 - e.g.
- * attempt a token refresh or redirect to /iniciar-sesion. Kept here rather
- * than baked into apiRequest so this client has no auth-flow knowledge. */
 export function onUnauthorized(handler: UnauthorizedHandler): void {
   unauthorizedHandler = handler;
 }
@@ -86,16 +96,34 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
   if (!response.ok) {
     const kind = classifyStatus(response.status);
-    if (kind === "unauthorized") {
-      unauthorizedHandler?.();
+
+    if (kind === "unauthorized" && !options.skipAuthRefresh && unauthorizedHandler) {
+      const refreshed = await unauthorizedHandler();
+      if (refreshed) {
+        // Retry exactly once - the caller passes skipAuthRefresh so a
+        // second 401 on the retry itself is never eligible to trigger
+        // yet another refresh attempt (prevents an infinite loop).
+        return apiRequest<T>(path, { ...options, skipAuthRefresh: true });
+      }
     }
+
+    // The backend never sets a Retry-After *header* for 429s (see
+    // RateLimiterService/AuthController) - retryAfterSeconds travels in
+    // the JSON body instead. The header is still checked first in case a
+    // future story adds one, but the body is the real source today.
     const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader
+      ? Number(retryAfterHeader)
+      : typeof envelope?.retryAfterSeconds === "number"
+        ? envelope.retryAfterSeconds
+        : undefined;
+
     throw new ApiError({
       kind,
       status: response.status,
       envelope,
       requestId: envelope?.requestId ?? requestId,
-      retryAfterSeconds: retryAfterHeader ? Number(retryAfterHeader) : undefined,
+      retryAfterSeconds,
     });
   }
 

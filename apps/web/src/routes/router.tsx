@@ -5,6 +5,12 @@ import { AuthLayout } from "../layouts/AuthLayout";
 import { RouteErrorBoundary } from "../layouts/shared/RouteErrorBoundary";
 import { NotFoundPage } from "../pages/errors/NotFoundPage";
 import { RoutePlaceholder } from "../pages/RoutePlaceholder";
+import { LoginPage } from "../pages/auth/LoginPage";
+import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
+import { GuestOnlyRoute } from "../lib/auth/route-guards/GuestOnlyRoute";
+import { AuthenticatedRoute } from "../lib/auth/route-guards/AuthenticatedRoute";
+import { RoleRoute } from "../lib/auth/route-guards/RoleRoute";
 
 // Payment/account/company/admin/legal are never needed on first paint of
 // the public marketing site, so they're code-split - satisfies "no
@@ -60,9 +66,16 @@ export const routeConfig: RouteObject[] = [
     element: <AuthLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { path: "iniciar-sesion", element: <RoutePlaceholder title="Iniciar sesión" /> },
-      { path: "recuperar-clave", element: <RoutePlaceholder title="Recuperar clave" /> },
-      { path: "restablecer-clave", element: <RoutePlaceholder title="Restablecer clave" /> },
+      {
+        // An already-authenticated visitor is sent to their real landing
+        // area instead of seeing these forms again (US-010 section 6).
+        element: <GuestOnlyRoute />,
+        children: [
+          { path: "iniciar-sesion", element: <LoginPage /> },
+          { path: "recuperar-clave", element: <ForgotPasswordPage /> },
+          { path: "restablecer-clave", element: <ResetPasswordPage /> },
+        ],
+      },
     ],
   },
   {
@@ -78,49 +91,84 @@ export const routeConfig: RouteObject[] = [
     ],
   },
   {
-    path: "mi-cuenta",
-    element: <AccountLayout />,
+    // Authentication is required for every /mi-cuenta/* route - no role
+    // restriction beyond "logged in" (US-010 recommended role routing:
+    // CUSTOMER/AFFILIATE land here, but any authenticated user may view
+    // their own account area).
+    element: <AuthenticatedRoute />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <RoutePlaceholder title="Mi cuenta" /> },
-      { path: "perfil", element: <RoutePlaceholder title="Perfil" /> },
-      { path: "pagos", element: <RoutePlaceholder title="Mis pagos" /> },
-      { path: "documentos", element: <RoutePlaceholder title="Documentos" /> },
-      { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-      { path: "notificaciones", element: <RoutePlaceholder title="Notificaciones" /> },
+      {
+        path: "mi-cuenta",
+        element: <AccountLayout />,
+        children: [
+          { index: true, element: <RoutePlaceholder title="Mi cuenta" /> },
+          { path: "perfil", element: <RoutePlaceholder title="Perfil" /> },
+          { path: "pagos", element: <RoutePlaceholder title="Mis pagos" /> },
+          { path: "documentos", element: <RoutePlaceholder title="Documentos" /> },
+          { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
+          { path: "notificaciones", element: <RoutePlaceholder title="Notificaciones" /> },
+        ],
+      },
     ],
   },
   {
-    path: "empresa",
-    element: <CompanyLayout />,
+    element: <AuthenticatedRoute />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <RoutePlaceholder title="Panel de empresa" /> },
-      { path: "dashboard", element: <RoutePlaceholder title="Dashboard" /> },
-      { path: "beneficios", element: <RoutePlaceholder title="Beneficios" /> },
-      { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-      { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
+      {
+        // Only COMPANY_PARTNER may reach /empresa/* - an authenticated
+        // user of any other role sees ForbiddenPage in place, never a
+        // silent redirect that would hide the route's existence
+        // inconsistently with how the backend responds (US-010 section 8).
+        element: <RoleRoute roles={["COMPANY_PARTNER"]} />,
+        children: [
+          {
+            path: "empresa",
+            element: <CompanyLayout />,
+            children: [
+              { index: true, element: <RoutePlaceholder title="Panel de empresa" /> },
+              { path: "dashboard", element: <RoutePlaceholder title="Dashboard" /> },
+              { path: "beneficios", element: <RoutePlaceholder title="Beneficios" /> },
+              { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
+              { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
-    path: "admin",
-    element: <AdminLayout />,
+    element: <AuthenticatedRoute />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <RoutePlaceholder title="Dashboard administrativo" /> },
-      { path: "clientes", element: <RoutePlaceholder title="Clientes" /> },
-      { path: "afiliados", element: <RoutePlaceholder title="Afiliados" /> },
-      { path: "empresas", element: <RoutePlaceholder title="Empresas" /> },
-      { path: "aliados", element: <RoutePlaceholder title="Aliados" /> },
-      { path: "planes", element: <RoutePlaceholder title="Planes" /> },
-      { path: "pagos", element: <RoutePlaceholder title="Pagos" /> },
-      { path: "conciliacion", element: <RoutePlaceholder title="Conciliación" /> },
-      { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-      { path: "legal", element: <RoutePlaceholder title="Legal" /> },
-      { path: "pqr", element: <RoutePlaceholder title="PQR" /> },
-      { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
-      { path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> },
-      { path: "usuarios", element: <RoutePlaceholder title="Usuarios" /> },
+      {
+        // Only SUPER_ADMIN/ADMIN may reach /admin/* (US-010 recommended
+        // role routing).
+        element: <RoleRoute roles={["SUPER_ADMIN", "ADMIN"]} />,
+        children: [
+          {
+            path: "admin",
+            element: <AdminLayout />,
+            children: [
+              { index: true, element: <RoutePlaceholder title="Dashboard administrativo" /> },
+              { path: "clientes", element: <RoutePlaceholder title="Clientes" /> },
+              { path: "afiliados", element: <RoutePlaceholder title="Afiliados" /> },
+              { path: "empresas", element: <RoutePlaceholder title="Empresas" /> },
+              { path: "aliados", element: <RoutePlaceholder title="Aliados" /> },
+              { path: "planes", element: <RoutePlaceholder title="Planes" /> },
+              { path: "pagos", element: <RoutePlaceholder title="Pagos" /> },
+              { path: "conciliacion", element: <RoutePlaceholder title="Conciliación" /> },
+              { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
+              { path: "legal", element: <RoutePlaceholder title="Legal" /> },
+              { path: "pqr", element: <RoutePlaceholder title="PQR" /> },
+              { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
+              { path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> },
+              { path: "usuarios", element: <RoutePlaceholder title="Usuarios" /> },
+            ],
+          },
+        ],
+      },
     ],
   },
   {

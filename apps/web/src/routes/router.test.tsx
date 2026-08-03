@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { routeConfig, routerFutureConfig } from "./router";
+import { buildCurrentUser, mockAuthFetch, renderWithAuth } from "../test-utils/auth-test-helpers";
+import type { CurrentUser } from "../lib/auth/auth-types";
 
-function renderAtPath(path: string) {
+function renderAtPath(path: string, currentUser: CurrentUser | null = null) {
+  mockAuthFetch(currentUser);
   const testRouter = createMemoryRouter(routeConfig, { initialEntries: [path], future: routerFutureConfig });
-  return render(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
+  return renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
 }
 
 describe("router", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders PublicLayout's nav and footer for the home route", () => {
     renderAtPath("/");
 
@@ -23,16 +30,29 @@ describe("router", () => {
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
-  it("renders AuthLayout (no marketing nav/footer) for /iniciar-sesion", () => {
+  it("renders AuthLayout (no marketing nav/footer) for /iniciar-sesion when unauthenticated", async () => {
     renderAtPath("/iniciar-sesion");
 
-    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
-  it("renders the lazily-loaded AccountLayout with its own nav for a nested /mi-cuenta/* route", async () => {
+  it("redirects an already-authenticated visitor away from /iniciar-sesion (GuestOnlyRoute)", async () => {
+    renderAtPath("/iniciar-sesion", buildCurrentUser({ roles: ["CUSTOMER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Mi cuenta" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Iniciar sesión" })).not.toBeInTheDocument();
+  });
+
+  it("redirects an unauthenticated visitor away from a protected /mi-cuenta/* route", async () => {
     renderAtPath("/mi-cuenta/perfil");
+
+    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+  });
+
+  it("renders the lazily-loaded AccountLayout with its own nav for an authenticated /mi-cuenta/* route", async () => {
+    renderAtPath("/mi-cuenta/perfil", buildCurrentUser({ roles: ["CUSTOMER"] }));
 
     expect(await screen.findByRole("heading", { name: "Perfil" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Cuenta" })).toBeInTheDocument();
@@ -41,11 +61,18 @@ describe("router", () => {
     expect(screen.getByRole("link", { name: "Documentos" })).toBeInTheDocument();
   });
 
-  it("renders the lazily-loaded AdminLayout with its distinct nav for /admin", async () => {
-    renderAtPath("/admin");
+  it("renders the lazily-loaded AdminLayout with its distinct nav for /admin when the user holds ADMIN", async () => {
+    renderAtPath("/admin", buildCurrentUser({ roles: ["ADMIN"] }));
 
     expect(await screen.findByRole("heading", { name: "Dashboard administrativo" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Administración" })).toBeInTheDocument();
+  });
+
+  it("shows ForbiddenPage for /admin when the authenticated user lacks SUPER_ADMIN/ADMIN", async () => {
+    renderAtPath("/admin", buildCurrentUser({ roles: ["CUSTOMER"] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard administrativo" })).not.toBeInTheDocument();
   });
 
   it("renders the lazily-loaded LegalLayout with its document list for /legal/politica-de-privacidad", async () => {
@@ -61,10 +88,10 @@ describe("router", () => {
     expect(screen.getByRole("navigation", { name: "Documentos legales" })).toBeInTheDocument();
   });
 
-  it("renders the 404 page (inside PublicLayout) for any unmatched path", () => {
+  it("renders the 404 page (inside PublicLayout) for any unmatched path", async () => {
     renderAtPath("/esta-ruta-no-existe");
 
-    expect(screen.getByText("Página no encontrada")).toBeInTheDocument();
+    expect(await screen.findByText("Página no encontrada")).toBeInTheDocument();
     // still within the public site chrome, not a bare unstyled fallback
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
@@ -72,7 +99,7 @@ describe("router", () => {
   it("does not match the catch-all for a route that belongs to a different layout group", async () => {
     // regression guard: PublicLayout's "*" child must not shadow more
     // specific routes defined in later top-level route groups
-    renderAtPath("/empresa/dashboard");
+    renderAtPath("/empresa/dashboard", buildCurrentUser({ roles: ["COMPANY_PARTNER"] }));
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Página no encontrada")).not.toBeInTheDocument());
   });

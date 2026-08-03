@@ -14,7 +14,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 describe("apiClient", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    onUnauthorized(() => {});
+    onUnauthorized(async () => false);
   });
 
   it("returns the parsed JSON body on a successful request", async () => {
@@ -69,7 +69,7 @@ describe("apiClient", () => {
   it("maps 401 to kind 'unauthorized', shows a safe message, and invokes the registered handler", async () => {
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(jsonResponse(401, { statusCode: 401, error: "Unauthorized" })));
 
-    const handler = vi.fn();
+    const handler = vi.fn().mockResolvedValue(false);
     onUnauthorized(handler);
 
     let caught: ApiError | undefined;
@@ -83,6 +83,40 @@ describe("apiClient", () => {
     expect(caught?.message).not.toMatch(/statusCode|Unauthorized/);
     expect(caught?.message).toMatch(/sesión/i);
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the original request exactly once when the unauthorized handler reports a successful refresh", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(jsonResponse(401, { statusCode: 401, error: "Unauthorized" }))
+      .mockReturnValueOnce(jsonResponse(200, { status: "ok" }));
+    vi.stubGlobal("fetch", fetchMock);
+    onUnauthorized(vi.fn().mockResolvedValue(true));
+
+    const result = await apiClient.get<{ status: string }>("/mi-cuenta/perfil");
+
+    expect(result).toEqual({ status: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not attempt a refresh at all for a request marked skipAuthRefresh", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(jsonResponse(401, { statusCode: 401, error: "Unauthorized" })));
+    const handler = vi.fn().mockResolvedValue(true);
+    onUnauthorized(handler);
+
+    await expect(apiRequest("/auth/login", { method: "POST", skipAuthRefresh: true })).rejects.toMatchObject({
+      kind: "unauthorized",
+    });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt a refresh for a 403 (forbidden must never trigger token refresh)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(jsonResponse(403, { statusCode: 403, error: "Forbidden" })));
+    const handler = vi.fn().mockResolvedValue(true);
+    onUnauthorized(handler);
+
+    await expect(apiClient.get("/admin/usuarios")).rejects.toMatchObject({ kind: "forbidden" });
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("maps 403 to kind 'forbidden' with a safe permission message", async () => {
@@ -111,6 +145,30 @@ describe("apiClient", () => {
 
     expect(caught?.kind).toBe("rate_limited");
     expect(caught?.retryAfterSeconds).toBe(30);
+  });
+
+  it("falls back to retryAfterSeconds in the JSON body when no Retry-After header is present (the real API's shape)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(
+        jsonResponse(429, {
+          statusCode: 429,
+          error: "Too Many Requests",
+          message: "Demasiados intentos.",
+          retryAfterSeconds: 42,
+        }),
+      ),
+    );
+
+    let caught: ApiError | undefined;
+    try {
+      await apiClient.post("/auth/login", {});
+    } catch (error) {
+      caught = error as ApiError;
+    }
+
+    expect(caught?.kind).toBe("rate_limited");
+    expect(caught?.retryAfterSeconds).toBe(42);
   });
 
   it("maps a fetch/network failure to kind 'network' with a safe message, not the raw fetch error", async () => {

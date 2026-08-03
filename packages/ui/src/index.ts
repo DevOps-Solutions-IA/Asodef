@@ -9,6 +9,7 @@ export * from "./components/Label";
 export * from "./components/FieldError";
 export * from "./components/FormField";
 export * from "./components/Input";
+export * from "./components/PasswordInput";
 export * from "./components/Textarea";
 export * from "./components/Select";
 export * from "./components/Checkbox";

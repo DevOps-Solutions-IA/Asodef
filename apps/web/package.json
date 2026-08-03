@@ -15,11 +15,14 @@
   "dependencies": {
     "@asodef/config": "workspace:*",
     "@asodef/ui": "workspace:*",
+    "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.0",
     "lucide-react": "^0.462.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-hook-form": "^7.54.0",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@asodef/eslint-config": "workspace:*",
