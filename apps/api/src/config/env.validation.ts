@@ -136,6 +136,12 @@ export const envSchema = z.object({
   // this counter (see PasswordRecoveryService.changePassword).
   CHANGE_PASSWORD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   CHANGE_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
+
+  // leads (US-017): coarse per-IP throttle on the public partnership-inquiry
+  // form. A lower ceiling than login/password flows is appropriate - a
+  // legitimate visitor submits this form once, not repeatedly.
+  LEADS_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
+  LEADS_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -363,3 +363,61 @@ model SecurityEvent {
   @@index([type, createdAt])
   @@map("security_events")
 }
+
+enum LeadStatus {
+  PENDING
+  REVIEWED
+  ARCHIVED
+
+  @@map("lead_status")
+}
+
+enum LeadNotificationStatus {
+  PENDING
+  SENT
+
+  @@map("lead_notification_status")
+}
+
+// US-017: inbound partnership inquiries from the public "quiero ser
+// aliado" form. Public-facing and unauthenticated, so every field is
+// exactly what the visitor typed - never trusted for anything beyond
+// display/follow-up (no role, permission, or internal linkage implied).
+model LeadSubmission {
+  id              String     @id @default(uuid()) @db.Uuid
+  fullName        String     @map("full_name")
+  company         String
+  position        String
+  city            String
+  phone           String
+  email           String
+  sector          String
+  message         String
+  consentAccepted Boolean    @map("consent_accepted")
+  status          LeadStatus @default(PENDING)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  notification LeadNotification?
+
+  @@index([createdAt])
+  @@map("lead_submissions")
+}
+
+// A persisted "pending" stub, not an actual dispatch - deliberately not
+// reusing NotificationJob (that model is scoped to authenticated-user
+// email flows: required recipientEmail/userId, a closed NotificationType
+// enum, and a real MailTransport send). This is just the durable record
+// the commercial team's follow-up tooling polls; no email is sent by
+// this story.
+model LeadNotification {
+  id               String                  @id @default(uuid()) @db.Uuid
+  leadSubmissionId String                  @unique @map("lead_submission_id") @db.Uuid
+  status           LeadNotificationStatus  @default(PENDING)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leadSubmission LeadSubmission @relation(fields: [leadSubmissionId], references: [id], onDelete: Cascade)
+
+  @@map("lead_notifications")
+}
