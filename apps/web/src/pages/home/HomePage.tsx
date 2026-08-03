@@ -3,12 +3,8 @@ import { TrustBar } from "./TrustBar";
 import { AboutSection } from "./AboutSection";
 
 /**
- * Institutional homepage. US-012 (Hero) is content-complete with
- * approved Spanish copy. US-013 (TrustBar + About) is PARTIALLY
- * COMPLETE: both sections are fully built, tested, animated, and wired
- * here technically, but real institutional content is still pending
- * approval - see the US-013 completion report for the exact content
- * specification and what's missing.
+ * Institutional homepage. US-012 (Hero) and US-013 (TrustBar + About)
+ * are both content-complete with approved Spanish copy.
  *
  * Statistics/Benefits/Portfolio/Coverage/Alliance-CTA are separate,
  * later stories and are not stubbed here. Hero's CTA anchors
@@ -37,23 +33,32 @@ export function HomePage() {
         ]}
       />
 
-      {/* TrustBar's 4 trust items have no confirmed content anywhere in
-       * the approved project sources - the component renders nothing
-       * until real content is supplied (see the US-013 report). */}
-      <TrustBar />
+      <TrustBar
+        items={[
+          { label: "Atención cercana", sublabel: "Acompañamiento humano y responsable" },
+          { label: "Gestión confiable", sublabel: "Procesos claros y orientados al bienestar" },
+          { label: "Compromiso familiar", sublabel: "Soluciones pensadas para las familias" },
+          { label: "Servicio responsable", sublabel: "Atención con respeto, transparencia y cuidado" },
+        ]}
+      />
 
       <AboutSection
+        eyebrow="Conoce a ASODEF"
         heading="Quiénes somos"
+        description="Somos una asociación comprometida con el bienestar y el desarrollo de las familias. Trabajamos con cercanía, responsabilidad y vocación de servicio, acompañando a personas y organizaciones mediante soluciones orientadas a sus necesidades."
         cards={[
-          // Card titles are the PRD's own confirmed section labels
-          // (routes list: "Quiénes somos"). The body paragraphs (the
-          // actual Historia/Misión/Visión copy from "master prompt
-          // section 12") are not present in any approved project
-          // source - see the US-013 report - so they stay omitted
-          // rather than invented.
-          { title: "Nuestra historia" },
-          { title: "Nuestra misión" },
-          { title: "Nuestra visión" },
+          {
+            title: "Nuestra historia",
+            body: "ASODEF nace con el propósito de acompañar a las familias y contribuir a su bienestar mediante una gestión cercana, humana y responsable.",
+          },
+          {
+            title: "Nuestra misión",
+            body: "Brindar atención y soluciones que aporten al bienestar de las personas, las familias y las organizaciones, actuando con compromiso, respeto y transparencia.",
+          },
+          {
+            title: "Nuestra visión",
+            body: "Ser una organización reconocida por su cercanía, confianza y capacidad de generar valor para las familias y las comunidades que acompaña.",
+          },
         ]}
       />
     </>

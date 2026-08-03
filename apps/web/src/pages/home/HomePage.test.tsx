@@ -79,7 +79,9 @@ describe("HomePage - approved Hero copy (US-012)", () => {
     expect(screen.getByText("Confianza")).toBeInTheDocument();
     expect(screen.getByText("Gestión responsable")).toBeInTheDocument();
     expect(screen.getByText("Bienestar")).toBeInTheDocument();
-    expect(screen.getByText("Compromiso familiar")).toBeInTheDocument();
+    // "Compromiso familiar" is approved copy in both the Hero stat label
+    // and the TrustBar's third item title - two distinct, legitimate uses.
+    expect(screen.getAllByText("Compromiso familiar")).toHaveLength(2);
   });
 
   it("positions all three stats at distinct locations (no overlapping duplicate position)", () => {
@@ -114,7 +116,7 @@ describe("HomePage - approved Hero copy (US-012)", () => {
   });
 });
 
-describe("HomePage - TrustBar and About sections (US-013)", () => {
+describe("HomePage - approved TrustBar and About copy (US-013)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -127,10 +129,33 @@ describe("HomePage - TrustBar and About sections (US-013)", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Quiénes somos" })).toBeInTheDocument();
   });
 
-  it("renders no TrustBar content, since no approved trust-item copy exists yet", () => {
+  it("renders all four approved TrustBar items with their titles and descriptions", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
-    expect(screen.queryByRole("region", { name: "Indicadores de confianza" })).not.toBeInTheDocument();
+
+    expect(screen.getByRole("region", { name: "Indicadores de confianza" })).toBeInTheDocument();
+    expect(screen.getByText("Atención cercana")).toBeInTheDocument();
+    expect(screen.getByText("Acompañamiento humano y responsable")).toBeInTheDocument();
+    expect(screen.getByText("Gestión confiable")).toBeInTheDocument();
+    expect(screen.getByText("Procesos claros y orientados al bienestar")).toBeInTheDocument();
+    // "Compromiso familiar" is shared with a Hero stat label - assert both instances exist.
+    expect(screen.getAllByText("Compromiso familiar")).toHaveLength(2);
+    expect(screen.getByText("Soluciones pensadas para las familias")).toBeInTheDocument();
+    expect(screen.getByText("Servicio responsable")).toBeInTheDocument();
+    expect(screen.getByText("Atención con respeto, transparencia y cuidado")).toBeInTheDocument();
+  });
+
+  it("renders the approved About eyebrow, heading, and introductory paragraph", () => {
+    mockPrefersReducedMotion(false);
+    renderHomePage();
+
+    expect(screen.getByText("Conoce a ASODEF")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Quiénes somos" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Somos una asociación comprometida con el bienestar y el desarrollo de las familias. Trabajamos con cercanía, responsabilidad y vocación de servicio, acompañando a personas y organizaciones mediante soluciones orientadas a sus necesidades.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("anchors the About section at #quienes-somos, reachable via the homepage anchor", () => {
@@ -139,22 +164,51 @@ describe("HomePage - TrustBar and About sections (US-013)", () => {
     expect(container.querySelector("section#quienes-somos")).toBeInTheDocument();
   });
 
-  it("renders the three approved About card titles with no invented body copy", () => {
+  it("renders all three complete approved About cards with their titles and body copy", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
 
-    for (const title of ["Nuestra historia", "Nuestra misión", "Nuestra visión"]) {
-      const heading = screen.getByRole("heading", { level: 3, name: title });
-      expect(heading.closest("article")?.querySelector("p")).not.toBeInTheDocument();
-    }
+    expect(screen.getByRole("heading", { level: 3, name: "Nuestra historia" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "ASODEF nace con el propósito de acompañar a las familias y contribuir a su bienestar mediante una gestión cercana, humana y responsable.",
+      ),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { level: 3, name: "Nuestra misión" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Brindar atención y soluciones que aporten al bienestar de las personas, las familias y las organizaciones, actuando con compromiso, respeto y transparencia.",
+      ),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { level: 3, name: "Nuestra visión" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ser una organización reconocida por su cercanía, confianza y capacidad de generar valor para las familias y las comunidades que acompaña.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("renders Hero before the About section in document order", () => {
+  it("renders Hero before TrustBar before the About section in document order", () => {
     mockPrefersReducedMotion(false);
     renderHomePage();
 
     const h1 = screen.getByRole("heading", { level: 1 });
+    const trustBar = screen.getByRole("region", { name: "Indicadores de confianza" });
     const about = document.querySelector("section#quienes-somos")!;
-    expect(h1.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(h1.compareDocumentPosition(trustBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trustBar.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders TrustBar and About content fully visible immediately under reduced motion", () => {
+    mockPrefersReducedMotion(true);
+    renderHomePage();
+
+    const trustItem = screen.getByText("Atención cercana").closest("div")!;
+    const aboutCard = screen.getByText("Nuestra historia").closest("article")!;
+    expect(trustItem.style.opacity === "" || trustItem.style.opacity === "1").toBe(true);
+    expect(aboutCard.style.opacity === "" || aboutCard.style.opacity === "1").toBe(true);
   });
 });
