@@ -94,6 +94,31 @@ describe("ContactSection", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("Negative case (AC): does not submit when every other field is valid but consentAccepted is false", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderContactSection();
+
+    // Fill every field except the consent checkbox - isolates that
+    // this one validation rule alone blocks submission, not merely
+    // "the whole form was empty".
+    await user.type(field("Nombre completo"), "Visitante de Prueba");
+    await user.type(field("Empresa"), "Empresa de Prueba S.A.S.");
+    await user.type(field("Cargo"), "Gerente Comercial");
+    await user.type(field("Ciudad"), "Cali");
+    await user.type(field("Teléfono / WhatsApp"), "3001234567");
+    await user.type(field("Correo electrónico"), "visitante@example.com");
+    await user.type(field("Sector"), "Servicios");
+    await user.type(field("Mensaje"), "Quiero conocer más sobre ASODEF.");
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
+
+    expect(await screen.findByText("Debes aceptar el tratamiento de datos para continuar.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("shows an inline error for an invalid email format", async () => {
     const user = userEvent.setup();
     renderContactSection();
