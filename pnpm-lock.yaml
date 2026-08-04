@@ -23,6 +23,9 @@ importers:
       '@asodef/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@asodef/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@nestjs/common':
         specifier: ^10.4.6
         version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -260,6 +263,27 @@ importers:
       typescript-eslint:
         specifier: ^8.15.0
         version: 8.65.0(eslint@9.39.5(jiti@1.21.7))(typescript@5.9.3)
+
+  packages/payments:
+    devDependencies:
+      '@asodef/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@asodef/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      eslint:
+        specifier: ^9.15.0
+        version: 9.39.5(jiti@1.21.7)
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.25)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)(terser@5.49.0)
 
   packages/typescript-config: {}
 

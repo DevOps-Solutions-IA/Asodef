@@ -148,6 +148,13 @@ export const envSchema = z.object({
   // legitimate visitor submits this form once, not repeatedly.
   LEADS_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
   LEADS_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
+
+  // payment-orders (US-023): how long a PENDING order stays reusable
+  // before create() stops returning it and mints a new one instead. Not
+  // specified by the PRD - a reasonable default long enough for a
+  // customer to complete checkout, short enough that a stale order
+  // doesn't linger indefinitely.
+  PAYMENT_ORDER_TTL_MINUTES: z.coerce.number().int().positive().default(30),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

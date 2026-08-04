@@ -11,6 +11,7 @@ import { AdminUsersModule } from "./modules/admin-users/admin-users.module";
 import { LeadsModule } from "./modules/leads/leads.module";
 import { ContentModule } from "./modules/content/content.module";
 import { PaymentProvidersModule } from "./modules/payment-providers/payment-providers.module";
+import { PaymentOrdersModule } from "./modules/payment-orders/payment-orders.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PaymentProvidersModule } from "./modules/payment-providers/payment-prov
     LeadsModule,
     ContentModule,
     PaymentProvidersModule,
+    PaymentOrdersModule,
   ],
   controllers: [AppController],
   providers: [],
