@@ -21,6 +21,14 @@ export const queryKeys = {
     /** GET /content - published, managed homepage fields (US-020). */
     all: () => ["content"] as const,
   },
+  paymentOrders: {
+    /** GET /payment-orders/:reference (US-024/US-030). */
+    detail: (publicReference: string) => ["payment-orders", "detail", publicReference] as const,
+  },
+  boldPayments: {
+    /** GET /payments/:reference/status (US-025/US-030). */
+    status: (publicReference: string) => ["bold-payments", "status", publicReference] as const,
+  },
   admin: {
     users: {
       stats: () => ["admin", "users", "stats"] as const,

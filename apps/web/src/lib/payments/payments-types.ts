@@ -43,3 +43,20 @@ export interface PaymentsLookupByReferenceRequest {
 }
 
 export type PaymentsLookupRequest = PaymentsLookupByDocumentRequest | PaymentsLookupByReferenceRequest;
+
+/** Mirrors apps/api's bold-payments.types.ts (US-025). */
+export interface CreateBoldPaymentResult {
+  publicReference: string;
+  orderStatus: string;
+  orderStatusLabel: string;
+  /** Opaque provider payload (US-022/US-025's own "only `status` is
+   * confirmed" contract) - never assume a specific shape here either. */
+  providerNextAction: unknown;
+}
+
+export interface BoldPaymentStatus {
+  publicReference: string;
+  orderStatus: string;
+  orderStatusLabel: string;
+  attemptStatus: string | null;
+}
