@@ -3,6 +3,7 @@ import { PaymentAttemptStatus, PaymentOrderStatus, type Prisma } from "@prisma/c
 import { PrismaService } from "../../database/prisma.service";
 import { PAYMENT_PROVIDER, type PaymentProvider } from "../payment-providers/payment-provider.interface";
 import { PaymentReceiptsService } from "../receipts/payment-receipts.service";
+import { AuditService, AuditSource } from "../audit/audit.service";
 import {
   canTransitionAttemptStatus,
   canTransitionOrderStatus,
@@ -41,6 +42,7 @@ export class BoldPaymentsService {
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     private readonly paymentReceiptsService: PaymentReceiptsService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -94,6 +96,14 @@ export class BoldPaymentsService {
 
       if (order.status !== PaymentOrderStatus.PROCESSING && canTransitionOrderStatus(order.status, PaymentOrderStatus.PROCESSING)) {
         await tx.paymentOrder.update({ where: { id: order.id }, data: { status: PaymentOrderStatus.PROCESSING } });
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: order.status,
+          newStatus: PaymentOrderStatus.PROCESSING,
+          applied: true,
+          source: AuditSource.BOLD_CREATE,
+        });
       }
 
       let result;
@@ -131,11 +141,27 @@ export class BoldPaymentsService {
       if (canTransitionOrderStatus(currentOrder.status, mapping.orderStatus)) {
         updatedOrder = await tx.paymentOrder.update({ where: { id: order.id }, data: { status: mapping.orderStatus } });
         await this.paymentReceiptsService.issueIfNewlyApproved(tx, currentOrder.status, updatedOrder);
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: currentOrder.status,
+          newStatus: updatedOrder.status,
+          applied: true,
+          source: AuditSource.BOLD_CREATE,
+        });
       } else {
         this.logger.warn(
           `Blocked invalid PaymentOrder transition ${currentOrder.status} -> ${mapping.orderStatus} for reference ${publicReference}`,
           BoldPaymentsService.name,
         );
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: currentOrder.status,
+          newStatus: mapping.orderStatus,
+          applied: false,
+          source: AuditSource.BOLD_CREATE,
+        });
       }
 
       await tx.paymentTransaction.create({
@@ -220,11 +246,27 @@ export class BoldPaymentsService {
       if (canTransitionOrderStatus(freshOrder.status, mapping.orderStatus)) {
         updatedOrder = await tx.paymentOrder.update({ where: { id: order.id }, data: { status: mapping.orderStatus } });
         await this.paymentReceiptsService.issueIfNewlyApproved(tx, freshOrder.status, updatedOrder);
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: freshOrder.status,
+          newStatus: updatedOrder.status,
+          applied: true,
+          source: AuditSource.POLL,
+        });
       } else {
         this.logger.warn(
           `Blocked invalid PaymentOrder transition ${freshOrder.status} -> ${mapping.orderStatus} for reference ${publicReference}`,
           BoldPaymentsService.name,
         );
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: freshOrder.status,
+          newStatus: mapping.orderStatus,
+          applied: false,
+          source: AuditSource.POLL,
+        });
       }
 
       await tx.paymentTransaction.create({

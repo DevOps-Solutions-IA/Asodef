@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import type { Obligation, PaymentOrder } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
+import { AuditService, AuditSource } from "../audit/audit.service";
 import { generatePublicReference } from "./public-reference";
 
 /** Obligation statuses that still represent money owed - anything else
@@ -30,6 +31,7 @@ export class PaymentOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -82,6 +84,16 @@ export class PaymentOrdersService {
           expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
         },
       });
+
+      await this.auditService.record(tx, {
+        paymentOrderId: created.id,
+        action: "order.created",
+        previousStatus: null,
+        newStatus: created.status,
+        applied: true,
+        source: AuditSource.ORDER_CREATE,
+      });
+
       return { ...created, obligation: { concept: obligation.concept, dueDate: obligation.due_date } };
     });
   }

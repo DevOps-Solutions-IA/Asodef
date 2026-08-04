@@ -5,6 +5,7 @@ import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { PAYMENT_PROVIDER, type PaymentProvider } from "../payment-providers/payment-provider.interface";
 import { PaymentReceiptsService } from "../receipts/payment-receipts.service";
+import { AuditService, AuditSource } from "../audit/audit.service";
 import { canTransitionAttemptStatus, canTransitionOrderStatus, mapBoldPaymentStatus } from "../bold-payments/bold-payment-status-mapping";
 import { computeWebhookIdempotencyKey } from "./webhook-idempotency-key";
 import type { BoldWebhookPayload } from "./bold-webhook-payload";
@@ -28,6 +29,7 @@ export class BoldWebhookService {
     private readonly configService: ConfigService<EnvConfig, true>,
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     private readonly paymentReceiptsService: PaymentReceiptsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async receive(payload: BoldWebhookPayload, headers: Record<string, string | string[] | undefined>): Promise<void> {
@@ -95,7 +97,20 @@ export class BoldWebhookService {
         `Unverified Bold webhook for reference ${payload.reference_id} received with PRODUCTION_PAYMENTS_ENABLED=true - stored for reconciliation, no state transition applied`,
         BoldWebhookService.name,
       );
-      await this.prisma.paymentEvent.update({ where: { id: eventId }, data: { processedAt: new Date() } });
+      const unverifiedOrder = await this.prisma.paymentOrder.findUnique({ where: { publicReference: payload.reference_id } });
+      await this.prisma.$transaction(async (tx) => {
+        if (unverifiedOrder) {
+          await this.auditService.record(tx, {
+            paymentOrderId: unverifiedOrder.id,
+            action: "order.unverified_signature_blocked",
+            previousStatus: unverifiedOrder.status,
+            newStatus: mapping.orderStatus,
+            applied: false,
+            source: AuditSource.WEBHOOK,
+          });
+        }
+        await tx.paymentEvent.update({ where: { id: eventId }, data: { processedAt: new Date() } });
+      });
       return;
     }
 
@@ -130,11 +145,27 @@ export class BoldWebhookService {
       if (canTransitionOrderStatus(order.status, mapping.orderStatus)) {
         const updatedOrder = await tx.paymentOrder.update({ where: { id: order.id }, data: { status: mapping.orderStatus } });
         await this.paymentReceiptsService.issueIfNewlyApproved(tx, order.status, updatedOrder);
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: order.status,
+          newStatus: updatedOrder.status,
+          applied: true,
+          source: AuditSource.WEBHOOK,
+        });
       } else {
         this.logger.warn(
           `Blocked invalid PaymentOrder transition ${order.status} -> ${mapping.orderStatus} from webhook for reference ${payload.reference_id}`,
           BoldWebhookService.name,
         );
+        await this.auditService.record(tx, {
+          paymentOrderId: order.id,
+          action: "order.status_transition",
+          previousStatus: order.status,
+          newStatus: mapping.orderStatus,
+          applied: false,
+          source: AuditSource.WEBHOOK,
+        });
       }
 
       await tx.paymentEvent.update({ where: { id: eventId }, data: { processedAt: new Date() } });

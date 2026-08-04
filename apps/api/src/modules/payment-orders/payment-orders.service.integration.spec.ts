@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { createTestPrismaClient } from "../../database/test-db-client";
+import { AuditService } from "../audit/audit.service";
 import { PaymentOrdersService } from "./payment-orders.service";
 
 function buildConfigService(ttlMinutes = 30) {
@@ -16,11 +17,16 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
   beforeAll(async () => {
     prisma = createTestPrismaClient();
     await prisma.$connect();
-    service = new PaymentOrdersService(prisma as unknown as ConstructorParameters<typeof PaymentOrdersService>[0], buildConfigService());
+    service = new PaymentOrdersService(
+      prisma as unknown as ConstructorParameters<typeof PaymentOrdersService>[0],
+      buildConfigService(),
+      new AuditService(),
+    );
   });
 
   afterAll(async () => {
     if (createdCustomerIds.length > 0) {
+      await prisma.auditLog.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentOrder.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.obligation.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });

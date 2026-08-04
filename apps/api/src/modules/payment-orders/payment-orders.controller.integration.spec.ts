@@ -20,6 +20,7 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
 
   afterAll(async () => {
     if (createdCustomerIds.length > 0) {
+      await prisma.auditLog.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentOrder.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.obligation.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });

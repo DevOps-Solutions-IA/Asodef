@@ -617,6 +617,7 @@ model PaymentOrder {
   attempts   PaymentAttempt[]
   events     PaymentEvent[]
   receipts   PaymentReceipt[]
+  auditLogs  AuditLog[]
 
   @@index([customerId, status])
   @@index([obligationId])
@@ -690,4 +691,42 @@ model PaymentReceipt {
 
   @@index([paymentOrderId])
   @@map("payment_receipts")
+}
+
+// US-028: the durable, append-only audit trail for the payment domain -
+// the "later story" SecurityEvent's own schema comment (US-006)
+// pointed to. Scoped to PaymentOrder specifically (not a generic
+// polymorphic audit table) because that is this story's literal scope
+// ("Audit wiring for the payment domain"); a cross-domain AuditLog, if
+// a later story needs one, is that story's own design decision to make
+// - extending forward, never rewriting this one.
+enum AuditSource {
+  ORDER_CREATE
+  BOLD_CREATE
+  POLL
+  WEBHOOK
+  MANUAL
+
+  @@map("audit_source")
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  paymentOrderId String      @map("payment_order_id") @db.Uuid
+  action         String
+  previousStatus String?     @map("previous_status")
+  newStatus      String?     @map("new_status")
+  // False for the negative-case AC: an attempted transition that was
+  // blocked (e.g. an invalid regression) still gets an audit row -
+  // "indicating no-op, not silence" - distinguished from a real
+  // transition by this flag rather than by parsing `action` text.
+  applied        Boolean     @default(true)
+  source         AuditSource
+  metadata       Json?
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+
+  @@index([paymentOrderId, createdAt])
+  @@map("audit_logs")
 }

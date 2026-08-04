@@ -30,6 +30,7 @@ describe("Bold payment creation and status endpoints (integration, real HTTP, BO
 
   afterAll(async () => {
     if (createdCustomerIds.length > 0) {
+      await prisma.auditLog.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentReceipt.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentEvent.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentTransaction.deleteMany({ where: { paymentAttempt: { paymentOrder: { customerId: { in: createdCustomerIds } } } } });

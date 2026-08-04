@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuditModule } from "../audit/audit.module";
 import { PaymentOrdersController } from "./payment-orders.controller";
 import { PaymentOrdersService } from "./payment-orders.service";
 
@@ -7,6 +8,7 @@ import { PaymentOrdersService } from "./payment-orders.service";
  * the exact same service + response mapper for its reference-lookup
  * branch, rather than duplicating either. */
 @Module({
+  imports: [AuditModule],
   controllers: [PaymentOrdersController],
   providers: [PaymentOrdersService],
   exports: [PaymentOrdersService],
