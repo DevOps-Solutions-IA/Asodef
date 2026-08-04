@@ -14,6 +14,7 @@ import { PaymentProvidersModule } from "./modules/payment-providers/payment-prov
 import { PaymentOrdersModule } from "./modules/payment-orders/payment-orders.module";
 import { PaymentsLookupModule } from "./modules/payments-lookup/payments-lookup.module";
 import { BoldPaymentsModule } from "./modules/bold-payments/bold-payments.module";
+import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { BoldPaymentsModule } from "./modules/bold-payments/bold-payments.module
     PaymentOrdersModule,
     PaymentsLookupModule,
     BoldPaymentsModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [],
