@@ -13,6 +13,7 @@ import { ContentModule } from "./modules/content/content.module";
 import { PaymentProvidersModule } from "./modules/payment-providers/payment-providers.module";
 import { PaymentOrdersModule } from "./modules/payment-orders/payment-orders.module";
 import { PaymentsLookupModule } from "./modules/payments-lookup/payments-lookup.module";
+import { BoldPaymentsModule } from "./modules/bold-payments/bold-payments.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PaymentsLookupModule } from "./modules/payments-lookup/payments-lookup.
     PaymentProvidersModule,
     PaymentOrdersModule,
     PaymentsLookupModule,
+    BoldPaymentsModule,
   ],
   controllers: [AppController],
   providers: [],
