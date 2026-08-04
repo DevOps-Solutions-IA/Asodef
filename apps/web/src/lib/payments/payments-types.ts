@@ -60,3 +60,19 @@ export interface BoldPaymentStatus {
   orderStatusLabel: string;
   attemptStatus: string | null;
 }
+
+/** Mirrors apps/api's payment-receipts.service.ts ReceiptDetail (US-027). */
+export interface ReceiptDetail {
+  publicReference: string;
+  receiptNumber: string;
+  verificationCode: string;
+  issuedAt: string;
+  customerFullName: string;
+  maskedDocumentNumber: string;
+  concept: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  statusLabel: string;
+  dueDate: string;
+}

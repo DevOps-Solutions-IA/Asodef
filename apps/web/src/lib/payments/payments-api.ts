@@ -1,5 +1,12 @@
 import { apiClient } from "../api-client";
-import type { BoldPaymentStatus, CreateBoldPaymentResult, PaymentOrderSummary, PaymentsLookupRequest, PaymentsLookupResponse } from "./payments-types";
+import type {
+  BoldPaymentStatus,
+  CreateBoldPaymentResult,
+  PaymentOrderSummary,
+  PaymentsLookupRequest,
+  PaymentsLookupResponse,
+  ReceiptDetail,
+} from "./payments-types";
 
 /** Public endpoints (US-023/US-024/US-025) - no auth cookie is required,
  * but apiClient always sends credentials:"include" regardless, which is
@@ -34,4 +41,8 @@ export function getBoldPaymentStatus(reference: string): Promise<BoldPaymentStat
 export function getReceiptDownloadUrl(publicReference: string): string {
   const origin: string = import.meta.env.VITE_API_URL ?? "";
   return `${origin}/api/v1/receipts/${encodeURIComponent(publicReference)}?format=pdf`;
+}
+
+export function getReceipt(publicReference: string): Promise<ReceiptDetail> {
+  return apiClient.get<ReceiptDetail>(`/receipts/${encodeURIComponent(publicReference)}`);
 }

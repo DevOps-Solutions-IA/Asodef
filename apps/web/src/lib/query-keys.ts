@@ -29,6 +29,10 @@ export const queryKeys = {
     /** GET /payments/:reference/status (US-025/US-030). */
     status: (publicReference: string) => ["bold-payments", "status", publicReference] as const,
   },
+  receipts: {
+    /** GET /receipts/:reference (US-027/US-032). */
+    detail: (publicReference: string) => ["receipts", "detail", publicReference] as const,
+  },
   admin: {
     users: {
       stats: () => ["admin", "users", "stats"] as const,
