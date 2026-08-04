@@ -3,7 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ASODEF S.A.S.</title>
+
+    <!-- US-019: title/description are the confirmed legalName+tagline and
+         the already-approved Hero supporting copy verbatim (US-012) -
+         no new claims invented here. %VITE_APP_URL% is Vite's built-in
+         HTML env-replacement syntax: the production domain is supplied
+         entirely via the environment, never hardcoded in source. -->
+    <title>ASODEF S.A.S. | Trabajamos pensando en su bienestar.</title>
+    <meta
+      name="description"
+      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+    />
+    <link rel="canonical" href="%VITE_APP_URL%/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ASODEF S.A.S." />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:url" content="%VITE_APP_URL%/" />
+    <meta property="og:title" content="ASODEF S.A.S. | Trabajamos pensando en su bienestar." />
+    <meta
+      property="og:description"
+      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+    />
+    <meta property="og:image" content="%VITE_APP_URL%/og-image.webp" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ASODEF S.A.S. | Trabajamos pensando en su bienestar." />
+    <meta
+      name="twitter:description"
+      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+    />
+    <meta name="twitter:image" content="%VITE_APP_URL%/og-image.webp" />
+
+    <!-- Organization JSON-LD: only ASODEF_COMPANY's confirmed fields
+         (packages/config/src/company.ts) - no aggregateRating, reviews,
+         sameAs profiles, geographic coverage, or logo, since none of
+         those are confirmed facts. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "ASODEF S.A.S.",
+        "url": "%VITE_APP_URL%/",
+        "email": "info@asodef.com.co",
+        "address": {
+          "@type": "PostalAddress",
+          "addressLocality": "Cali",
+          "addressCountry": "CO"
+        }
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
