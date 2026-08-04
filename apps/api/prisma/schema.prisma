@@ -411,11 +411,11 @@ model LeadSubmission {
 // the commercial team's follow-up tooling polls; no email is sent by
 // this story.
 model LeadNotification {
-  id               String                  @id @default(uuid()) @db.Uuid
-  leadSubmissionId String                  @unique @map("lead_submission_id") @db.Uuid
-  status           LeadNotificationStatus  @default(PENDING)
-  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String                 @id @default(uuid()) @db.Uuid
+  leadSubmissionId String                 @unique @map("lead_submission_id") @db.Uuid
+  status           LeadNotificationStatus @default(PENDING)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   leadSubmission LeadSubmission @relation(fields: [leadSubmissionId], references: [id], onDelete: Cascade)
 
@@ -446,4 +446,248 @@ model ContentEntry {
 
   @@index([status])
   @@map("content_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Payments domain (US-021)
+//
+// Schema/seed only - no API routes, no PaymentProvider integration, no
+// frontend (later stories). Field lists match the PRD's own dataModel
+// entries exactly (never extended beyond what's listed there). Every FK
+// in this domain uses onDelete: Restrict - financial/audit records must
+// never be silently cascade-deleted, same principle already applied to
+// SecurityEvent/LoginAttempt elsewhere in this schema. amountCents is
+// always Int (integer minor units) per the PRD's own rule: "never use
+// floating-point arithmetic for money."
+// ---------------------------------------------------------------------------
+
+enum AffiliateStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+
+  @@map("affiliate_status")
+}
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("company_status")
+}
+
+enum ObligationStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+
+  @@map("obligation_status")
+}
+
+// The PRD's own rule text gives this exact enum verbatim: "Payment
+// status enum is centrally defined once (DRAFT/PENDING/PROCESSING/
+// APPROVED/REJECTED/FAILED/EXPIRED/CANCELLED/REFUNDED/
+// PARTIALLY_REFUNDED)" - not inferred, copied directly from the rules
+// array.
+enum PaymentOrderStatus {
+  DRAFT
+  PENDING
+  PROCESSING
+  APPROVED
+  REJECTED
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_order_status")
+}
+
+// A single attempt's own outcome - a smaller vocabulary than the parent
+// order's full lifecycle, since an attempt either succeeds, fails, or
+// expires; it never independently reaches REFUNDED/PARTIALLY_REFUNDED
+// (those are order-level, post-approval states).
+enum PaymentAttemptStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FAILED
+  EXPIRED
+
+  @@map("payment_attempt_status")
+}
+
+model Customer {
+  id             String   @id @default(uuid()) @db.Uuid
+  documentType   String   @map("document_type")
+  documentNumber String   @map("document_number")
+  fullName       String   @map("full_name")
+  email          String
+  phone          String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  affiliates    Affiliate[]
+  obligations   Obligation[]
+  paymentOrders PaymentOrder[]
+
+  // Natural business key: US-021's own Example queries "the seeded demo
+  // customer's document number", implying (type, number) uniquely
+  // identifies a customer for lookup - matches the real-world Payment
+  // Center's own lookup-by-document flow (later story).
+  @@unique([documentType, documentNumber])
+  @@map("customers")
+}
+
+model Affiliate {
+  id              String          @id @default(uuid()) @db.Uuid
+  customerId      String          @map("customer_id") @db.Uuid
+  affiliateNumber String          @unique @map("affiliate_number")
+  status          AffiliateStatus @default(ACTIVE)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@map("affiliates")
+}
+
+model Company {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  nit          String        @unique
+  contactName  String        @map("contact_name")
+  contactEmail String        @map("contact_email")
+  sector       String
+  status       CompanyStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("companies")
+}
+
+model Plan {
+  id          String  @id @default(uuid()) @db.Uuid
+  // @unique is a constraint on an existing PRD-listed field, not an
+  // added field - needed so the seed script can upsert idempotently
+  // (the PRD's dataModel gives no other natural unique key for Plan).
+  name        String  @unique
+  description String
+  active      Boolean @default(true)
+
+  obligations Obligation[]
+
+  @@map("plans")
+}
+
+model Obligation {
+  id          String           @id @default(uuid()) @db.Uuid
+  customerId  String           @map("customer_id") @db.Uuid
+  planId      String           @map("plan_id") @db.Uuid
+  concept     String
+  amountCents Int              @map("amount_cents")
+  currency    String           @default("COP")
+  dueDate     DateTime         @map("due_date") @db.Timestamptz(3)
+  status      ObligationStatus @default(PENDING)
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  plan          Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  paymentOrders PaymentOrder[]
+
+  @@index([customerId, status])
+  @@map("obligations")
+}
+
+model PaymentOrder {
+  id              String             @id @default(uuid()) @db.Uuid
+  // Cryptographically random, never the internal uuid/sequence exposed
+  // as a guessable ordering - per the PRD's own rule on public
+  // references.
+  publicReference String             @unique @map("public_reference")
+  obligationId    String             @map("obligation_id") @db.Uuid
+  customerId      String             @map("customer_id") @db.Uuid
+  amountCents     Int                @map("amount_cents")
+  currency        String             @default("COP")
+  status          PaymentOrderStatus @default(DRAFT)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt       DateTime           @map("expires_at") @db.Timestamptz(3)
+
+  obligation Obligation       @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  attempts   PaymentAttempt[]
+  events     PaymentEvent[]
+  receipts   PaymentReceipt[]
+
+  @@index([customerId, status])
+  @@index([obligationId])
+  @@map("payment_orders")
+}
+
+model PaymentAttempt {
+  id                  String               @id @default(uuid()) @db.Uuid
+  paymentOrderId      String               @map("payment_order_id") @db.Uuid
+  // Null until the attempt actually reaches the provider (Bold) and a
+  // reference comes back - not every attempt necessarily gets that far.
+  providerReferenceId String?              @map("provider_reference_id")
+  status              PaymentAttemptStatus @default(PENDING)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  paymentOrder PaymentOrder         @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+  transactions PaymentTransaction[]
+
+  @@index([paymentOrderId])
+  @@map("payment_attempts")
+}
+
+model PaymentTransaction {
+  id                String   @id @default(uuid()) @db.Uuid
+  paymentAttemptId  String   @map("payment_attempt_id") @db.Uuid
+  boldTransactionId String?  @map("bold_transaction_id")
+  // Bold's own raw status string, stored as-is (not a strict enum) -
+  // Bold's exact status vocabulary isn't confirmed from public docs in
+  // this session (see the PRD's own rule on UNVERIFIED fields); a later
+  // story (US-022, BoldPaymentProvider) is where that gets resolved.
+  // rawResponse below preserves the full payload regardless.
+  status            String
+  rawResponse       Json     @map("raw_response")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+
+  @@index([paymentAttemptId])
+  @@map("payment_transactions")
+}
+
+model PaymentEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  paymentOrderId String    @map("payment_order_id") @db.Uuid
+  source         String
+  eventType      String    @map("event_type")
+  // Explicit unique index required by the acceptance criteria - Bold
+  // webhook events are processed idempotently keyed on this (PRD rule).
+  idempotencyKey String    @unique @map("idempotency_key")
+  payload        Json
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+
+  @@index([paymentOrderId])
+  @@map("payment_events")
+}
+
+model PaymentReceipt {
+  id               String   @id @default(uuid()) @db.Uuid
+  paymentOrderId   String   @map("payment_order_id") @db.Uuid
+  receiptNumber    String   @unique @map("receipt_number")
+  verificationCode String   @map("verification_code")
+  issuedAt         DateTime @default(now()) @map("issued_at") @db.Timestamptz(3)
+  // Null until the PDF is actually generated - receipt metadata (number,
+  // verification code) can exist an instant before the file does.
+  pdfPath          String?  @map("pdf_path")
+
+  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+
+  @@index([paymentOrderId])
+  @@map("payment_receipts")
 }
