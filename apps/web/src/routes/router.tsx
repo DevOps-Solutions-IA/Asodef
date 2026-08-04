@@ -24,6 +24,7 @@ import { UserSecurityPage } from "../pages/admin/UserSecurityPage";
 import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
 import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
+import { PaymentResultPage } from "../pages/payments/PaymentResultPage";
 
 // Payment/account/company/admin/legal are never needed on first paint of
 // the public marketing site, so they're code-split - satisfies "no
@@ -99,7 +100,7 @@ export const routeConfig: RouteObject[] = [
       { path: "pagos/consultar", element: <RoutePlaceholder title="Consultar pago" /> },
       { path: "pagos/orden/:publicReference", element: <OrderSummaryPage /> },
       { path: "pagos/procesar/:publicReference", element: <PaymentProcessPage /> },
-      { path: "pagos/resultado", element: <RoutePlaceholder title="Resultado de pago" /> },
+      { path: "pagos/resultado", element: <PaymentResultPage /> },
       { path: "pagos/comprobante/:publicReference", element: <RoutePlaceholder title="Comprobante" /> },
     ],
   },

@@ -23,3 +23,15 @@ export function createBoldPayment(reference: string): Promise<CreateBoldPaymentR
 export function getBoldPaymentStatus(reference: string): Promise<BoldPaymentStatus> {
   return apiClient.get<BoldPaymentStatus>(`/payments/${encodeURIComponent(reference)}/status`);
 }
+
+/**
+ * A plain download link, not a typed apiClient call - the browser must
+ * navigate/download the response itself (US-027's PDF endpoint), not
+ * fetch+blob through JS. Mirrors api-client.ts's own
+ * VITE_API_URL-based origin resolution since API_ORIGIN isn't exported
+ * from there.
+ */
+export function getReceiptDownloadUrl(publicReference: string): string {
+  const origin: string = import.meta.env.VITE_API_URL ?? "";
+  return `${origin}/api/v1/receipts/${encodeURIComponent(publicReference)}?format=pdf`;
+}

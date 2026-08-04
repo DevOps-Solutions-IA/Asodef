@@ -132,6 +132,8 @@ interface MockConfirmationProps {
 }
 
 function MockConfirmation({ publicReference, orderStatus, orderStatusLabel }: MockConfirmationProps) {
+  const navigate = useNavigate();
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -146,7 +148,10 @@ function MockConfirmation({ publicReference, orderStatus, orderStatusLabel }: Mo
       <Card className="mt-6 flex flex-col items-center gap-4 py-10 text-center">
         <StatusBadge tone={getPaymentOrderStatusTone(orderStatus)} label={orderStatusLabel} />
         <p className="text-sm text-text-muted">Referencia: {publicReference}</p>
-        <Link to="/pagos" className="font-medium text-brand-dark hover:underline">
+        <Button type="button" onClick={() => navigate(`/pagos/resultado?reference=${encodeURIComponent(publicReference)}`)}>
+          Ver resultado
+        </Button>
+        <Link to="/pagos" className="text-sm font-medium text-brand-dark hover:underline">
           Volver al Centro de Pagos
         </Link>
       </Card>
