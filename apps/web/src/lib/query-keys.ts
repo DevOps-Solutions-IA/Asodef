@@ -17,6 +17,10 @@ export const queryKeys = {
      * state in multiple global stores"). */
     me: () => ["auth", "me"] as const,
   },
+  content: {
+    /** GET /content - published, managed homepage fields (US-020). */
+    all: () => ["content"] as const,
+  },
   admin: {
     users: {
       stats: () => ["admin", "users", "stats"] as const,

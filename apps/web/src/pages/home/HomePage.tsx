@@ -1,4 +1,5 @@
 import { Heart, Users, GraduationCap, House, Palmtree, MessageCircle, Building2, Grid2X2Plus } from "lucide-react";
+import { useContent } from "../../lib/content/useContent";
 import { Hero } from "./Hero";
 import { TrustBar } from "./TrustBar";
 import { AboutSection } from "./AboutSection";
@@ -7,6 +8,11 @@ import { BenefitPortfolio } from "./BenefitPortfolio";
 import { CoverageSection } from "./CoverageSection";
 import { AllianceCta } from "./AllianceCta";
 import { ContactSection } from "./ContactSection";
+
+// US-020: the same approved copy as before (US-012), now also the
+// fallback if GET /content is unreachable or hasn't published this key
+// yet - the homepage must render identically either way.
+const HERO_EYEBROW_FALLBACK = "ASODEF · Asociación para el desarrollo familiar";
 
 /**
  * Institutional homepage. US-012 (Hero), US-013 (TrustBar + About),
@@ -17,12 +23,19 @@ import { ContactSection } from "./ContactSection";
  *
  * Hero's/AllianceCta's "#contacto" anchors now resolve to a real,
  * working section (US-018) - previously a stable id with no target yet.
+ *
+ * US-020: hero.eyebrow is DB-hydrated via useContent(), falling back to
+ * the same hardcoded copy on any failure/loading state - Hero itself
+ * stays a plain `eyebrow?: string` prop, entirely unaware ContentEntry
+ * exists (see useContent's own doc comment on the fallback contract).
  */
 export function HomePage() {
+  const content = useContent();
+
   return (
     <>
       <Hero
-        eyebrow="ASODEF · Asociación para el desarrollo familiar"
+        eyebrow={content["hero.eyebrow"] ?? HERO_EYEBROW_FALLBACK}
         heading={
           <>
             Soluciones que fortalecen el <span className="text-brand-orange">bienestar y desarrollo</span> de las familias

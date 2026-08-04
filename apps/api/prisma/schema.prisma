@@ -421,3 +421,29 @@ model LeadNotification {
 
   @@map("lead_notifications")
 }
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+
+  @@map("content_status")
+}
+
+// US-020: a generic, extensible key/value store for homepage fields
+// that should be editable without a code deploy (starting with
+// hero.eyebrow). DRAFT rows are never returned by the public GET
+// /content endpoint - only PUBLISHED. No admin mutation endpoint
+// exists yet (out of scope for this story); rows are seeded via
+// seed-content.ts and edited directly until a future admin-content
+// story adds one.
+model ContentEntry {
+  id        String        @id @default(uuid()) @db.Uuid
+  key       String        @unique
+  value     String
+  status    ContentStatus @default(DRAFT)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@map("content_entries")
+}

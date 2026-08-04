@@ -9,6 +9,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { GovernanceModule } from "./modules/governance/governance.module";
 import { AdminUsersModule } from "./modules/admin-users/admin-users.module";
 import { LeadsModule } from "./modules/leads/leads.module";
+import { ContentModule } from "./modules/content/content.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LeadsModule } from "./modules/leads/leads.module";
     GovernanceModule,
     AdminUsersModule,
     LeadsModule,
+    ContentModule,
   ],
   controllers: [AppController],
   providers: [],

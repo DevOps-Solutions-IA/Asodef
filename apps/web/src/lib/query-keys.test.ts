@@ -12,4 +12,8 @@ describe("queryKeys factory", () => {
     expect(first).not.toBe(second);
     expect(first).toEqual(second);
   });
+
+  it("produces a stable key for the published content query", () => {
+    expect(queryKeys.content.all()).toEqual(["content"]);
+  });
 });
