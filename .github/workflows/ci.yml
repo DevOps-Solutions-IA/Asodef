@@ -1,0 +1,167 @@
+name: CI
+
+# US-036: every gate below must pass, in order, on every push/PR - the
+# workflow fails (non-zero exit) the moment any step fails, and nothing
+# here uses --no-verify or a skip flag. Dev-only placeholder secrets are
+# generated fresh per run (openssl rand) - never a real credential, and
+# never printed (GitHub Actions masks any string set via GITHUB_ENV/
+# step outputs that matches a value added through `::add-mask::`, but
+# these are also just meaningless-outside-this-run local dev values).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "10.16.0"
+  # Existing docker-compose.yml's own published ports (US-021's own
+  # local dev stack) - reused as-is, never re-mapped, since a CI runner
+  # is an isolated, single-tenant environment with no "shared machine"
+  # port-conflict concern.
+  DATABASE_URL: "postgresql://asodef:asodef_dev_password@localhost:5433/asodef?schema=public"
+  REDIS_URL: "redis://localhost:6379"
+  API_PORT: "3100"
+  BOLD_MODE: "mock"
+  NODE_ENV: "development"
+  VITE_API_URL: "http://localhost:3100"
+  VITE_APP_URL: "http://localhost:4173"
+  CORS_ORIGIN: "http://localhost:4173"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate dev-only placeholder secrets
+        # Never real credentials, never printed - meaningless outside
+        # this single ephemeral CI run. Exported via GITHUB_ENV so every
+        # later step (test, build, the e2e API process) sees them.
+        run: |
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 24)"
+            echo "JWT_REFRESH_SECRET=$(openssl rand -hex 24)"
+            echo "ENCRYPTION_KEY=$(openssl rand -hex 24)"
+            echo "PASSWORD_RESET_TOKEN_SECRET=$(openssl rand -hex 24)"
+          } >> "$GITHUB_ENV"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Start docker-compose service stack (Postgres + Redis)
+        run: docker compose up -d
+
+      - name: Wait for Postgres and Redis to report healthy
+        run: |
+          for i in $(seq 1 30); do
+            pg_status=$(docker inspect --format='{{.State.Health.Status}}' asodef-postgres-1 2>/dev/null || echo "starting")
+            redis_status=$(docker inspect --format='{{.State.Health.Status}}' asodef-redis-1 2>/dev/null || echo "starting")
+            if [ "$pg_status" = "healthy" ] && [ "$redis_status" = "healthy" ]; then
+              echo "Postgres and Redis are healthy."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Postgres/Redis did not become healthy in time (postgres=$pg_status, redis=$redis_status)"
+          docker compose logs
+          exit 1
+
+      - name: Apply migrations
+        run: pnpm --filter api prisma:deploy
+
+      - name: Seed approved demo/RBAC/content data
+        run: pnpm --filter api prisma:seed
+
+      - name: Unit and integration tests (backend --runInBand, frontend)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Start the compiled API in the background
+        run: nohup node apps/api/dist/main.js > api.log 2>&1 &
+
+      - name: Wait for the API health endpoint
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:${API_PORT}/api/v1/health" > /dev/null; then
+              echo "API is healthy."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API did not become healthy in time"
+          cat api.log || true
+          exit 1
+
+      - name: Start the built frontend preview in the background
+        working-directory: apps/web
+        run: nohup npx vite preview --host 127.0.0.1 --port 4173 --strictPort > ../../web.log 2>&1 &
+
+      - name: Wait for the frontend preview server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:4173/" > /dev/null; then
+              echo "Frontend preview is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Frontend preview did not come up in time"
+          cat web.log || true
+          exit 1
+
+      - name: Install Playwright's Chromium browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end smoke test
+        env:
+          PLAYWRIGHT_BASE_URL: "http://localhost:4173"
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload API/web logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            api.log
+            web.log
+          retention-days: 7
+
+      - name: Tear down the docker-compose service stack
+        if: always()
+        run: docker compose down -v
