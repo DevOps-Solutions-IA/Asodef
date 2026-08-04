@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { PaymentOrder } from "@prisma/client";
+import type { Obligation, PaymentOrder } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { generatePublicReference } from "./public-reference";
@@ -8,8 +8,12 @@ import { generatePublicReference } from "./public-reference";
 /** Obligation statuses that still represent money owed - anything else
  * (PAID, CANCELLED) is not payable. Matches the AC's own "outstanding"
  * wording; the literal negative case only tests PAID, CANCELLED is the
- * same non-inventive extension of "not outstanding". */
-const OUTSTANDING_OBLIGATION_STATUSES = ["PENDING", "OVERDUE"] as const;
+ * same non-inventive extension of "not outstanding". Exported so
+ * PaymentsLookupService (also US-024) filters obligations the same way,
+ * rather than duplicating this list. */
+export const OUTSTANDING_OBLIGATION_STATUSES = ["PENDING", "OVERDUE"] as const;
+
+export type PaymentOrderWithObligation = PaymentOrder & { obligation: Pick<Obligation, "concept" | "dueDate"> };
 
 interface ObligationRow {
   id: string;
@@ -17,6 +21,8 @@ interface ObligationRow {
   status: string;
   amount_cents: number;
   currency: string;
+  concept: string;
+  due_date: Date;
 }
 
 @Injectable()
@@ -40,10 +46,10 @@ export class PaymentOrdersService {
    * second one. Prisma has no first-class row-locking API, hence the
    * raw SQL for this one query; everything else uses the normal client.
    */
-  async create(obligationId: string): Promise<PaymentOrder> {
+  async create(obligationId: string): Promise<PaymentOrderWithObligation> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<ObligationRow[]>`
-        SELECT id, customer_id, status, amount_cents, currency
+        SELECT id, customer_id, status, amount_cents, currency, concept, due_date
         FROM obligations
         WHERE id = ${obligationId}::uuid
         FOR UPDATE
@@ -61,11 +67,11 @@ export class PaymentOrdersService {
         where: { obligationId, status: "PENDING", expiresAt: { gt: new Date() } },
       });
       if (existingOrder) {
-        return existingOrder;
+        return { ...existingOrder, obligation: { concept: obligation.concept, dueDate: obligation.due_date } };
       }
 
       const ttlMinutes = this.configService.get("PAYMENT_ORDER_TTL_MINUTES", { infer: true });
-      return tx.paymentOrder.create({
+      const created = await tx.paymentOrder.create({
         data: {
           publicReference: generatePublicReference(),
           obligationId: obligation.id,
@@ -76,6 +82,16 @@ export class PaymentOrdersService {
           expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
         },
       });
+      return { ...created, obligation: { concept: obligation.concept, dueDate: obligation.due_date } };
+    });
+  }
+
+  /** Public-reference lookup for GET /payment-orders/:reference - never
+   * accepts or looks up by the internal id. */
+  async findByPublicReference(publicReference: string): Promise<PaymentOrderWithObligation | null> {
+    return this.prisma.paymentOrder.findUnique({
+      where: { publicReference },
+      include: { obligation: { select: { concept: true, dueDate: true } } },
     });
   }
 }

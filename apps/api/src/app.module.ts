@@ -12,6 +12,7 @@ import { LeadsModule } from "./modules/leads/leads.module";
 import { ContentModule } from "./modules/content/content.module";
 import { PaymentProvidersModule } from "./modules/payment-providers/payment-providers.module";
 import { PaymentOrdersModule } from "./modules/payment-orders/payment-orders.module";
+import { PaymentsLookupModule } from "./modules/payments-lookup/payments-lookup.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PaymentOrdersModule } from "./modules/payment-orders/payment-orders.mod
     ContentModule,
     PaymentProvidersModule,
     PaymentOrdersModule,
+    PaymentsLookupModule,
   ],
   controllers: [AppController],
   providers: [],
