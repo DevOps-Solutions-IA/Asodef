@@ -155,6 +155,12 @@ export const envSchema = z.object({
   // customer to complete checkout, short enough that a stale order
   // doesn't linger indefinitely.
   PAYMENT_ORDER_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+
+  // receipts (US-027): local filesystem directory PDFs are generated
+  // into and served from - relative to the API process's cwd by
+  // default. No cloud storage is documented/approved anywhere in this
+  // project yet, so this stays a plain local path, gitignored.
+  RECEIPTS_STORAGE_DIR: z.string().default("./storage/receipts"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, Logger, NotFoundException, Servi
 import { PaymentAttemptStatus, PaymentOrderStatus, type Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { PAYMENT_PROVIDER, type PaymentProvider } from "../payment-providers/payment-provider.interface";
+import { PaymentReceiptsService } from "../receipts/payment-receipts.service";
 import {
   canTransitionAttemptStatus,
   canTransitionOrderStatus,
@@ -39,6 +40,7 @@ export class BoldPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
+    private readonly paymentReceiptsService: PaymentReceiptsService,
   ) {}
 
   /**
@@ -128,6 +130,7 @@ export class BoldPaymentsService {
       let updatedOrder = currentOrder;
       if (canTransitionOrderStatus(currentOrder.status, mapping.orderStatus)) {
         updatedOrder = await tx.paymentOrder.update({ where: { id: order.id }, data: { status: mapping.orderStatus } });
+        await this.paymentReceiptsService.issueIfNewlyApproved(tx, currentOrder.status, updatedOrder);
       } else {
         this.logger.warn(
           `Blocked invalid PaymentOrder transition ${currentOrder.status} -> ${mapping.orderStatus} for reference ${publicReference}`,
@@ -216,6 +219,7 @@ export class BoldPaymentsService {
       let updatedOrder = freshOrder;
       if (canTransitionOrderStatus(freshOrder.status, mapping.orderStatus)) {
         updatedOrder = await tx.paymentOrder.update({ where: { id: order.id }, data: { status: mapping.orderStatus } });
+        await this.paymentReceiptsService.issueIfNewlyApproved(tx, freshOrder.status, updatedOrder);
       } else {
         this.logger.warn(
           `Blocked invalid PaymentOrder transition ${freshOrder.status} -> ${mapping.orderStatus} for reference ${publicReference}`,

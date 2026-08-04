@@ -13,4 +13,5 @@ coverage/
 playwright-report/
 test-results/
 apps/api/generated/
+apps/api/storage/
 .pnpm-store/
