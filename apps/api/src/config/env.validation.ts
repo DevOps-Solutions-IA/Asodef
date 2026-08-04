@@ -44,7 +44,13 @@ export const envSchema = z.object({
     .string({ required_error: "ENCRYPTION_KEY is required" })
     .min(32, "ENCRYPTION_KEY must be at least 32 characters"),
 
-  BOLD_MODE: z.enum(["mock", "live"]).default("mock"),
+  // US-022: "sandbox" and "production" both route through the real HTTP
+  // transport (against BOLD_BASE_URL, which Bold itself doesn't split by
+  // environment) and both require BOLD_IDENTITY_KEY to be configured -
+  // the distinction exists at the application level (which credential
+  // set + which legal/commercial approval gates apply), not as a
+  // different Bold API host.
+  BOLD_MODE: z.enum(["mock", "sandbox", "production"]).default("mock"),
   BOLD_BASE_URL: z.string().url().default("https://api.online.payments.bold.co"),
   BOLD_IDENTITY_KEY: z.string().default(""),
   BOLD_SECRET_KEY: z.string().default(""),

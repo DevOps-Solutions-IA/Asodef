@@ -10,6 +10,7 @@ import { GovernanceModule } from "./modules/governance/governance.module";
 import { AdminUsersModule } from "./modules/admin-users/admin-users.module";
 import { LeadsModule } from "./modules/leads/leads.module";
 import { ContentModule } from "./modules/content/content.module";
+import { PaymentProvidersModule } from "./modules/payment-providers/payment-providers.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ContentModule } from "./modules/content/content.module";
     AdminUsersModule,
     LeadsModule,
     ContentModule,
+    PaymentProvidersModule,
   ],
   controllers: [AppController],
   providers: [],
