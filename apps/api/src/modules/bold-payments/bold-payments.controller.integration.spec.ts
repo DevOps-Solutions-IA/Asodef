@@ -189,6 +189,31 @@ describe("Bold payment creation and status endpoints (integration, real HTTP, BO
       expect(updatedOrder.status).toBe("PROCESSING");
     });
 
+    it("US-034: a provider timeout/unavailable failure returns 503, leaves the order safely PENDING (never FAILED on an unknown outcome), and a retry can still succeed without duplicating the attempt", async () => {
+      const { order } = await createOrder("PENDING");
+      jest.spyOn(mockBoldTransport, "createPaymentIntent").mockRejectedValueOnce(new Error("ETIMEDOUT: Bold did not respond in time"));
+
+      const failedResponse = await request(app.getHttpServer())
+        .post("/api/v1/payments/bold/create")
+        .send({ reference: order.publicReference });
+      expect(failedResponse.status).toBe(503);
+
+      // The whole transaction (including the attempt just created)
+      // rolled back on the thrown error - safe, reconcilable state:
+      // still PENDING, no attempt left dangling half-created.
+      const orderAfterFailure = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
+      expect(orderAfterFailure.status).toBe("PENDING");
+      expect(await prisma.paymentAttempt.count({ where: { paymentOrderId: order.id } })).toBe(0);
+
+      // A retry (no mock failure this time) succeeds normally and does
+      // not somehow produce two attempts from the earlier failed try.
+      const retryResponse = await request(app.getHttpServer())
+        .post("/api/v1/payments/bold/create")
+        .send({ reference: order.publicReference });
+      expect(retryResponse.status).toBe(201);
+      expect(await prisma.paymentAttempt.count({ where: { paymentOrderId: order.id } })).toBe(1);
+    });
+
     it("does not require authentication", async () => {
       const { order } = await createOrder("PENDING");
       const response = await request(app.getHttpServer()).post("/api/v1/payments/bold/create").send({ reference: order.publicReference });

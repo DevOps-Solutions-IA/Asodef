@@ -93,7 +93,7 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
     return { customer, obligation, order };
   }
 
-  it("Example (AC): a valid APPROVED event transitions the order and creates exactly one PaymentEvent even when POSTed twice", async () => {
+  it("Example (AC): a valid APPROVED event transitions the order and creates exactly one PaymentEvent and one AuditLog entry even when POSTed twice", async () => {
     const { order } = await createOrder("PROCESSING");
     const body = { reference_id: order.publicReference, status: "APPROVED" };
 
@@ -112,6 +112,16 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
     const events = await prisma.paymentEvent.findMany({ where: { paymentOrderId: order.id } });
     expect(events).toHaveLength(1);
     expect(events[0]?.eventType).toBe("webhook");
+
+    const auditEntries = await prisma.auditLog.findMany({ where: { paymentOrderId: order.id } });
+    expect(auditEntries).toHaveLength(1);
+    expect(auditEntries[0]).toMatchObject({
+      action: "order.status_transition",
+      previousStatus: "PROCESSING",
+      newStatus: "APPROVED",
+      applied: true,
+      source: "WEBHOOK",
+    });
 
     const finalOrder = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
     expect(finalOrder.status).toBe("APPROVED");

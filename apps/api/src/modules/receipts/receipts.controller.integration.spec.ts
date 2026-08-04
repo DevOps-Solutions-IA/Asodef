@@ -123,10 +123,12 @@ describe("Receipts endpoint (integration, real HTTP, BOLD_MODE=mock)", () => {
     expect(response.body.message).toBe("No se encontraron resultados.");
   });
 
-  it("Negative case (AC): a REJECTED order has no receipt and returns 404", async () => {
+  it("Negative case (AC): a REJECTED order has no receipt, returns 404, and creates no PaymentReceipt row", async () => {
     const { order } = await createOrder("REJECTED");
     const response = await request(app.getHttpServer()).get(`/api/v1/receipts/${order.publicReference}`);
     expect(response.status).toBe(404);
+    const receiptCount = await prisma.paymentReceipt.count({ where: { paymentOrderId: order.id } });
+    expect(receiptCount).toBe(0);
   });
 
   it("returns 404 for a non-existent reference", async () => {

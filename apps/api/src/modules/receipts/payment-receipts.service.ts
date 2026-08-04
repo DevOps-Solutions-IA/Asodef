@@ -8,6 +8,7 @@ import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { maskDocumentNumber } from "../payments-lookup/mask-document-number";
 import { generateReceiptNumber, generateVerificationCode } from "./receipt-code";
+import { formatAmountCents } from "./format-amount-cents";
 import { getPaymentOrderStatusLabel } from "@asodef/payments";
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
@@ -157,7 +158,7 @@ export class PaymentReceiptsService {
     const font = await doc.embedFont(StandardFonts.Helvetica);
     const bold = await doc.embedFont(StandardFonts.HelveticaBold);
 
-    const amount = (detail.amountCents / 100).toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const amount = formatAmountCents(detail.amountCents);
     let y = 500;
     const line = (text: string, useFont = font, size = 11, gap = 22) => {
       page.drawText(text, { x: 40, y, size, font: useFont, color: rgb(0.02, 0.15, 0.11) });
