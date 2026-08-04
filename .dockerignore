@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+.git
+.github
+e2e
+test-results
+playwright-report
+apps/api/storage
+**/*.log
+.claude

@@ -31,6 +31,61 @@ services:
       timeout: 5s
       retries: 10
 
+  # US-037: local-verification-only containers - not the production
+  # image/config (US-039's own job). Host ports (3200/8080) are
+  # deliberately different from the ad-hoc local-review environment
+  # (3100/5180) this session already has running, so bringing this
+  # stack up never conflicts with it.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-asodef}:${POSTGRES_PASSWORD:-asodef_dev_password}@postgres:5432/${POSTGRES_DB:-asodef}?schema=public
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - generate a dev-only value, never reuse a production secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      PASSWORD_RESET_TOKEN_SECRET: ${PASSWORD_RESET_TOKEN_SECRET:?PASSWORD_RESET_TOKEN_SECRET is required}
+      BOLD_MODE: mock
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - "127.0.0.1:3200:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/v1/health/ready',(res)=>process.exit(res.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3200
+        VITE_APP_URL: http://localhost:8080
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
 volumes:
   asodef_postgres_data:
   asodef_redis_data:
