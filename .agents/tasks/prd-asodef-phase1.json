@@ -2196,8 +2196,8 @@
         "Reconstruir el resto de /mi-cuenta (sigue siendo placeholder fuera de esta seccion)",
         "Permitir revocar consentimientos desde esta pantalla (eso es US-073)"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "089ac50",
       "notes": "IDOR-safety pattern follows the real US-063 refunds fix already in this codebase."
     },
     {
