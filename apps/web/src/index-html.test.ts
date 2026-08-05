@@ -33,6 +33,13 @@ describe("index.html SEO metadata (US-019)", () => {
     expect(html).toMatch(/<meta name="twitter:image" content="%VITE_APP_URL%\/og-image\.webp"/);
   });
 
+  it("US-077: links a real favicon derived from the official logo, not a placeholder", () => {
+    expect(html).toMatch(/<link rel="icon" type="image\/x-icon" href="\/favicon\.ico"/);
+    expect(html).toMatch(/<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32x32\.png"/);
+    expect(html).toMatch(/<link rel="icon" type="image\/png" sizes="16x16" href="\/favicon-16x16\.png"/);
+    expect(html).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png"/);
+  });
+
   it("sets a canonical link driven by the environment, never a hardcoded protected subdomain", () => {
     expect(html).toMatch(/<link rel="canonical" href="%VITE_APP_URL%\/"/);
     // info@asodef.com.co (the confirmed corporate email) is fine - the
@@ -43,13 +50,14 @@ describe("index.html SEO metadata (US-019)", () => {
   it("embeds Organization JSON-LD with only confirmed facts - no fabricated claims", () => {
     const match = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html);
     expect(match).not.toBeNull();
-    const jsonLd = JSON.parse(match![1]!.replace("%VITE_APP_URL%", "https://example.invalid"));
+    const jsonLd = JSON.parse(match![1]!.replaceAll("%VITE_APP_URL%", "https://example.invalid"));
 
     expect(jsonLd).toMatchObject({
       "@context": "https://schema.org",
       "@type": "Organization",
       name: "ASODEF S.A.S.",
       email: "info@asodef.com.co",
+      logo: "https://example.invalid/icon-512.png",
       address: { "@type": "PostalAddress", addressLocality: "Cali", addressCountry: "CO" },
     });
 

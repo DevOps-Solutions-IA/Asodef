@@ -56,6 +56,14 @@ describe("ReceiptViewPage", () => {
     expect(link).toHaveAttribute("href", expect.stringContaining("/api/v1/receipts/ref-123?format=pdf"));
   });
 
+  it("US-077: renders the official brand logo", async () => {
+    const fetchMock = vi.fn(() => jsonResponse(200, buildReceipt()));
+    renderReceiptPage(fetchMock);
+
+    expect(await screen.findByText("RCP-ABCD123456")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+  });
+
   it("Negative case (AC): a non-approved order shows an appropriate empty state, not a broken render", async () => {
     const fetchMock = vi.fn(() => jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No se encontraron resultados." }));
     renderReceiptPage(fetchMock);

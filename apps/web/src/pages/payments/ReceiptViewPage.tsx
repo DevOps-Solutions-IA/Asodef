@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, ErrorState, Skeleton } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
+import { BrandLogo } from "../../layouts/shared/BrandLogo";
 import { getReceipt, getReceiptDownloadUrl } from "../../lib/payments/payments-api";
 import { queryKeys } from "../../lib/query-keys";
 import { formatCurrency } from "./format-currency";
@@ -46,7 +47,8 @@ export function ReceiptViewPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-brand-dark">Comprobante de pago</h1>
+      <BrandLogo variant="compact" className="h-8 w-auto" />
+      <h1 className="mt-4 font-display text-2xl font-semibold text-brand-dark">Comprobante de pago</h1>
       <p className="mt-1 text-sm text-text-muted">{data.statusLabel}</p>
 
       <Card className="mt-6">

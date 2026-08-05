@@ -16,6 +16,14 @@
     />
     <link rel="canonical" href="%VITE_APP_URL%/" />
 
+    <!-- US-077: favicon derived from the official isotipo
+         (src/assets/asodef-logo-icon.webp), square-padded and exported
+         at standard sizes - no redesign, just a canvas/export step. -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ASODEF S.A.S." />
     <meta property="og:locale" content="es_CO" />
@@ -37,8 +45,10 @@
 
     <!-- Organization JSON-LD: only ASODEF_COMPANY's confirmed fields
          (packages/config/src/company.ts) - no aggregateRating, reviews,
-         sameAs profiles, geographic coverage, or logo, since none of
-         those are confirmed facts. -->
+         sameAs profiles, or geographic coverage, since none of those
+         are confirmed facts. US-077: logo now included - the real
+         official isotipo asset is available (it was not when this
+         comment previously explained its absence). -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -46,6 +56,7 @@
         "name": "ASODEF S.A.S.",
         "url": "%VITE_APP_URL%/",
         "email": "info@asodef.com.co",
+        "logo": "%VITE_APP_URL%/icon-512.png",
         "address": {
           "@type": "PostalAddress",
           "addressLocality": "Cali",
