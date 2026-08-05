@@ -14,13 +14,19 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   iconRight?: ReactNode;
 }
 
+// Premium redesign: primary/secondary hover now darkens within the same
+// hue (brand-dark-600) plus a subtle e1 lift, rather than swapping to a
+// second brand color outright - a more refined, "considered" hover than
+// an abrupt hue change, while the orange accent stays reserved for CTAs
+// that specifically want it (Hero/AllianceCta already pass their own
+// className overrides where that's the intent).
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
-  primary: "bg-brand-dark text-white hover:bg-brand-orange focus-visible:ring-brand-dark",
+  primary: "bg-brand-dark text-white shadow-e1 hover:bg-brand-dark-600 hover:shadow-e2 focus-visible:ring-brand-dark",
   secondary:
-    "bg-white/80 border border-brand-dark/10 text-brand-dark hover:bg-brand-orange hover:text-white focus-visible:ring-brand-dark",
-  outline: "border border-border-soft bg-transparent text-text-main hover:bg-bg-soft focus-visible:ring-brand-dark",
+    "bg-white/80 border border-brand-dark/10 text-brand-dark shadow-e1 hover:border-brand-dark/20 hover:bg-brand-dark-50 hover:shadow-e2 focus-visible:ring-brand-dark",
+  outline: "border border-border-soft bg-transparent text-text-main hover:border-brand-dark/20 hover:bg-bg-soft focus-visible:ring-brand-dark",
   ghost: "bg-transparent text-text-main hover:bg-bg-soft focus-visible:ring-brand-dark",
-  danger: "bg-danger text-white hover:bg-danger/90 focus-visible:ring-danger",
+  danger: "bg-danger text-white shadow-e1 hover:bg-danger/90 hover:shadow-e2 focus-visible:ring-danger",
 };
 
 const SIZE_STYLES: Record<ButtonSize, string> = {
@@ -41,9 +47,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={props.type ?? "button"}
         className={cn(
-          "inline-flex items-center justify-center rounded-full font-medium transition-colors",
+          "inline-flex items-center justify-center rounded-full font-medium",
+          "transition-[background-color,box-shadow,transform,border-color] duration-150 ease-out",
+          "active:scale-[0.98]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:active:scale-100",
           VARIANT_STYLES[variant],
           SIZE_STYLES[size],
           className,

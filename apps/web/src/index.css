@@ -3,12 +3,63 @@
 @tailwind utilities;
 
 :root {
+  /* Brand anchors - the institutional identity itself, never altered.
+   * Every other token below is derived from or tuned around these 4
+   * hues; nothing here changes the brand, only how richly it's
+   * expressed across surfaces, depth, and state. */
   --color-brand-dark: #064d38;
   --color-brand-deep: #003f2d;
   --color-brand-green: #438b34;
   --color-brand-light: #80ae3a;
   --color-brand-orange: #f28a00;
   --color-brand-orange-light: #ffaa28;
+
+  /* Brand-dark tonal scale (premium redesign) - the same institutional
+   * green expressed as a full 11-step ramp, so components can reach for
+   * a precise weight (a tinted hover, a subtle badge fill, a deep
+   * heading) instead of hand-mixing opacity every time. 500 is the
+   * closest match to --color-brand-dark itself. */
+  --color-brand-dark-50: #eaf3ef;
+  --color-brand-dark-100: #d0e6dd;
+  --color-brand-dark-200: #a3cdbc;
+  --color-brand-dark-300: #71b098;
+  --color-brand-dark-400: #3c8f73;
+  --color-brand-dark-500: #0b4d38;
+  --color-brand-dark-600: #073b2b;
+  --color-brand-dark-700: #052e21;
+  --color-brand-dark-800: #041f16;
+  --color-brand-dark-900: #02120c;
+
+  /* Brand-orange tonal scale, same rationale. 500 matches
+   * --color-brand-orange itself. */
+  --color-brand-orange-50: #fff6e8;
+  --color-brand-orange-100: #ffe7c2;
+  --color-brand-orange-200: #ffd08a;
+  --color-brand-orange-300: #ffb752;
+  --color-brand-orange-400: #ffa226;
+  --color-brand-orange-500: #f28a00;
+  --color-brand-orange-600: #d97600;
+  --color-brand-orange-700: #b25f00;
+  --color-brand-orange-800: #8a4a00;
+  --color-brand-orange-900: #5c3200;
+
+  /* Warm-neutral scale - a grey with the same green undertone as
+   * --color-text-main, rather than a hue-less grey lifted from a
+   * generic UI kit. Backgrounds, borders, and muted surfaces are built
+   * from this, so the whole platform reads as one considered palette
+   * instead of "brand colors on top of a stock admin theme". */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8f9f6;
+  --color-neutral-100: #f0f2ec;
+  --color-neutral-200: #e2e6dd;
+  --color-neutral-300: #cad0c3;
+  --color-neutral-400: #a4ac9c;
+  --color-neutral-500: #798175;
+  --color-neutral-600: #575e53;
+  --color-neutral-700: #3d433a;
+  --color-neutral-800: #272b24;
+  --color-neutral-900: #161915;
+
   --color-bg-base: #f4f5f1;
   --color-bg-soft: #edf3ec;
   --color-bg-elevated: #ffffff;
@@ -19,6 +70,16 @@
   --color-warning: #d98500;
   --color-danger: #c83f49;
   --color-info: #2878b5;
+
+  /* Elevation - every shadow tinted toward brand-dark instead of flat
+   * black, the same technique the pre-existing Card/Dialog/Drawer/Hero
+   * shadows already used ad hoc; formalized here as a 5-step scale so
+   * every surface reaches for the same vocabulary of depth. */
+  --shadow-color: 6, 40, 30;
+  --shadow-e1: 0 1px 2px rgba(var(--shadow-color), 0.06), 0 4px 12px -4px rgba(var(--shadow-color), 0.08);
+  --shadow-e2: 0 2px 4px rgba(var(--shadow-color), 0.06), 0 12px 28px -8px rgba(var(--shadow-color), 0.12);
+  --shadow-e3: 0 4px 10px rgba(var(--shadow-color), 0.08), 0 20px 48px -12px rgba(var(--shadow-color), 0.16);
+  --shadow-e4: 0 8px 16px rgba(var(--shadow-color), 0.1), 0 32px 72px -16px rgba(var(--shadow-color), 0.22);
 
   --font-sans: "Inter", system-ui, sans-serif;
   --font-display: "Outfit", system-ui, sans-serif;
