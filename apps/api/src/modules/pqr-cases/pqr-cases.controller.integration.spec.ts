@@ -3,11 +3,12 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
-import type { User } from "@prisma/client";
+import type { PrismaClient, User } from "@prisma/client";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { upsertActivePlanDemo } from "../../database/seed-payments";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 import { PasswordService } from "../auth/password.service";
 import { RedisService } from "../../common/redis/redis.service";
 
@@ -35,6 +36,7 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
+  let dataProcessingHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
@@ -51,6 +53,12 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
 
     admin = await createActor("ADMIN");
     noPermActor = await createActor("CUSTOMER");
+
+    // US-072: PQR case creation now also records a data_processing
+    // ConsentRecord, which requires a resolvable PUBLISHED
+    // tratamiento-de-datos version - see publishDraftForTest's own doc
+    // comment (test-only, reverted in afterAll).
+    dataProcessingHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "tratamiento-de-datos");
   });
 
   beforeEach(async () => {
@@ -62,6 +70,10 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
   });
 
   afterAll(async () => {
+    if (dataProcessingHandle) {
+      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: dataProcessingHandle.versionId } });
+      await dataProcessingHandle.restore();
+    }
     // pqr_cases holds a Restrict FK into payment_orders
     // (relatedPaymentOrderId), so cases must be deleted before orders;
     // orders hold a Restrict FK into obligations, and obligations into
@@ -140,6 +152,22 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
     expect(response.body).not.toHaveProperty("id");
     expect(response.body).not.toHaveProperty("applicantName");
     expect(response.body).not.toHaveProperty("applicantContact");
+  });
+
+  it("US-072: submitting a PQR records a data_processing ConsentRecord tied to the published policy version", async () => {
+    const { response } = await createCaseViaApi({ category: "reclamo" });
+    const created = await prisma.pqrCase.findUniqueOrThrow({ where: { caseNumber: response.body.caseNumber } });
+    createdCaseIds.push(created.id);
+
+    const record = await prisma.consentRecord.findFirst({
+      where: { source: "web_pqr_form", legalDocumentVersionId: dataProcessingHandle!.versionId },
+      include: { consentPurpose: true },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(record).not.toBeNull();
+    expect(record?.consentPurpose.key).toBe("data_processing");
+    expect(record?.status).toBe("GRANTED");
+    expect(record?.customerId).toBeNull();
   });
 
   it("Example (AC): a linked payment reference is resolved and visible in the admin queue", async () => {

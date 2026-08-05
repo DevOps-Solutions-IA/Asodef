@@ -4,9 +4,11 @@ import { DataSubjectRequestStatus } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { AuditService, AuditSource } from "../audit/audit.service";
 import { RateLimiterService } from "../auth/rate-limiter.service";
-import { RateLimitedException } from "../auth/auth.service";
+import { RateLimitedException, type RequestContext } from "../auth/auth.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { generatePublicReference } from "../payment-orders/public-reference";
+import { ConsentService } from "../consent/consent.service";
+import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
 import type { CreateDataSubjectRequestDto } from "./dto/create-data-subject-request.dto";
 import type { TransitionDataSubjectRequestDto } from "./dto/transition-data-subject-request.dto";
 import type { AssignDataSubjectRequestDto } from "./dto/assign-data-subject-request.dto";
@@ -20,6 +22,7 @@ import {
 } from "./data-subject-request.types";
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
+const DATA_PROCESSING_POLICY_SLUG = "tratamiento-de-datos";
 
 /** Not given explicitly by the AC beyond one negative case (RECEIVED ->
  * RESOLVED directly is invalid) - this table is the mechanical
@@ -61,6 +64,8 @@ export class DataSubjectRequestsService {
     private readonly auditService: AuditService,
     private readonly rateLimiterService: RateLimiterService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly legalDocumentsService: LegalDocumentsService,
+    private readonly consentService: ConsentService,
   ) {}
 
   /**
@@ -71,9 +76,9 @@ export class DataSubjectRequestsService {
    * a data subject exercising a real legal right deserves to know their
    * submission wasn't received, unlike a marketing lead.
    */
-  async create(dto: CreateDataSubjectRequestDto, ipAddress: string | null): Promise<PublicDataSubjectRequestResponse> {
+  async create(dto: CreateDataSubjectRequestDto, context: RequestContext): Promise<PublicDataSubjectRequestResponse> {
     const rateLimit = await this.rateLimiterService.checkAndIncrement(
-      `data-subject-requests:ip:${ipAddress ?? "unknown"}`,
+      `data-subject-requests:ip:${context.ipAddress ?? "unknown"}`,
       this.configService.get("DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_MAX", { infer: true }),
       this.configService.get("DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_WINDOW_SECONDS", { infer: true }),
     );
@@ -101,6 +106,20 @@ export class DataSubjectRequestsService {
         newStatus: request.status,
         applied: true,
         source: AuditSource.REQUEST_CREATE,
+      });
+
+      // US-072: the request itself is real personal data (name, email,
+      // document number) collected from a public form, with no consent
+      // trail until now - anonymous, not a Customer/User/LeadSubmission
+      // link, since a data-subject request may come from someone who
+      // isn't (yet) any of those; same pattern the cookie-consent
+      // banner already uses for an unidentified visitor.
+      const policyVersionId = await this.legalDocumentsService.resolveCurrentPublishedVersionId(DATA_PROCESSING_POLICY_SLUG, tx);
+      await this.consentService.record(tx, "data_processing", { anonymous: true }, policyVersionId, {
+        ipAddress: context.ipAddress ?? null,
+        userAgent: context.userAgent ?? null,
+        source: "web_data_subject_request_form",
+        acceptanceMethod: "form_submission",
       });
 
       return toPublicDataSubjectRequestResponse(request);

@@ -3,10 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
-import type { User } from "@prisma/client";
+import type { PrismaClient, User } from "@prisma/client";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 import { PasswordService } from "../auth/password.service";
 import { RedisService } from "../../common/redis/redis.service";
 
@@ -32,6 +33,7 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
+  let dataProcessingHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
@@ -53,6 +55,12 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
 
     admin = await createActor("ADMIN");
     noPermActor = await createActor("CUSTOMER");
+
+    // US-072: DSR creation now also records a data_processing
+    // ConsentRecord, which requires a resolvable PUBLISHED
+    // tratamiento-de-datos version - see publishDraftForTest's own doc
+    // comment (test-only, reverted in afterAll).
+    dataProcessingHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "tratamiento-de-datos");
   });
 
   beforeEach(async () => {
@@ -69,6 +77,10 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
   });
 
   afterAll(async () => {
+    if (dataProcessingHandle) {
+      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: dataProcessingHandle.versionId } });
+      await dataProcessingHandle.restore();
+    }
     if (createdRequestIds.length > 0) {
       await prisma.auditLog.deleteMany({ where: { dataSubjectRequestId: { in: createdRequestIds } } });
       await prisma.dataSubjectRequest.deleteMany({ where: { id: { in: createdRequestIds } } });
@@ -135,6 +147,22 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
     expect(response.body).not.toHaveProperty("id");
     expect(response.body).not.toHaveProperty("requesterEmail");
     expect(response.body).not.toHaveProperty("assignedUserId");
+  });
+
+  it("US-072: submitting a request records a data_processing ConsentRecord (anonymous subject) tied to the published policy version", async () => {
+    await createRequestViaApi({ type: "DELETION" });
+
+    const record = await prisma.consentRecord.findFirst({
+      where: { source: "web_data_subject_request_form", legalDocumentVersionId: dataProcessingHandle!.versionId },
+      include: { consentPurpose: true },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(record).not.toBeNull();
+    expect(record?.consentPurpose.key).toBe("data_processing");
+    expect(record?.status).toBe("GRANTED");
+    expect(record?.userId).toBeNull();
+    expect(record?.customerId).toBeNull();
+    expect(record?.leadSubmissionId).toBeNull();
   });
 
   it("rejects an unknown request type with 400", async () => {

@@ -4,9 +4,11 @@ import { PqrCaseStatus } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { AuditService, AuditSource } from "../audit/audit.service";
 import { RateLimiterService } from "../auth/rate-limiter.service";
-import { RateLimitedException } from "../auth/auth.service";
+import { RateLimitedException, type RequestContext } from "../auth/auth.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { generatePublicReference } from "../payment-orders/public-reference";
+import { ConsentService } from "../consent/consent.service";
+import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
 import type { CreatePqrCaseDto } from "./dto/create-pqr-case.dto";
 import type { TransitionPqrCaseDto } from "./dto/transition-pqr-case.dto";
 import type { AssignPqrCaseDto } from "./dto/assign-pqr-case.dto";
@@ -20,6 +22,7 @@ import {
 } from "./pqr-case.types";
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
+const DATA_PROCESSING_POLICY_SLUG = "tratamiento-de-datos";
 
 /** Not given explicitly by the AC beyond one negative case (closing
  * from INFORMATION_REQUIRED without a resolution is invalid) - RECEIVED
@@ -45,6 +48,8 @@ export class PqrCasesService {
     private readonly auditService: AuditService,
     private readonly rateLimiterService: RateLimiterService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly legalDocumentsService: LegalDocumentsService,
+    private readonly consentService: ConsentService,
   ) {}
 
   /**
@@ -60,9 +65,9 @@ export class PqrCasesService {
    * customer, giving a complete link without the anonymous submitter
    * ever needing to know or supply a customer id.
    */
-  async create(dto: CreatePqrCaseDto, ipAddress: string | null): Promise<PublicPqrCaseResponse> {
+  async create(dto: CreatePqrCaseDto, context: RequestContext): Promise<PublicPqrCaseResponse> {
     const rateLimit = await this.rateLimiterService.checkAndIncrement(
-      `pqr-cases:ip:${ipAddress ?? "unknown"}`,
+      `pqr-cases:ip:${context.ipAddress ?? "unknown"}`,
       this.configService.get("PQR_CASES_RATE_LIMIT_IP_MAX", { infer: true }),
       this.configService.get("PQR_CASES_RATE_LIMIT_IP_WINDOW_SECONDS", { infer: true }),
     );
@@ -107,6 +112,26 @@ export class PqrCasesService {
         applied: true,
         source: AuditSource.REQUEST_CREATE,
       });
+
+      // US-072: applicantName/applicantContact/description is real
+      // personal data collected from a public form, with no consent
+      // trail until now. Tied to the resolved customer when the
+      // submission links to a real payment reference (same resolution
+      // already computed above for relatedCustomerId); anonymous
+      // otherwise - a PQR submitter is not always an existing customer.
+      const policyVersionId = await this.legalDocumentsService.resolveCurrentPublishedVersionId(DATA_PROCESSING_POLICY_SLUG, tx);
+      await this.consentService.record(
+        tx,
+        "data_processing",
+        relatedCustomerId ? { customerId: relatedCustomerId } : { anonymous: true },
+        policyVersionId,
+        {
+          ipAddress: context.ipAddress ?? null,
+          userAgent: context.userAgent ?? null,
+          source: "web_pqr_form",
+          acceptanceMethod: "form_submission",
+        },
+      );
 
       // AC: "case creation triggers a CommunicationLog entry (US-059)
       // acknowledging receipt" - BLOCKED. CommunicationLog is defined

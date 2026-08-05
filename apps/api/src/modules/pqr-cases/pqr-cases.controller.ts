@@ -26,7 +26,7 @@ export class PqrCasesController {
   async create(@Body() dto: CreatePqrCaseDto, @Req() request: AuthenticatedRequest) {
     const context = buildRequestContext(request);
     try {
-      return await this.pqrCasesService.create(dto, context.ipAddress ?? null);
+      return await this.pqrCasesService.create(dto, context);
     } catch (error) {
       if (error instanceof RateLimitedException) {
         throw new HttpException(

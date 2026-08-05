@@ -39,7 +39,7 @@ export class DataSubjectRequestsController {
   async create(@Body() dto: CreateDataSubjectRequestDto, @Req() request: AuthenticatedRequest) {
     const context = buildRequestContext(request);
     try {
-      return await this.dataSubjectRequestsService.create(dto, context.ipAddress ?? null);
+      return await this.dataSubjectRequestsService.create(dto, context);
     } catch (error) {
       if (error instanceof RateLimitedException) {
         throw new HttpException(
