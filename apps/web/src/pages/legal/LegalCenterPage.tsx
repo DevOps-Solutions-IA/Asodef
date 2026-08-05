@@ -61,7 +61,7 @@ export function LegalCenterPage() {
             <li key={entry.slug}>
               <Link
                 to={`/legal/${entry.slug}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border-soft px-4 py-3 text-sm hover:bg-bg-soft"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border-soft bg-white px-4 py-3 text-sm shadow-e1 transition-shadow duration-150 hover:shadow-e2"
               >
                 <span className="font-medium text-text-main">{entry.title}</span>
                 {isPublished ? (
