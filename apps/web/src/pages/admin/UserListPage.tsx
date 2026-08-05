@@ -188,10 +188,10 @@ export function UserListPage() {
 
       {query.isSuccess && query.data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[640px] text-left text-sm">
               <caption className="sr-only">Lista de usuarios administrativos</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Usuario
@@ -211,7 +211,7 @@ export function UserListPage() {
                 {query.data.items.map((user) => {
                   const { tone, label } = userStatusTone(user.status);
                   return (
-                    <tr key={user.id} className="hover:bg-bg-soft/60">
+                    <tr key={user.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                       <td className="px-4 py-3">
                         <Link to={`/admin/usuarios/${user.id}`} className="font-medium text-brand-dark hover:underline">
                           {user.fullName}

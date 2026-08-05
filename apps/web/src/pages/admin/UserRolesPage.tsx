@@ -87,10 +87,10 @@ export function UserRolesPage() {
       <PageHeader title="Roles" description={userQuery.data.email} />
       <UserDetailTabs userId={userQuery.data.id} />
 
-      <div className="overflow-x-auto rounded-2xl border border-border-soft">
+      <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
         <table className="w-full min-w-[420px] text-left text-sm">
           <caption className="sr-only">Roles disponibles para este usuario</caption>
-          <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
             <tr>
               <th scope="col" className="px-4 py-3">
                 Rol

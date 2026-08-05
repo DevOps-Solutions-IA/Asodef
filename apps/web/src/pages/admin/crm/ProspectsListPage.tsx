@@ -94,10 +94,10 @@ export function ProspectsListPage() {
         {prospectsQuery.isSuccess && filteredProspects.length === 0 && <EmptyState title="No hay prospectos que coincidan" description="Ajusta la búsqueda o los filtros." />}
 
         {prospectsQuery.isSuccess && filteredProspects.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[720px] text-left text-sm">
               <caption className="sr-only">Lista de prospectos</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Prospecto
@@ -118,7 +118,7 @@ export function ProspectsListPage() {
               </thead>
               <tbody className="divide-y divide-border-soft">
                 {filteredProspects.map((prospect) => (
-                  <tr key={prospect.id} className="hover:bg-bg-soft/60">
+                  <tr key={prospect.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-text-main">{prospect.fullNameOrLegalName}</p>
                       <p className="text-xs text-text-muted">{prospect.documentOrNit}</p>
@@ -159,10 +159,10 @@ export function ProspectsListPage() {
         {leadsQuery.isSuccess && filteredLeads.length === 0 && <EmptyState title="No hay leads que coincidan" description="Ajusta la búsqueda." />}
 
         {leadsQuery.isSuccess && filteredLeads.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[720px] text-left text-sm">
               <caption className="sr-only">Lista de leads</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Contacto
@@ -180,7 +180,7 @@ export function ProspectsListPage() {
               </thead>
               <tbody className="divide-y divide-border-soft">
                 {filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-bg-soft/60">
+                  <tr key={lead.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-text-main">{lead.fullName}</p>
                       <p className="text-xs text-text-muted">{lead.email}</p>

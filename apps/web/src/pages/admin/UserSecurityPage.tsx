@@ -72,10 +72,10 @@ export function UserSecurityPage() {
         <EmptyState title="Sin eventos de seguridad registrados" />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[560px] text-left text-sm">
               <caption className="sr-only">Historial de eventos de seguridad</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Evento

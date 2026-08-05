@@ -143,10 +143,10 @@ export function AdminReportsPage() {
                 )}
 
                 {runResult && runResult.items.length > 0 && (
-                  <div className="overflow-x-auto rounded-2xl border border-border-soft">
+                  <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
                     <table className="w-full min-w-[640px] text-left text-sm">
                       <caption className="sr-only">Resultados del reporte</caption>
-                      <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                         <tr>
                           {Object.keys(runResult.items[0]!).map((column) => (
                             <th key={column} scope="col" className="px-4 py-3">

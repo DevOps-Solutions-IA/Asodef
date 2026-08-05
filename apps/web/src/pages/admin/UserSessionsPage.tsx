@@ -92,10 +92,10 @@ export function UserSessionsPage() {
       {sessions.length === 0 ? (
         <EmptyState title="Sin sesiones registradas" />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border-soft">
+        <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
           <table className="w-full min-w-[720px] text-left text-sm">
             <caption className="sr-only">Sesiones del usuario</caption>
-            <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
               <tr>
                 <th scope="col" className="px-4 py-3">
                   Creada

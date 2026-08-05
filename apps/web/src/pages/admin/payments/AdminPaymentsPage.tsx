@@ -87,10 +87,10 @@ export function AdminPaymentsPage() {
 
       {query.isSuccess && query.data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[760px] text-left text-sm">
               <caption className="sr-only">Órdenes de pago</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Cliente
@@ -111,7 +111,7 @@ export function AdminPaymentsPage() {
               </thead>
               <tbody className="divide-y divide-border-soft">
                 {query.data.items.map((order) => (
-                  <tr key={order.id} className="hover:bg-bg-soft/60">
+                  <tr key={order.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <Link to={`/admin/pagos/${order.id}`} className="font-medium text-brand-dark hover:underline">
                         {order.customer.fullName}

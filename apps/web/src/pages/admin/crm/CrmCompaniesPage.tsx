@@ -31,10 +31,10 @@ export function CrmCompaniesPage() {
         )}
 
         {companiesQuery.isSuccess && companiesQuery.data.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[640px] text-left text-sm">
               <caption className="sr-only">Lista de empresas</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Empresa
@@ -52,7 +52,7 @@ export function CrmCompaniesPage() {
               </thead>
               <tbody className="divide-y divide-border-soft">
                 {companiesQuery.data.map((company) => (
-                  <tr key={company.id} className="hover:bg-bg-soft/60">
+                  <tr key={company.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <Link to={`/admin/crm/empresas/${company.id}`} className="font-medium text-brand-dark hover:underline">
                         {company.name}
@@ -86,10 +86,10 @@ export function CrmCompaniesPage() {
         )}
 
         {partnersQuery.isSuccess && partnersQuery.data.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl border border-border-soft">
+          <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[640px] text-left text-sm">
               <caption className="sr-only">Lista de aliados comerciales</caption>
-              <thead className="bg-bg-soft text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <thead className="bg-brand-dark-50 text-xs font-semibold uppercase tracking-wide text-brand-dark">
                 <tr>
                   <th scope="col" className="px-4 py-3">
                     Aliado
@@ -107,7 +107,7 @@ export function CrmCompaniesPage() {
               </thead>
               <tbody className="divide-y divide-border-soft">
                 {partnersQuery.data.map((partner) => (
-                  <tr key={partner.id} className="hover:bg-bg-soft/60">
+                  <tr key={partner.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <Link to={`/admin/crm/aliados/${partner.id}`} className="font-medium text-brand-dark hover:underline">
                         {partner.tradeName}
