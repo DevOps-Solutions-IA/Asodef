@@ -19,6 +19,7 @@ import { ReceiptsModule } from "./modules/receipts/receipts.module";
 import { LegalDocumentsModule } from "./modules/legal-documents/legal-documents.module";
 import { ConsentModule } from "./modules/consent/consent.module";
 import { CookieConsentModule } from "./modules/cookie-consent/cookie-consent.module";
+import { DataSubjectRequestsModule } from "./modules/data-subject-requests/data-subject-requests.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { CookieConsentModule } from "./modules/cookie-consent/cookie-consent.mod
     LegalDocumentsModule,
     ConsentModule,
     CookieConsentModule,
+    DataSubjectRequestsModule,
   ],
   controllers: [AppController],
   providers: [],

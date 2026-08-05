@@ -18,10 +18,12 @@ interface RecordAuditBase {
 }
 
 /** Exactly one entity reference per call - matches the audit_logs
- * table's own exactly-one-entity CHECK constraint (US-043). */
+ * table's own exactly-one-entity CHECK constraint (US-043, extended to
+ * a 3rd domain in US-048). */
 export type RecordAuditParams =
-  | (RecordAuditBase & { paymentOrderId: string; legalDocumentVersionId?: never })
-  | (RecordAuditBase & { legalDocumentVersionId: string; paymentOrderId?: never });
+  | (RecordAuditBase & { paymentOrderId: string; legalDocumentVersionId?: never; dataSubjectRequestId?: never })
+  | (RecordAuditBase & { legalDocumentVersionId: string; paymentOrderId?: never; dataSubjectRequestId?: never })
+  | (RecordAuditBase & { dataSubjectRequestId: string; paymentOrderId?: never; legalDocumentVersionId?: never });
 
 /**
  * US-028 (payment domain), generalized in US-043 to also cover the
@@ -39,6 +41,7 @@ export class AuditService {
       data: {
         paymentOrderId: params.paymentOrderId,
         legalDocumentVersionId: params.legalDocumentVersionId,
+        dataSubjectRequestId: params.dataSubjectRequestId,
         actorUserId: params.actorUserId,
         action: params.action,
         previousStatus: params.previousStatus,

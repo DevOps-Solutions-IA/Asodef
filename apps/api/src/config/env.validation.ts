@@ -149,6 +149,11 @@ export const envSchema = z.object({
   LEADS_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
   LEADS_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
 
+  // data-subject-requests (US-048): same rationale/shape as the leads
+  // rate limit above - a public, unauthenticated submission form.
+  DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
+  DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
+
   // payment-orders (US-023): how long a PENDING order stays reusable
   // before create() stops returning it and mints a new one instead. Not
   // specified by the PRD - a reasonable default long enough for a

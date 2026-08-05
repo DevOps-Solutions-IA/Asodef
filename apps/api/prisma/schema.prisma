@@ -61,6 +61,7 @@ model User {
   approvedLegalDocumentVersions LegalDocumentVersion[] @relation("LegalDocumentVersionApprover")
   auditLogActions               AuditLog[]             @relation("AuditLogActor")
   consentRecords                ConsentRecord[]
+  assignedDataSubjectRequests   DataSubjectRequest[]   @relation("DataSubjectRequestAssignee")
 
   @@map("users")
 }
@@ -711,6 +712,8 @@ enum AuditSource {
   POLL
   WEBHOOK
   MANUAL
+  // US-048: the public DSR submission flow, analogous to ORDER_CREATE.
+  REQUEST_CREATE
 
   @@map("audit_source")
 }
@@ -732,6 +735,9 @@ model AuditLog {
   id                     String      @id @default(uuid()) @db.Uuid
   paymentOrderId         String?     @map("payment_order_id") @db.Uuid
   legalDocumentVersionId String?     @map("legal_document_version_id") @db.Uuid
+  // US-048: generalized to a 3rd domain, same "real per-domain FK, not
+  // a polymorphic pair" pattern as the other two.
+  dataSubjectRequestId   String?     @map("data_subject_request_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -751,12 +757,14 @@ model AuditLog {
 
   paymentOrder         PaymentOrder?         @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
   legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)
+  dataSubjectRequest   DataSubjectRequest?   @relation(fields: [dataSubjectRequestId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([paymentOrderId, createdAt])
   @@index([legalDocumentVersionId, createdAt])
+  @@index([dataSubjectRequestId, createdAt])
   @@map("audit_logs")
 }
 
@@ -918,4 +926,71 @@ model ConsentRecord {
   @@index([leadSubmissionId, createdAt])
   @@index([customerId, createdAt])
   @@map("consent_records")
+}
+
+// ---------------------------------------------------------------------------
+// Data-subject-rights requests (US-048)
+//
+// Field list is the PRD's own literal dataModel entry for this entity,
+// verbatim, plus one addition: publicReference. The PRD's field list
+// doesn't include it, but the AC explicitly requires "a tracking
+// reference" returned on submission and used for public, reference-only
+// lookup - exposing the raw internal uuid as that reference would
+// violate this project's own repeated "never expose internal ids
+// publicly when a distinct public identifier exists" rule (see
+// PaymentOrder.publicReference, LegalDocument.slug). identityVerificationStatus
+// is a free string, not an enum - no PRD-confirmed exhaustive value set
+// exists for it (same non-invention rule as LegalDocument.type).
+// ---------------------------------------------------------------------------
+
+enum DataSubjectRequestType {
+  ACCESS
+  CONSULTATION
+  UPDATE
+  CORRECTION
+  DELETION
+  REVOCATION
+  PROOF_OF_AUTHORIZATION
+  DATA_USE_INFORMATION
+  COMPLAINT
+  IDENTITY_VERIFICATION
+  INCIDENT_REPORT
+
+  @@map("data_subject_request_type")
+}
+
+enum DataSubjectRequestStatus {
+  RECEIVED
+  IDENTITY_VERIFICATION
+  IN_REVIEW
+  INFORMATION_REQUIRED
+  RESOLVED
+  REJECTED_WITH_REASON
+  CLOSED
+
+  @@map("data_subject_request_status")
+}
+
+model DataSubjectRequest {
+  id                         String                   @id @default(uuid()) @db.Uuid
+  publicReference            String                   @unique @map("public_reference")
+  type                       DataSubjectRequestType
+  requesterName              String                   @map("requester_name")
+  requesterEmail             String                   @map("requester_email")
+  requesterDocument          String                   @map("requester_document")
+  identityVerificationStatus String?                  @map("identity_verification_status")
+  description                String
+  assignedUserId             String?                  @map("assigned_user_id") @db.Uuid
+  dueDate                    DateTime?                @map("due_date") @db.Timestamptz(3)
+  status                     DataSubjectRequestStatus @default(RECEIVED)
+  resolution                 String?
+  createdAt                  DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  assignedUser User?      @relation("DataSubjectRequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  auditLogs    AuditLog[]
+
+  @@index([status, createdAt])
+  @@index([assignedUserId])
+  @@map("data_subject_requests")
 }
