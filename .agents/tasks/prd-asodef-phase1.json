@@ -2445,8 +2445,8 @@
       "outOfScope": [
         "Cambios de paleta de marca o tipografia fuera de refinamientos ya establecidos en la Fase 2 previa"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "0312a85",
       "notes": "Final story of the extension - gates closing the whole US-068..US-077 arc, mirroring the Fase 2 premium redesign's own final QA section."
     }
   ]
