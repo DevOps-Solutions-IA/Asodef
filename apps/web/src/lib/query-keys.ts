@@ -37,6 +37,10 @@ export const queryKeys = {
     /** GET /legal-documents/:slug (US-043/US-045). */
     detail: (slug: string) => ["legal-documents", "detail", slug] as const,
   },
+  me: {
+    /** GET /me/consent-records (US-071) - always the caller's own. */
+    consentRecords: () => ["me", "consent-records"] as const,
+  },
   admin: {
     users: {
       stats: () => ["admin", "users", "stats"] as const,

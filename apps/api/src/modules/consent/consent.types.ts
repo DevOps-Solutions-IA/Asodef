@@ -80,6 +80,37 @@ type ConsentRecordWithRelations = ConsentRecord & {
   legalDocumentVersion: { version: number } | null;
 };
 
+/**
+ * US-071: self-service "Mis consentimientos" - the titular's own view of
+ * their own consent history. Deliberately narrower than
+ * AdminConsentRecordResponse: no ipAddress/userAgent (not useful to the
+ * titular themselves, and no reason to surface it back to them), no
+ * subjectType/subjectId (always implicitly "me").
+ */
+export interface MyConsentRecordResponse {
+  id: string;
+  purposeKey: string;
+  status: string;
+  policyVersionNumber: number | null;
+  source: string;
+  acceptanceMethod: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+}
+
+export function toMyConsentRecordResponse(record: ConsentRecordWithRelations): MyConsentRecordResponse {
+  return {
+    id: record.id,
+    purposeKey: record.consentPurpose.key,
+    status: record.status,
+    policyVersionNumber: record.legalDocumentVersion?.version ?? null,
+    source: record.source,
+    acceptanceMethod: record.acceptanceMethod,
+    createdAt: record.createdAt,
+    revokedAt: record.revokedAt,
+  };
+}
+
 export function toAdminConsentRecordResponse(record: ConsentRecordWithRelations): AdminConsentRecordResponse {
   const subjectType = record.userId ? "user" : record.leadSubmissionId ? "leadSubmission" : record.customerId ? "customer" : "anonymous";
   const subjectId = record.userId ?? record.leadSubmissionId ?? record.customerId ?? null;

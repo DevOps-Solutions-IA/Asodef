@@ -64,6 +64,7 @@ const SPECIAL_CASED_LEGAL_SLUGS = new Set([DATA_SUBJECT_REQUEST_SLUG, PQR_SLUG])
 // eager: Public is the landing experience itself, and Auth is tiny.
 const PaymentLayout = lazy(() => import("../layouts/PaymentLayout").then((m) => ({ default: m.PaymentLayout })));
 const AccountLayout = lazy(() => import("../layouts/AccountLayout").then((m) => ({ default: m.AccountLayout })));
+const MyAccountPage = lazy(() => import("../pages/account/MyAccountPage").then((m) => ({ default: m.MyAccountPage })));
 const CompanyLayout = lazy(() => import("../layouts/CompanyLayout").then((m) => ({ default: m.CompanyLayout })));
 const AdminLayout = lazy(() => import("../layouts/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LegalLayout = lazy(() => import("../layouts/LegalLayout").then((m) => ({ default: m.LegalLayout })));
@@ -146,7 +147,7 @@ export const routeConfig: RouteObject[] = [
         path: "mi-cuenta",
         element: <AccountLayout />,
         children: [
-          { index: true, element: <RoutePlaceholder title="Mi cuenta" /> },
+          { index: true, element: <MyAccountPage /> },
           { path: "perfil", element: <RoutePlaceholder title="Perfil" /> },
           { path: "pagos", element: <RoutePlaceholder title="Mis pagos" /> },
           { path: "documentos", element: <RoutePlaceholder title="Documentos" /> },

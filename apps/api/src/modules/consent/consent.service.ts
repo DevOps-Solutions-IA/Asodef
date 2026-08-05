@@ -5,8 +5,10 @@ import {
   subjectToRecordFields,
   toAdminConsentRecordResponse,
   toConsentRecordResponse,
+  toMyConsentRecordResponse,
   type AdminConsentRecordResponse,
   type ConsentRecordResponse,
+  type MyConsentRecordResponse,
   type RecordConsentRequestMeta,
   type RecordConsentSubject,
 } from "./consent.types";
@@ -128,6 +130,21 @@ export class ConsentService {
       throw new NotFoundException("El registro de consentimiento no existe.");
     }
     return toAdminConsentRecordResponse(record);
+  }
+
+  /**
+   * US-071: "Mis consentimientos" - always scoped to the given userId,
+   * which callers must derive exclusively from the authenticated
+   * session (never from a request parameter) so one user can never read
+   * another's consent history.
+   */
+  async listForUser(userId: string): Promise<MyConsentRecordResponse[]> {
+    const records = await this.prisma.consentRecord.findMany({
+      where: { userId },
+      include: { consentPurpose: true, legalDocumentVersion: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return records.map(toMyConsentRecordResponse);
   }
 
   async revoke(consentRecordId: string): Promise<ConsentRecordResponse> {
