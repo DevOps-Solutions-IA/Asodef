@@ -58,11 +58,15 @@ model User {
   loginAttempts                 LoginAttempt[]
   securityEvents                SecurityEvent[]
   notificationJobs              NotificationJob[]
-  approvedLegalDocumentVersions LegalDocumentVersion[] @relation("LegalDocumentVersionApprover")
-  auditLogActions               AuditLog[]             @relation("AuditLogActor")
+  approvedLegalDocumentVersions LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
+  auditLogActions               AuditLog[]                 @relation("AuditLogActor")
   consentRecords                ConsentRecord[]
-  assignedDataSubjectRequests   DataSubjectRequest[]   @relation("DataSubjectRequestAssignee")
+  assignedDataSubjectRequests   DataSubjectRequest[]       @relation("DataSubjectRequestAssignee")
   anonymizationLogActions       AnonymizationLog[]
+  assignedProspects             Prospect[]                 @relation("ProspectAssignee")
+  assignedOpportunities         Opportunity[]              @relation("OpportunityAssignee")
+  opportunityStageChanges       OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
+  assignedCommercialActivities  CommercialActivity[]       @relation("CommercialActivityAssignee")
 
   @@map("users")
 }
@@ -400,11 +404,15 @@ model LeadSubmission {
   message         String
   consentAccepted Boolean    @map("consent_accepted")
   status          LeadStatus @default(PENDING)
+  // US-051: set once this lead is promoted into a Prospect via the
+  // admin endpoint - nullable, never set at creation.
+  prospectId      String?    @map("prospect_id") @db.Uuid
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   notification   LeadNotification?
   consentRecords ConsentRecord[]
+  prospect       Prospect?         @relation(fields: [prospectId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@map("lead_submissions")
@@ -570,6 +578,9 @@ model Company {
   sector       String
   status       CompanyStatus @default(ACTIVE)
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  commercialContacts CommercialContact[]
+  opportunities      Opportunity[]
 
   @@map("companies")
 }
@@ -743,6 +754,8 @@ model AuditLog {
   dataSubjectRequestId   String?     @map("data_subject_request_id") @db.Uuid
   // US-050: generalized to a 4th domain, same pattern.
   pqrCaseId              String?     @map("pqr_case_id") @db.Uuid
+  // US-051: generalized to a 5th domain, same pattern.
+  opportunityId          String?     @map("opportunity_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -764,6 +777,7 @@ model AuditLog {
   legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)
   dataSubjectRequest   DataSubjectRequest?   @relation(fields: [dataSubjectRequestId], references: [id], onDelete: Restrict)
   pqrCase              PqrCase?              @relation(fields: [pqrCaseId], references: [id], onDelete: Restrict)
+  opportunity          Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -772,6 +786,7 @@ model AuditLog {
   @@index([legalDocumentVersionId, createdAt])
   @@index([dataSubjectRequestId, createdAt])
   @@index([pqrCaseId, createdAt])
+  @@index([opportunityId, createdAt])
   @@map("audit_logs")
 }
 
@@ -1143,4 +1158,166 @@ model PqrCase {
   @@index([relatedCustomerId])
   @@index([relatedPaymentOrderId])
   @@map("pqr_cases")
+}
+
+// ---------------------------------------------------------------------------
+// CRM core: prospects, commercial contacts, opportunities, pipeline
+// (US-051)
+//
+// Field lists are the PRD's own literal dataModel entries, verbatim.
+// The 14-stage pipeline enum is shared by Prospect.stage and
+// Opportunity.stage (a prospect's own stage is a coarser summary; an
+// opportunity - created once a prospect is being actively pursued -
+// tracks its own stage independently, since one prospect can have more
+// than one opportunity over time, e.g. a renewal cycle).
+//
+// documentOrNit and type have no PRD-given default/derivation rule for
+// lead promotion (LeadSubmission never collects either) - the
+// promotion endpoint requires them as explicit admin input rather than
+// guessing.
+// ---------------------------------------------------------------------------
+
+enum ProspectType {
+  INDIVIDUAL
+  COMPANY
+
+  @@map("prospect_type")
+}
+
+// Verbatim order from the AC - this literal order is also what
+// CrmService's "was this stage change a forward skip" warning logic
+// (US-051's own negative case) walks to detect skipped intermediate
+// stages within the primary funnel (index 0-9); the 4 trailing states
+// (inactive/lost_opportunity/renewal_pending/contract_expired) are
+// side/terminal states reachable from various points, not part of that
+// linear skip-detection walk.
+enum CommercialPipelineStage {
+  NEW_PROSPECT
+  CONTACTED
+  QUALIFIED
+  COMMERCIAL_MEETING
+  PROPOSAL_PREPARATION
+  PROPOSAL_SUBMITTED
+  NEGOTIATION
+  LEGAL_REVIEW
+  CONTRACT_PENDING
+  ACTIVE_PARTNER
+  INACTIVE
+  LOST_OPPORTUNITY
+  RENEWAL_PENDING
+  CONTRACT_EXPIRED
+
+  @@map("commercial_pipeline_stage")
+}
+
+model Prospect {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  type                ProspectType
+  fullNameOrLegalName String                  @map("full_name_or_legal_name")
+  documentOrNit       String                  @map("document_or_nit")
+  sector              String?
+  city                String?
+  source              String?
+  assignedUserId      String?                 @map("assigned_user_id") @db.Uuid
+  stage               CommercialPipelineStage @default(NEW_PROSPECT)
+  estimatedValueCents Int?                    @map("estimated_value_cents")
+  probability         Int?
+  expectedClosingDate DateTime?               @map("expected_closing_date") @db.Timestamptz(3)
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  assignedUser       User?               @relation("ProspectAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  commercialContacts CommercialContact[]
+  opportunities      Opportunity[]
+  promotedLeads      LeadSubmission[]
+
+  @@index([stage])
+  @@index([assignedUserId])
+  @@map("prospects")
+}
+
+model CommercialContact {
+  id         String  @id @default(uuid()) @db.Uuid
+  prospectId String  @map("prospect_id") @db.Uuid
+  companyId  String? @map("company_id") @db.Uuid
+  fullName   String  @map("full_name")
+  role       String?
+  phone      String?
+  email      String?
+  isPrimary  Boolean @default(false) @map("is_primary")
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  company  Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([prospectId])
+  @@map("commercial_contacts")
+}
+
+model Opportunity {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  prospectId          String                  @map("prospect_id") @db.Uuid
+  companyId           String?                 @map("company_id") @db.Uuid
+  assignedUserId      String?                 @map("assigned_user_id") @db.Uuid
+  stage               CommercialPipelineStage @default(NEW_PROSPECT)
+  estimatedValueCents Int?                    @map("estimated_value_cents")
+  proposedBenefit     String?                 @map("proposed_benefit")
+  expectedClosingDate DateTime?               @map("expected_closing_date") @db.Timestamptz(3)
+  probability         Int?
+  wonLostReason       String?                 @map("won_lost_reason")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  prospect      Prospect                   @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  company       Company?                   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  assignedUser  User?                      @relation("OpportunityAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  statusHistory OpportunityStatusHistory[]
+  activities    CommercialActivity[]
+  auditLogs     AuditLog[]
+
+  @@index([stage])
+  @@index([prospectId])
+  @@map("opportunities")
+}
+
+model OpportunityStatusHistory {
+  id              String                   @id @default(uuid()) @db.Uuid
+  opportunityId   String                   @map("opportunity_id") @db.Uuid
+  fromStage       CommercialPipelineStage? @map("from_stage")
+  toStage         CommercialPipelineStage  @map("to_stage")
+  changedByUserId String?                  @map("changed_by_user_id") @db.Uuid
+  note            String?
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  changedByUser User?       @relation("OpportunityStatusChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([opportunityId, createdAt])
+  @@map("opportunity_status_history")
+}
+
+enum CommercialActivityType {
+  CALL
+  MEETING
+  EMAIL
+  TASK
+
+  @@map("commercial_activity_type")
+}
+
+model CommercialActivity {
+  id             String                 @id @default(uuid()) @db.Uuid
+  opportunityId  String                 @map("opportunity_id") @db.Uuid
+  type           CommercialActivityType
+  dueDate        DateTime?              @map("due_date") @db.Timestamptz(3)
+  completedAt    DateTime?              @map("completed_at") @db.Timestamptz(3)
+  assignedUserId String?                @map("assigned_user_id") @db.Uuid
+  note           String?
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  assignedUser User?       @relation("CommercialActivityAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  @@index([opportunityId])
+  @@index([assignedUserId, completedAt])
+  @@map("commercial_activities")
 }
