@@ -154,6 +154,11 @@ export const envSchema = z.object({
   DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
   DATA_SUBJECT_REQUESTS_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
 
+  // pqr-cases (US-050): same rationale/shape as data-subject-requests -
+  // a real 429, never a silent drop, for a formal complaint/petition.
+  PQR_CASES_RATE_LIMIT_IP_MAX: z.coerce.number().int().positive().default(5),
+  PQR_CASES_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce.number().int().positive().default(3600),
+
   // payment-orders (US-023): how long a PENDING order stays reusable
   // before create() stops returning it and mints a new one instead. Not
   // specified by the PRD - a reasonable default long enough for a

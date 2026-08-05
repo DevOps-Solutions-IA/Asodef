@@ -19,11 +19,12 @@ interface RecordAuditBase {
 
 /** Exactly one entity reference per call - matches the audit_logs
  * table's own exactly-one-entity CHECK constraint (US-043, extended to
- * a 3rd domain in US-048). */
+ * a 3rd domain in US-048 and a 4th in US-050). */
 export type RecordAuditParams =
-  | (RecordAuditBase & { paymentOrderId: string; legalDocumentVersionId?: never; dataSubjectRequestId?: never })
-  | (RecordAuditBase & { legalDocumentVersionId: string; paymentOrderId?: never; dataSubjectRequestId?: never })
-  | (RecordAuditBase & { dataSubjectRequestId: string; paymentOrderId?: never; legalDocumentVersionId?: never });
+  | (RecordAuditBase & { paymentOrderId: string; legalDocumentVersionId?: never; dataSubjectRequestId?: never; pqrCaseId?: never })
+  | (RecordAuditBase & { legalDocumentVersionId: string; paymentOrderId?: never; dataSubjectRequestId?: never; pqrCaseId?: never })
+  | (RecordAuditBase & { dataSubjectRequestId: string; paymentOrderId?: never; legalDocumentVersionId?: never; pqrCaseId?: never })
+  | (RecordAuditBase & { pqrCaseId: string; paymentOrderId?: never; legalDocumentVersionId?: never; dataSubjectRequestId?: never });
 
 /**
  * US-028 (payment domain), generalized in US-043 to also cover the
@@ -42,6 +43,7 @@ export class AuditService {
         paymentOrderId: params.paymentOrderId,
         legalDocumentVersionId: params.legalDocumentVersionId,
         dataSubjectRequestId: params.dataSubjectRequestId,
+        pqrCaseId: params.pqrCaseId,
         actorUserId: params.actorUserId,
         action: params.action,
         previousStatus: params.previousStatus,

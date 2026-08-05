@@ -29,13 +29,19 @@ import { ReceiptViewPage } from "../pages/payments/ReceiptViewPage";
 import { LegalCenterPage } from "../pages/legal/LegalCenterPage";
 import { LegalDocumentPage } from "../pages/legal/LegalDocumentPage";
 import { DataSubjectRequestPage } from "../pages/legal/DataSubjectRequestPage";
+import { PqrCasePage } from "../pages/legal/PqrCasePage";
 import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
 
 // US-048: solicitudes-de-datos is a real submission workflow, not a
 // LegalDocument - it never gets the generic LegalDocumentPage treatment
-// the other 11 /legal/* subpages get (US-045 deliberately left it as
+// the other /legal/* subpages get (US-045 deliberately left it as
 // "aún no publicado" until this story built the real thing).
 const DATA_SUBJECT_REQUEST_SLUG = "solicitudes-de-datos";
+// US-050: pqr is a real submission workflow too - its own literal AC
+// names "/legal/pqr public form posts to POST /api/v1/pqr-cases",
+// replacing the generic LegalDocumentPage treatment for this one route.
+const PQR_SLUG = "pqr";
+const SPECIAL_CASED_LEGAL_SLUGS = new Set([DATA_SUBJECT_REQUEST_SLUG, PQR_SLUG]);
 
 // Payment/account/company/admin/legal are never needed on first paint of
 // the public marketing site, so they're code-split - satisfies "no
@@ -222,11 +228,12 @@ export const routeConfig: RouteObject[] = [
     errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <LegalCenterPage /> },
-      ...LEGAL_CATALOG.filter((entry) => entry.slug !== DATA_SUBJECT_REQUEST_SLUG).map((entry) => ({
+      ...LEGAL_CATALOG.filter((entry) => !SPECIAL_CASED_LEGAL_SLUGS.has(entry.slug)).map((entry) => ({
         path: entry.slug,
         element: <LegalDocumentPage slug={entry.slug} title={entry.title} />,
       })),
       { path: DATA_SUBJECT_REQUEST_SLUG, element: <DataSubjectRequestPage /> },
+      { path: PQR_SLUG, element: <PqrCasePage /> },
     ],
   },
   // Alias: the master route map defines the canonical location as

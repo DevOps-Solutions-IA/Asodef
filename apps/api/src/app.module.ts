@@ -21,6 +21,7 @@ import { ConsentModule } from "./modules/consent/consent.module";
 import { CookieConsentModule } from "./modules/cookie-consent/cookie-consent.module";
 import { DataSubjectRequestsModule } from "./modules/data-subject-requests/data-subject-requests.module";
 import { RetentionReviewModule } from "./modules/retention/retention-review.module";
+import { PqrCasesModule } from "./modules/pqr-cases/pqr-cases.module";
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { RetentionReviewModule } from "./modules/retention/retention-review.modu
     CookieConsentModule,
     DataSubjectRequestsModule,
     RetentionReviewModule,
+    PqrCasesModule,
   ],
   controllers: [AppController],
   providers: [],

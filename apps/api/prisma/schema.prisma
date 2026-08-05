@@ -538,6 +538,7 @@ model Customer {
   obligations    Obligation[]
   paymentOrders  PaymentOrder[]
   consentRecords ConsentRecord[]
+  pqrCases       PqrCase[]
 
   // Natural business key: US-021's own Example queries "the seeded demo
   // customer's document number", implying (type, number) uniquely
@@ -625,6 +626,7 @@ model PaymentOrder {
   events     PaymentEvent[]
   receipts   PaymentReceipt[]
   auditLogs  AuditLog[]
+  pqrCases   PqrCase[]
 
   @@index([customerId, status])
   @@index([obligationId])
@@ -739,6 +741,8 @@ model AuditLog {
   // US-048: generalized to a 3rd domain, same "real per-domain FK, not
   // a polymorphic pair" pattern as the other two.
   dataSubjectRequestId   String?     @map("data_subject_request_id") @db.Uuid
+  // US-050: generalized to a 4th domain, same pattern.
+  pqrCaseId              String?     @map("pqr_case_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -759,6 +763,7 @@ model AuditLog {
   paymentOrder         PaymentOrder?         @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
   legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)
   dataSubjectRequest   DataSubjectRequest?   @relation(fields: [dataSubjectRequestId], references: [id], onDelete: Restrict)
+  pqrCase              PqrCase?              @relation(fields: [pqrCaseId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -766,6 +771,7 @@ model AuditLog {
   @@index([paymentOrderId, createdAt])
   @@index([legalDocumentVersionId, createdAt])
   @@index([dataSubjectRequestId, createdAt])
+  @@index([pqrCaseId, createdAt])
   @@map("audit_logs")
 }
 
@@ -1071,4 +1077,70 @@ model AnonymizationLog {
 
   @@index([recordCategory, recordId])
   @@map("anonymization_logs")
+}
+
+// ---------------------------------------------------------------------------
+// PQR case management (US-050)
+//
+// Field list is the PRD's own literal dataModel entry, verbatim, with
+// two deliberate gaps left exactly as the PRD leaves them:
+//
+// - relatedContractId has no @relation - no Contract model exists yet
+//   (a later CRM/contracts story); it's a bare, unconstrained uuid
+//   column for forward compatibility. A future migration adds the real
+//   FK once Contract exists - never guessed at here.
+// - This story's own AC3 says case creation "triggers a CommunicationLog
+//   entry (US-059) acknowledging receipt" - CommunicationLog is defined
+//   by US-059, which itself depends on US-050 (dependsOn: ["US-046",
+//   "US-050"]), so it cannot exist yet. That specific criterion is
+//   BLOCKED, not invented; everything else in this story is real.
+//
+// category is a plain string, not an enum: the PRD's own field
+// description is "P/Q/R/S + incident types" - the 4 base categories
+// (petición/queja/reclamo/sugerencia) are confirmed, but "+ incident
+// types" is an open, unenumerated extension the same non-invention
+// rule applies to (matches LegalDocument.type's own precedent).
+// priority and assignedTeam are plain strings for the same reason - no
+// PRD-confirmed enumerated value sets exist for either.
+// ---------------------------------------------------------------------------
+
+enum PqrCaseStatus {
+  RECEIVED
+  ASSIGNED
+  IN_REVIEW
+  INFORMATION_REQUIRED
+  RESOLVED
+  CLOSED
+  REOPENED
+
+  @@map("pqr_case_status")
+}
+
+model PqrCase {
+  id                    String        @id @default(uuid()) @db.Uuid
+  caseNumber            String        @unique @map("case_number")
+  category              String
+  applicantName         String        @map("applicant_name")
+  applicantContact      String        @map("applicant_contact")
+  relatedCustomerId     String?       @map("related_customer_id") @db.Uuid
+  relatedPaymentOrderId String?       @map("related_payment_order_id") @db.Uuid
+  relatedContractId     String?       @map("related_contract_id") @db.Uuid
+  description           String
+  assignedTeam          String?       @map("assigned_team")
+  priority              String?
+  dueDate               DateTime?     @map("due_date") @db.Timestamptz(3)
+  status                PqrCaseStatus @default(RECEIVED)
+  resolution            String?
+  satisfactionScore     Int?          @map("satisfaction_score")
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  relatedCustomer     Customer?     @relation(fields: [relatedCustomerId], references: [id], onDelete: Restrict)
+  relatedPaymentOrder PaymentOrder? @relation(fields: [relatedPaymentOrderId], references: [id], onDelete: Restrict)
+  auditLogs           AuditLog[]
+
+  @@index([status, createdAt])
+  @@index([relatedCustomerId])
+  @@index([relatedPaymentOrderId])
+  @@map("pqr_cases")
 }
