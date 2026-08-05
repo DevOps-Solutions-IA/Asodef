@@ -206,8 +206,14 @@ export class RefundsService {
     return toAdminRefundResponse(refund);
   }
 
-  async listRefunds(): Promise<AdminRefundResponse[]> {
-    const refunds = await this.prisma.refund.findMany({ orderBy: { createdAt: "desc" } });
+  /** US-063 AC1: /admin/pagos needs a given order's own refunds when
+   * viewing its detail - paymentOrderId stays optional so the existing
+   * unfiltered "list every refund" callers keep working unchanged. */
+  async listRefunds(paymentOrderId?: string): Promise<AdminRefundResponse[]> {
+    const refunds = await this.prisma.refund.findMany({
+      where: paymentOrderId ? { paymentOrderId } : undefined,
+      orderBy: { createdAt: "desc" },
+    });
     return refunds.map(toAdminRefundResponse);
   }
 }

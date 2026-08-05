@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { Obligation, PaymentOrder } from "@prisma/client";
+import type { Obligation, PaymentOrder, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { AuditService, AuditSource } from "../audit/audit.service";
@@ -9,6 +9,13 @@ import { ConsentService } from "../consent/consent.service";
 import type { RequestContext } from "../auth/auth.service";
 import { generatePublicReference } from "./public-reference";
 import { toPrePaymentDisclosureResponse, type PrePaymentDisclosureResponse } from "./plan-disclosure.types";
+import {
+  toAdminPaymentOrderResponse,
+  type AdminPaymentEventResponse,
+  type AdminPaymentOrderListResponse,
+  type AdminPaymentOrderResponse,
+} from "./admin-payment-order.types";
+import type { SearchPaymentOrdersQueryDto } from "./dto/search-payment-orders-query.dto";
 
 const PAYMENT_TERMS_POLICY_SLUG = "terminos-de-pago";
 
@@ -148,6 +155,81 @@ export class PaymentOrdersService {
       where: { publicReference },
       include: { obligation: { select: { concept: true, dueDate: true } } },
     });
+  }
+
+  /** US-063 AC1: "search by document/reference/transaction, status
+   * filtering". A single free-text `search` term matches (partial,
+   * case-insensitive) against publicReference, the customer's own
+   * documentNumber, and either attempt-level reference field - so one
+   * box covers all three literal search targets, whichever one the
+   * staff member actually has on hand. */
+  async search(query: SearchPaymentOrdersQueryDto): Promise<AdminPaymentOrderListResponse> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const where: Prisma.PaymentOrderWhereInput = {};
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.search) {
+      const term = query.search.trim();
+      where.OR = [
+        { publicReference: { contains: term, mode: "insensitive" } },
+        { customer: { documentNumber: { contains: term, mode: "insensitive" } } },
+        { attempts: { some: { providerReferenceId: { contains: term, mode: "insensitive" } } } },
+        { attempts: { some: { transactions: { some: { boldTransactionId: { contains: term, mode: "insensitive" } } } } } },
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      this.prisma.paymentOrder.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, fullName: true, documentType: true, documentNumber: true } },
+          obligation: { select: { concept: true, dueDate: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.paymentOrder.count({ where }),
+    ]);
+
+    return { items: orders.map(toAdminPaymentOrderResponse), total, page, pageSize };
+  }
+
+  async findByIdForAdmin(id: string): Promise<AdminPaymentOrderResponse> {
+    const order = await this.prisma.paymentOrder.findUnique({
+      where: { id },
+      include: {
+        customer: { select: { id: true, fullName: true, documentType: true, documentNumber: true } },
+        obligation: { select: { concept: true, dueDate: true } },
+      },
+    });
+    if (!order) {
+      throw new NotFoundException("No se encontraron resultados.");
+    }
+    return toAdminPaymentOrderResponse(order);
+  }
+
+  /** US-063 AC1: "viewing the full PaymentEvent history for an order". */
+  async listEvents(paymentOrderId: string): Promise<AdminPaymentEventResponse[]> {
+    const order = await this.prisma.paymentOrder.findUnique({ where: { id: paymentOrderId } });
+    if (!order) {
+      throw new NotFoundException("No se encontraron resultados.");
+    }
+    const events = await this.prisma.paymentEvent.findMany({
+      where: { paymentOrderId },
+      orderBy: { receivedAt: "desc" },
+    });
+    return events.map((event) => ({
+      id: event.id,
+      source: event.source,
+      eventType: event.eventType,
+      payload: event.payload,
+      receivedAt: event.receivedAt,
+      processedAt: event.processedAt,
+    }));
   }
 
   /**

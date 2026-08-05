@@ -39,6 +39,12 @@ function mockLoginFlow(user: CurrentUser) {
     if (url.includes("/auth/refresh")) {
       return jsonResponse(401, { statusCode: 401, error: "Unauthorized", message: "No autenticado." });
     }
+    // The /admin/pagos round-trip test below lands on a real page (not a
+    // RoutePlaceholder) that issues a real paginated-list query - the
+    // generic `{}` fallback below doesn't match that shape.
+    if (url.includes("/admin/payment-orders/search")) {
+      return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+    }
     return jsonResponse(200, {});
   });
 

@@ -81,5 +81,15 @@ export const queryKeys = {
       list: (filters: unknown) => ["admin", "pqr", "list", filters] as const,
       detail: (id: string) => ["admin", "pqr", "detail", id] as const,
     },
+    payments: {
+      search: (filters: unknown) => ["admin", "payments", "search", filters] as const,
+      order: (id: string) => ["admin", "payments", "order", id] as const,
+      events: (id: string) => ["admin", "payments", "order", id, "events"] as const,
+      refunds: (id: string) => ["admin", "payments", "order", id, "refunds"] as const,
+    },
+    reconciliation: {
+      runs: () => ["admin", "reconciliation", "runs"] as const,
+      differences: (runId: string) => ["admin", "reconciliation", "runs", runId, "differences"] as const,
+    },
   },
 } as const;

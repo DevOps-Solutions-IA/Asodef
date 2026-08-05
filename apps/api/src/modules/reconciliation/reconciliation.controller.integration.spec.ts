@@ -235,6 +235,9 @@ describe("Reconciliation endpoints (integration, real HTTP)", () => {
       .send({ resolutionNotes: "Confirmado manualmente con el proveedor - se aplicó la transición interna correcta." });
     expect(resolve.status).toBe(200);
     expect(resolve.body.resolutionStatus).toBe("RESOLVED");
+    // US-063 AC2: "resolution workflow (notes, resolved-by, resolved-at)".
+    expect(resolve.body.resolvedByUserId).toBe(finance.user.id);
+    expect(resolve.body.resolvedAt).not.toBeNull();
 
     const firstRunReloaded = await request(app.getHttpServer())
       .get(`/api/v1/admin/reconciliation/runs/${firstRun.body.id}`)

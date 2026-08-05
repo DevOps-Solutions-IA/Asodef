@@ -37,7 +37,7 @@ export class ReconciliationController {
 
   @Post("differences/:id/resolve")
   @HttpCode(HttpStatus.OK)
-  resolveDifference(@Param("id", ParseUUIDPipe) id: string, @Body() dto: ResolveDifferenceDto) {
-    return this.reconciliationService.resolveDifference(id, dto);
+  resolveDifference(@Param("id", ParseUUIDPipe) id: string, @Body() dto: ResolveDifferenceDto, @CurrentUser() actor: RequestUser) {
+    return this.reconciliationService.resolveDifference(id, dto, actor.id);
   }
 }

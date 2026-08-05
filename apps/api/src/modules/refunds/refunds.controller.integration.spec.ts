@@ -303,6 +303,42 @@ describe("Refund endpoints (integration, real HTTP, BOLD_MODE=mock)", () => {
     expect(second.status).toBe(409);
   });
 
+  it("US-063: a CUSTOMER actor (holds payments.read for its own self-service lookup, no row-level scoping) gets 403 on admin list()/get(), not every other customer's refunds", async () => {
+    const { order } = await createApprovedOrder(100_000);
+    const created = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${order.publicReference}/refund`)
+      .set("Cookie", requester.cookies)
+      .send({ amountCents: 30_000, reason: "Prueba de aislamiento por rol" });
+    expect(created.status).toBe(201);
+
+    const list = await request(app.getHttpServer()).get("/api/v1/admin/refunds").set("Cookie", readOnlyActor.cookies);
+    expect(list.status).toBe(403);
+
+    const found = await request(app.getHttpServer()).get(`/api/v1/admin/refunds/${created.body.id}`).set("Cookie", readOnlyActor.cookies);
+    expect(found.status).toBe(403);
+  });
+
+  it("US-063: list() filters by paymentOrderId for /admin/pagos's own order-detail view", async () => {
+    const { order: orderA } = await createApprovedOrder(100_000);
+    const { order: orderB } = await createApprovedOrder(100_000);
+    const refundA = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${orderA.publicReference}/refund`)
+      .set("Cookie", requester.cookies)
+      .send({ amountCents: 20_000, reason: "Reembolso orden A" });
+    await request(app.getHttpServer())
+      .post(`/api/v1/payments/${orderB.publicReference}/refund`)
+      .set("Cookie", requester.cookies)
+      .send({ amountCents: 20_000, reason: "Reembolso orden B" });
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/admin/refunds?paymentOrderId=${orderA.id}`)
+      .set("Cookie", requester.cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0].id).toBe(refundA.body.id);
+  });
+
   it("list()/get() return created refunds for authorized readers", async () => {
     const { order } = await createApprovedOrder(100_000);
     const created = await request(app.getHttpServer())

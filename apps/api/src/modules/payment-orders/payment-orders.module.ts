@@ -3,6 +3,7 @@ import { AuditModule } from "../audit/audit.module";
 import { LegalDocumentsModule } from "../legal-documents/legal-documents.module";
 import { ConsentModule } from "../consent/consent.module";
 import { PaymentOrdersController } from "./payment-orders.controller";
+import { AdminPaymentOrdersController } from "./admin-payment-orders.controller";
 import { PaymentOrdersService } from "./payment-orders.service";
 
 /** US-024 adds the controller; US-023 already shipped the domain
@@ -11,7 +12,7 @@ import { PaymentOrdersService } from "./payment-orders.service";
  * branch, rather than duplicating either. */
 @Module({
   imports: [AuditModule, LegalDocumentsModule, ConsentModule],
-  controllers: [PaymentOrdersController],
+  controllers: [PaymentOrdersController, AdminPaymentOrdersController],
   providers: [PaymentOrdersService],
   exports: [PaymentOrdersService],
 })

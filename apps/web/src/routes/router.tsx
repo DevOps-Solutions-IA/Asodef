@@ -32,6 +32,9 @@ import { AdminLegalPage } from "../pages/admin/legal/AdminLegalPage";
 import { ConsentSearchPage } from "../pages/admin/legal/ConsentSearchPage";
 import { DataSubjectRequestQueuePage } from "../pages/admin/legal/DataSubjectRequestQueuePage";
 import { PqrQueuePage } from "../pages/admin/legal/PqrQueuePage";
+import { AdminPaymentsPage } from "../pages/admin/payments/AdminPaymentsPage";
+import { PaymentOrderDetailPage } from "../pages/admin/payments/PaymentOrderDetailPage";
+import { AdminReconciliationPage } from "../pages/admin/payments/AdminReconciliationPage";
 import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
 import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
@@ -216,11 +219,14 @@ export const routeConfig: RouteObject[] = [
               { path: "planes", element: <RoutePlaceholder title="Planes" /> },
               {
                 element: <PermissionRoute permissions={["payments.read"]} />,
-                children: [{ path: "pagos", element: <RoutePlaceholder title="Pagos" /> }],
+                children: [
+                  { path: "pagos", element: <AdminPaymentsPage /> },
+                  { path: "pagos/:orderId", element: <PaymentOrderDetailPage /> },
+                ],
               },
               {
                 element: <PermissionRoute permissions={["payments.reconcile"]} />,
-                children: [{ path: "conciliacion", element: <RoutePlaceholder title="Conciliación" /> }],
+                children: [{ path: "conciliacion", element: <AdminReconciliationPage /> }],
               },
               {
                 element: <PermissionRoute permissions={["contracts.read"]} />,

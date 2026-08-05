@@ -227,7 +227,7 @@ export class ReconciliationService {
     return differences.map(toAdminReconciliationDifferenceResponse);
   }
 
-  async resolveDifference(id: string, dto: ResolveDifferenceDto): Promise<AdminReconciliationDifferenceResponse> {
+  async resolveDifference(id: string, dto: ResolveDifferenceDto, actorUserId: string): Promise<AdminReconciliationDifferenceResponse> {
     return this.prisma.$transaction(async (tx) => {
       const difference = await tx.reconciliationDifference.findUnique({ where: { id } });
       if (!difference) {
@@ -239,7 +239,12 @@ export class ReconciliationService {
 
       const updated = await tx.reconciliationDifference.update({
         where: { id },
-        data: { resolutionStatus: ReconciliationResolutionStatus.RESOLVED, resolutionNotes: dto.resolutionNotes },
+        data: {
+          resolutionStatus: ReconciliationResolutionStatus.RESOLVED,
+          resolutionNotes: dto.resolutionNotes,
+          resolvedByUserId: actorUserId,
+          resolvedAt: new Date(),
+        },
       });
 
       const remainingOpen = await tx.reconciliationDifference.count({

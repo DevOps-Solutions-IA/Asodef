@@ -71,6 +71,7 @@ model User {
   issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
   approvedRefunds               Refund[]                   @relation("RefundApprover")
   reconciliationRuns            Reconciliation[]
+  resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
   approvedApprovalGates         ApprovalGate[]
 
   @@map("users")
@@ -1728,10 +1729,21 @@ model ReconciliationDifference {
   details          Json
   resolutionStatus ReconciliationResolutionStatus @default(OPEN) @map("resolution_status")
   resolutionNotes  String?                        @map("resolution_notes")
+  // US-063 AC2: "a resolution workflow (notes, resolved-by, resolved-
+  // at)" - US-057 shipped resolutionNotes but never these two; added
+  // here as a forward-only migration, not a rewrite of that one.
+  // resolvedByUserId is SetNull (not Restrict) since it's an audit
+  // convenience field, not immutable financial evidence the way e.g.
+  // Refund.approvedByUserId is - resolutionNotes/resolutionStatus
+  // remain the durable record even if the resolving user is later
+  // deleted.
+  resolvedByUserId String?                        @map("resolved_by_user_id") @db.Uuid
+  resolvedAt       DateTime?                      @map("resolved_at") @db.Timestamptz(3)
   createdAt        DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
 
   reconciliation Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Restrict)
   paymentOrder   PaymentOrder?  @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  resolvedByUser User?          @relation("ReconciliationDifferenceResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
 
   // Same-issue de-duplication: at most one difference of a given kind
   // per order may exist at a time (Negative case AC - re-running

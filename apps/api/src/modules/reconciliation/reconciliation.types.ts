@@ -34,6 +34,8 @@ export interface AdminReconciliationDifferenceResponse {
   details: unknown;
   resolutionStatus: string;
   resolutionNotes: string | null;
+  resolvedByUserId: string | null;
+  resolvedAt: Date | null;
   createdAt: Date;
 }
 
@@ -46,6 +48,8 @@ export function toAdminReconciliationDifferenceResponse(difference: Reconciliati
     details: difference.details,
     resolutionStatus: difference.resolutionStatus,
     resolutionNotes: difference.resolutionNotes,
+    resolvedByUserId: difference.resolvedByUserId,
+    resolvedAt: difference.resolvedAt,
     createdAt: difference.createdAt,
   };
 }
