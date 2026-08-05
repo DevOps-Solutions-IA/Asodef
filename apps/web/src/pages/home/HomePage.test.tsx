@@ -162,7 +162,7 @@ describe("HomePage - approved TrustBar and About copy (US-013)", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Quiénes somos" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Somos una asociación comprometida con el bienestar y el desarrollo de las familias. Trabajamos con cercanía, responsabilidad y vocación de servicio, acompañando a personas y organizaciones mediante soluciones orientadas a sus necesidades.",
+        "En ASODEF creemos que proteger a las familias va más allá de ofrecer un servicio; significa crear oportunidades, generar tranquilidad y construir alianzas que mejoren la calidad de vida de miles de personas.",
       ),
     ).toBeInTheDocument();
   });
@@ -180,21 +180,21 @@ describe("HomePage - approved TrustBar and About copy (US-013)", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Nuestra historia" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "ASODEF nace con el propósito de acompañar a las familias y contribuir a su bienestar mediante una gestión cercana, humana y responsable.",
+        "ASODEF S.A.S. es una organización con más de 20 años de trayectoria, cuyos orígenes se remontan al Fondo de Empleados de Emssanar. En el año 2012 evolucionó a ASODEF S.A.S., fortaleciendo su modelo de atención y ampliando su cobertura a nivel nacional. Hoy trabajamos desde nuestra sede principal en Cali, con presencia en todo el país, ofreciendo soluciones de protección familiar, bienestar y una red de convenios estratégicos que generan beneficios reales para nuestros afiliados.",
       ),
     ).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { level: 3, name: "Nuestra misión" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Brindar atención y soluciones que aporten al bienestar de las personas, las familias y las organizaciones, actuando con compromiso, respeto y transparencia.",
+        "Brindar bienestar, protección y beneficios a las familias colombianas mediante soluciones integrales, planes de protección y una sólida red de convenios con empresas aliadas, generando ahorro, confianza y tranquilidad con un servicio humano y de calidad.",
       ),
     ).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { level: 3, name: "Nuestra visión" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Ser una organización reconocida por su cercanía, confianza y capacidad de generar valor para las familias y las comunidades que acompaña.",
+        "Ser la red de beneficios familiares más reconocida de Colombia, consolidando alianzas estratégicas que generen valor para nuestros afiliados y para las empresas que confían en ASODEF como un aliado para su crecimiento.",
       ),
     ).toBeInTheDocument();
   });
@@ -234,8 +234,8 @@ describe("HomePage - approved CompanyBenefits and BenefitPortfolio copy (US-015)
     renderHomePage();
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 2, name: "Soluciones que aportan bienestar y valor" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Alternativas pensadas para cada necesidad" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "¿Por qué hacer una alianza con ASODEF?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Nuestro portafolio de beneficios" })).toBeInTheDocument();
   });
 
   it("anchors CompanyBenefits at #beneficios and BenefitPortfolio at #portafolio", () => {
@@ -251,20 +251,20 @@ describe("HomePage - approved CompanyBenefits and BenefitPortfolio copy (US-015)
     const benefits = within(container.querySelector("section#beneficios")!);
 
     for (const title of [
-      "Atención cercana",
-      "Soluciones flexibles",
-      "Bienestar familiar",
-      "Gestión responsable",
-      "Acompañamiento continuo",
-      "Relaciones de confianza",
+      "Mayor visibilidad",
+      "Nuevos clientes",
+      "Difusión permanente",
+      "Alianza estratégica",
+      "Mayor fidelización",
+      "Posicionamiento de marca",
     ]) {
       expect(benefits.getByRole("heading", { level: 3, name: title })).toBeInTheDocument();
     }
     expect(
-      benefits.getByText("Brindamos orientación clara y acompañamiento humano durante cada etapa del servicio."),
+      benefits.getByText("Promocionamos su empresa entre nuestros afiliados mediante campañas digitales y comunicación directa."),
     ).toBeInTheDocument();
     expect(
-      benefits.getByText("Construimos vínculos basados en el cumplimiento, la comunicación y el respeto mutuo."),
+      benefits.getByText("Su empresa fortalece su reconocimiento al asociarse con una organización con más de 20 años de trayectoria."),
     ).toBeInTheDocument();
   });
 
@@ -274,14 +274,14 @@ describe("HomePage - approved CompanyBenefits and BenefitPortfolio copy (US-015)
     const portfolio = within(container.querySelector("section#portafolio")!);
 
     const categories = [
-      "Bienestar personal",
-      "Bienestar familiar",
-      "Educación y desarrollo",
-      "Hogar y protección",
-      "Recreación y experiencias",
-      "Orientación y acompañamiento",
-      "Soluciones para empresas",
-      "Servicios complementarios",
+      "Plan Exequial Familiar",
+      "Seguro de Vida",
+      "Asesoría Jurídica",
+      "Movilidad",
+      "Salud y Bienestar",
+      "Educación",
+      "Convenios Comerciales",
+      "Nuevos Convenios",
     ];
 
     for (const title of categories) {
@@ -324,7 +324,7 @@ describe("HomePage - approved Coverage and Alliance CTA copy (US-016)", () => {
     renderHomePage();
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 2, name: "Desde Cali, trabajamos cerca de ti" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Cobertura nacional" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Conviértete en aliado de ASODEF" })).toBeInTheDocument();
   });
 
@@ -342,7 +342,7 @@ describe("HomePage - approved Coverage and Alliance CTA copy (US-016)", () => {
 
     expect(coverage.getByRole("heading", { level: 3, name: "Sede principal" })).toBeInTheDocument();
     expect(coverage.getByRole("heading", { level: 3, name: "Acompañamiento institucional" })).toBeInTheDocument();
-    expect(coverage.getByText(/sede principal se encuentra en Cali/i)).toBeInTheDocument();
+    expect(coverage.getByText(/Cali es nuestra sede principal/i)).toBeInTheDocument();
 
     for (const otherCity of ["Bogotá", "Medellín", "Barranquilla"]) {
       expect(coverage.queryByText(otherCity)).not.toBeInTheDocument();

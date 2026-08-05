@@ -4,6 +4,7 @@ import { ASODEF_COMPANY } from "@asodef/config";
 import { Drawer, IconButton } from "@asodef/ui";
 import { Menu } from "lucide-react";
 import { useCookieConsent } from "../lib/cookie-consent/cookie-consent-context";
+import { BrandLogo } from "./shared/BrandLogo";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 import { useScrollToHash } from "./shared/useScrollToHash";
@@ -15,16 +16,26 @@ import { WhatsAppFloatingButton } from "./shared/WhatsAppFloatingButton";
  * update once real, sourced figures became available, so the section
  * it points to (#cifras, StatisticsSection on the homepage) is real,
  * not empty/nonexistent.
+ *
+ * Public-frontend correction: "Quiénes somos"/"Beneficios"/"Portafolio"/
+ * "Cobertura"/"Contacto" now use the same /#anchor pattern as "Cifras",
+ * not a separate route - each of these already has a real, fully-built
+ * section on HomePage with a matching id (AboutSection/CompanyBenefits/
+ * BenefitPortfolio/CoverageSection/ContactSection). They were
+ * incorrectly wired as separate route links, which resolved to
+ * long-orphaned RoutePlaceholder stubs instead of the real content -
+ * a nav-composition bug, not missing content. router.tsx now redirects
+ * those bare paths back to these same anchors for direct visits/refreshes.
  */
 const NAV_LINKS = [
   { to: "/", label: "Inicio" },
-  { to: "/quienes-somos", label: "Quiénes somos" },
-  { to: "/beneficios", label: "Beneficios" },
-  { to: "/portafolio", label: "Portafolio" },
+  { to: "/#quienes-somos", label: "Quiénes somos" },
+  { to: "/#beneficios", label: "Beneficios" },
+  { to: "/#portafolio", label: "Portafolio" },
   { to: "/#cifras", label: "Cifras" },
-  { to: "/cobertura", label: "Cobertura" },
+  { to: "/#cobertura", label: "Cobertura" },
   { to: "/pagos", label: "Pagos" },
-  { to: "/contacto", label: "Contacto" },
+  { to: "/#contacto", label: "Contacto" },
 ];
 
 // US-018: verbatim from the approved acceptance criteria.
@@ -68,10 +79,13 @@ export function PublicLayout() {
   }, []);
 
   // Close on route selection (AC, verbatim) - also covers browser
-  // back/forward while the drawer happens to be open.
+  // back/forward while the drawer happens to be open. Keyed on hash too:
+  // "Quiénes somos"/"Beneficios"/"Portafolio"/"Cifras"/"Cobertura"/
+  // "Contacto" are same-page /#anchor links (nav-composition fix), so
+  // activating one from "/" changes only the hash, not the pathname.
   useEffect(() => {
     setDrawerOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.hash]);
 
   function closeDrawer() {
     setDrawerOpen(false);
@@ -92,8 +106,8 @@ export function PublicLayout() {
         }
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-12">
-          <Link to="/" className="font-display text-lg font-semibold text-brand-dark">
-            {ASODEF_COMPANY.legalName}
+          <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
+            <BrandLogo className="h-9 w-auto sm:h-10" />
           </Link>
 
           <nav aria-label="Principal" className="hidden sm:block">
@@ -119,6 +133,7 @@ export function PublicLayout() {
       </header>
 
       <Drawer open={drawerOpen} onClose={closeDrawer} title="Menú" side="right">
+        <BrandLogo className="mb-4 h-8 w-auto" />
         <nav aria-label="Principal (móvil)">
           <ul className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
@@ -155,8 +170,15 @@ export function PublicLayout() {
       <footer className="border-t border-border-soft bg-brand-deep text-white">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 text-sm sm:px-8 md:grid-cols-3 lg:px-12">
           <div>
-            <p className="font-display text-lg font-semibold">{ASODEF_COMPANY.legalName}</p>
-            <p className="mt-1 text-white/70">{ASODEF_COMPANY.tagline}</p>
+            {/* The interim logo asset has a flat white background (no
+                alpha - see BrandLogo's own doc comment), so it needs a
+                light backdrop of its own against this dark footer rather
+                than a color filter, which would misrender it. */}
+            <div className="inline-block rounded-lg bg-white px-3 py-2">
+              {/* "full" variant already includes the tagline baked into
+                  the image - no separate <p> needed alongside it. */}
+              <BrandLogo variant="full" className="h-14 w-auto" />
+            </div>
           </div>
 
           <nav aria-label="Pie de página">

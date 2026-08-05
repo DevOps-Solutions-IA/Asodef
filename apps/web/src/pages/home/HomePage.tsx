@@ -1,4 +1,4 @@
-import { Heart, Users, GraduationCap, House, Palmtree, MessageCircle, Building2, Grid2X2Plus } from "lucide-react";
+import { ShieldCheck, Heart, Scale, Car, HeartPulse, GraduationCap, ShoppingCart, Handshake } from "lucide-react";
 import { useContent } from "../../lib/content/useContent";
 import { Hero } from "./Hero";
 import { TrustBar } from "./TrustBar";
@@ -83,19 +83,19 @@ export function HomePage() {
       <AboutSection
         eyebrow="Conoce a ASODEF"
         heading="Quiénes somos"
-        description="Somos una asociación comprometida con el bienestar y el desarrollo de las familias. Trabajamos con cercanía, responsabilidad y vocación de servicio, acompañando a personas y organizaciones mediante soluciones orientadas a sus necesidades."
+        description="En ASODEF creemos que proteger a las familias va más allá de ofrecer un servicio; significa crear oportunidades, generar tranquilidad y construir alianzas que mejoren la calidad de vida de miles de personas."
         cards={[
           {
             title: "Nuestra historia",
-            body: "ASODEF nace con el propósito de acompañar a las familias y contribuir a su bienestar mediante una gestión cercana, humana y responsable.",
+            body: "ASODEF S.A.S. es una organización con más de 20 años de trayectoria, cuyos orígenes se remontan al Fondo de Empleados de Emssanar. En el año 2012 evolucionó a ASODEF S.A.S., fortaleciendo su modelo de atención y ampliando su cobertura a nivel nacional. Hoy trabajamos desde nuestra sede principal en Cali, con presencia en todo el país, ofreciendo soluciones de protección familiar, bienestar y una red de convenios estratégicos que generan beneficios reales para nuestros afiliados.",
           },
           {
             title: "Nuestra misión",
-            body: "Brindar atención y soluciones que aporten al bienestar de las personas, las familias y las organizaciones, actuando con compromiso, respeto y transparencia.",
+            body: "Brindar bienestar, protección y beneficios a las familias colombianas mediante soluciones integrales, planes de protección y una sólida red de convenios con empresas aliadas, generando ahorro, confianza y tranquilidad con un servicio humano y de calidad.",
           },
           {
             title: "Nuestra visión",
-            body: "Ser una organización reconocida por su cercanía, confianza y capacidad de generar valor para las familias y las comunidades que acompaña.",
+            body: "Ser la red de beneficios familiares más reconocida de Colombia, consolidando alianzas estratégicas que generen valor para nuestros afiliados y para las empresas que confían en ASODEF como un aliado para su crecimiento.",
           },
         ]}
       />
@@ -117,46 +117,86 @@ export function HomePage() {
 
       <CompanyBenefits
         eyebrow="Beneficios para tu organización"
-        heading="Soluciones que aportan bienestar y valor"
-        description="Acompañamos a las organizaciones con una propuesta cercana, flexible y orientada al bienestar de sus colaboradores y sus familias."
+        heading="¿Por qué hacer una alianza con ASODEF?"
+        description="Conectamos su empresa con miles de familias que buscan beneficios reales."
         cards={[
-          { title: "Atención cercana", body: "Brindamos orientación clara y acompañamiento humano durante cada etapa del servicio." },
-          { title: "Soluciones flexibles", body: "Adaptamos nuestra atención a las necesidades y características de cada organización." },
-          { title: "Bienestar familiar", body: "Promovemos alternativas orientadas al bienestar de los colaboradores y sus familias." },
-          { title: "Gestión responsable", body: "Desarrollamos procesos con respeto, transparencia y cuidado de la información." },
-          { title: "Acompañamiento continuo", body: "Mantenemos canales de atención para orientar, resolver inquietudes y facilitar el acceso a los servicios." },
-          { title: "Relaciones de confianza", body: "Construimos vínculos basados en el cumplimiento, la comunicación y el respeto mutuo." },
+          { title: "Mayor visibilidad", body: "Promocionamos su empresa entre nuestros afiliados mediante campañas digitales y comunicación directa." },
+          { title: "Nuevos clientes", body: "Su negocio accede a una comunidad de más de 54.000 beneficiarios y sus familias." },
+          { title: "Difusión permanente", body: "Promoción a través de WhatsApp, redes sociales, material institucional y asesores comerciales." },
+          { title: "Alianza estratégica", body: "Construimos relaciones de largo plazo basadas en beneficios mutuos y en la confianza." },
+          { title: "Mayor fidelización", body: "Los afiliados prefieren utilizar los establecimientos que hacen parte de nuestra red de aliados." },
+          { title: "Posicionamiento de marca", body: "Su empresa fortalece su reconocimiento al asociarse con una organización con más de 20 años de trayectoria." },
         ]}
       />
 
       <BenefitPortfolio
         eyebrow="Nuestro portafolio"
-        heading="Alternativas pensadas para cada necesidad"
-        description="Conoce las categorías que conforman nuestro portafolio institucional y encuentra opciones orientadas al bienestar de las personas, las familias y las organizaciones."
+        heading="Nuestro portafolio de beneficios"
+        description="Soluciones que generan bienestar, protección y ahorro para miles de familias colombianas."
         categories={[
-          { title: "Bienestar personal", description: "Alternativas orientadas al cuidado, la tranquilidad y la calidad de vida.", icon: Heart, linkHref: "#contacto" },
-          { title: "Bienestar familiar", description: "Servicios pensados para acompañar las necesidades de las familias.", icon: Users, linkHref: "#contacto" },
-          { title: "Educación y desarrollo", description: "Opciones que apoyan el aprendizaje, la formación y el crecimiento personal.", icon: GraduationCap, linkHref: "#contacto" },
-          { title: "Hogar y protección", description: "Alternativas para contribuir al cuidado y la organización del entorno familiar.", icon: House, linkHref: "#contacto" },
-          { title: "Recreación y experiencias", description: "Opciones para compartir, descansar y disfrutar momentos de bienestar.", icon: Palmtree, linkHref: "#contacto" },
-          { title: "Orientación y acompañamiento", description: "Canales de apoyo para resolver inquietudes y facilitar el acceso a los servicios.", icon: MessageCircle, linkHref: "#contacto" },
-          { title: "Soluciones para empresas", description: "Propuestas dirigidas a organizaciones interesadas en fortalecer el bienestar de sus equipos.", icon: Building2, linkHref: "#contacto" },
-          { title: "Servicios complementarios", description: "Alternativas adicionales que amplían las posibilidades de atención y acompañamiento.", icon: Grid2X2Plus, linkHref: "#contacto" },
+          {
+            title: "Plan Exequial Familiar",
+            description: "Cobertura para el titular y su grupo familiar. Acompañamiento y asistencia integral en los momentos más difíciles.",
+            icon: ShieldCheck,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Seguro de Vida",
+            description: "Protección económica para su familia. Tranquilidad hoy, respaldo siempre.",
+            icon: Heart,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Asesoría Jurídica",
+            description: "Orientación profesional en diferentes áreas del derecho. Acompañamiento legal con tarifas preferenciales.",
+            icon: Scale,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Movilidad",
+            description: "Descuentos en CDA. Beneficios en repuestos, accesorios y servicios para su vehículo.",
+            icon: Car,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Salud y Bienestar",
+            description: "Red de farmacias. Imágenes diagnósticas con descuentos. Ópticas y salud visual.",
+            icon: HeartPulse,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Educación",
+            description: "Papelería y útiles escolares. Convenios educativos. Apoyo al desarrollo académico.",
+            icon: GraduationCap,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Convenios Comerciales",
+            description: "Descuentos exclusivos en comercios aliados. Beneficios permanentes para el titular y su grupo familiar.",
+            icon: ShoppingCart,
+            linkHref: "#contacto",
+          },
+          {
+            title: "Nuevos Convenios",
+            description: "Veterinarias, supermercados, restaurantes, gimnasios, turismo y más.",
+            icon: Handshake,
+            linkHref: "#contacto",
+          },
         ]}
       />
 
       <CoverageSection
         eyebrow="Presencia y acompañamiento"
-        heading="Desde Cali, trabajamos cerca de ti"
-        description="ASODEF tiene su sede principal en Cali y orienta su atención con cercanía, responsabilidad y vocación de servicio."
+        heading="Cobertura nacional"
+        description="Estamos presentes en todo el país, a través de una red de aliados, asesores y canales de atención, para estar siempre cerca de nuestros afiliados."
         cards={[
           {
             title: "Sede principal",
-            body: "Nuestra sede principal se encuentra en Cali, desde donde coordinamos la atención y el acompañamiento institucional.",
+            body: "Cali es nuestra sede principal, desde donde coordinamos la atención y el acompañamiento institucional a nivel nacional.",
           },
           {
-            title: "Atención cercana",
-            body: "Orientamos a personas, familias y organizaciones mediante canales de atención claros, humanos y responsables.",
+            title: "Red de aliados",
+            body: "Una red de aliados que crece día a día para ofrecer más beneficios y ahorro a nuestros afiliados en todo el país.",
           },
           {
             title: "Acompañamiento institucional",

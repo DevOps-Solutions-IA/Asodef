@@ -80,12 +80,26 @@ export const routeConfig: RouteObject[] = [
     errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: "quienes-somos", element: <RoutePlaceholder title="Quiénes somos" /> },
-      { path: "beneficios", element: <RoutePlaceholder title="Beneficios" /> },
-      { path: "portafolio", element: <RoutePlaceholder title="Portafolio" /> },
-      { path: "cobertura", element: <RoutePlaceholder title="Cobertura" /> },
+      // Real content for each of these 5 topics already exists as an
+      // anchor section on HomePage (AboutSection id="quienes-somos",
+      // CompanyBenefits id="beneficios", BenefitPortfolio id="portafolio",
+      // CoverageSection id="cobertura", ContactSection id="contacto" -
+      // US-013/US-015/US-016/US-018). These were separate RoutePlaceholder
+      // stubs left over from initial scaffolding and never wired to that
+      // real content - a genuine nav-composition bug: PublicLayout's own
+      // nav already used the correct /#cifras anchor-link pattern for
+      // "Cifras" but linked these 5 as separate routes instead. Redirect
+      // (never duplicate the content) so a direct visit, bookmark, or
+      // refresh on any of these paths still lands on the real section.
+      { path: "quienes-somos", element: <Navigate to="/#quienes-somos" replace /> },
+      { path: "beneficios", element: <Navigate to="/#beneficios" replace /> },
+      { path: "portafolio", element: <Navigate to="/#portafolio" replace /> },
+      { path: "cobertura", element: <Navigate to="/#cobertura" replace /> },
+      // No PRD story defines a public "empresas" page (only the admin CRM
+      // "empresas" section and the /empresa self-service portal exist) -
+      // left as an honest, deliberate, unlinked placeholder, not invented.
       { path: "empresas", element: <RoutePlaceholder title="Empresas" /> },
-      { path: "contacto", element: <RoutePlaceholder title="Contacto" /> },
+      { path: "contacto", element: <Navigate to="/#contacto" replace /> },
       // Global catch-all: React Router ranks routes by specificity across
       // the whole tree, so this only matches when nothing more specific
       // (admin/, mi-cuenta/, empresa/, legal/, pagos/, auth routes) does.

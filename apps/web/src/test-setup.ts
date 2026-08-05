@@ -62,3 +62,12 @@ if (typeof globalThis.IntersectionObserver === "undefined") {
 
   globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
 }
+
+// jsdom has no scrollIntoView - needed by useScrollToHash, which runs for
+// real on any route render that lands on a hash matching an on-page
+// section id (e.g. the public marketing routes redirecting to /#anchor).
+// A no-op stub is enough: tests assert on rendered content, not on actual
+// scroll position.
+if (typeof Element !== "undefined" && typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = () => {};
+}

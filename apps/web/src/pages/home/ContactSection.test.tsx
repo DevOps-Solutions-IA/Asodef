@@ -10,6 +10,31 @@ function jsonResponse(status: number, body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
 }
 
+const PUBLISHED_POLICY_RESPONSE = {
+  slug: "tratamiento-de-datos",
+  type: "PRIVACY_POLICY",
+  title: "Tratamiento de datos",
+  version: 1,
+  content: { sections: [] },
+  effectiveDate: null,
+  publicationDate: "2026-01-01T00:00:00.000Z",
+};
+
+/** Every test in this file renders a form that proactively checks the
+ * tratamiento-de-datos publication status on mount (see ContactSection's
+ * own doc comment) - this stubs that call as "published" by default so
+ * tests unrelated to that gate can still exercise the form, while
+ * `otherHandler` still gets a say in every other URL. */
+function fetchMockWithPublishedPolicy(otherHandler: (input: RequestInfo | URL) => Promise<Response>) {
+  return vi.fn((input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/legal-documents/")) {
+      return jsonResponse(200, PUBLISHED_POLICY_RESPONSE);
+    }
+    return otherHandler(input);
+  });
+}
+
 /** Required-field labels render with a trailing "*" (see packages/ui's
  * Label component), so exact text matching fails - same pattern already
  * used by ResetPasswordPage.test.tsx. */
@@ -47,6 +72,7 @@ describe("ContactSection", () => {
   });
 
   it("renders nothing when no heading is supplied - never invents institutional copy", () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     const queryClient = createQueryClient();
     const { container } = render(
       <QueryClientProvider client={queryClient}>
@@ -59,17 +85,20 @@ describe("ContactSection", () => {
   });
 
   it("anchors the section at #contacto", () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     const { container } = renderContactSection();
     expect(container.querySelector("section#contacto")).toBeInTheDocument();
   });
 
   it("renders the heading as an h2, never a page-level h1", () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     renderContactSection();
     expect(screen.getByRole("heading", { level: 2, name: "Contáctanos" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
   });
 
   it("renders all required fields plus the consent checkbox", () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     renderContactSection();
     for (const label of ["Nombre completo", "Empresa", "Cargo", "Ciudad", "Teléfono / WhatsApp", "Correo electrónico", "Sector", "Mensaje"]) {
       expect(field(label)).toBeInTheDocument();
@@ -82,7 +111,7 @@ describe("ContactSection", () => {
   });
 
   it("shows inline validation errors when submitted empty, without calling the API", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call")));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     renderContactSection();
@@ -91,11 +120,11 @@ describe("ContactSection", () => {
 
     expect(await screen.findByText("El nombre completo es requerido.")).toBeInTheDocument();
     expect(screen.getByText("Debes aceptar el tratamiento de datos para continuar.")).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([input]) => (typeof input === "string" ? input : input.toString()).includes("/leads"))).toBe(false);
   });
 
   it("Negative case (AC): does not submit when every other field is valid but consentAccepted is false", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call")));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     renderContactSection();
@@ -116,10 +145,11 @@ describe("ContactSection", () => {
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
 
     expect(await screen.findByText("Debes aceptar el tratamiento de datos para continuar.")).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([input]) => (typeof input === "string" ? input : input.toString()).includes("/leads"))).toBe(false);
   });
 
   it("shows an inline error for an invalid email format", async () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     const user = userEvent.setup();
     renderContactSection();
 
@@ -205,9 +235,41 @@ describe("ContactSection", () => {
   });
 
   it("includes a visually-hidden honeypot field never exposed to assistive tech", () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
     const { container } = renderContactSection();
     const honeypotWrapper = container.querySelector('[aria-hidden="true"] input[type="text"]');
     expect(honeypotWrapper).toBeInTheDocument();
     expect(honeypotWrapper).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("always renders the institutional contact channels (WhatsApp, email, office), regardless of form availability", async () => {
+    vi.stubGlobal("fetch", fetchMockWithPublishedPolicy(() => Promise.reject(new Error("unexpected fetch call"))));
+    renderContactSection();
+
+    expect(screen.getByText("Juan Pablo Filigrana")).toBeInTheDocument();
+    expect(screen.getByText("Director Comercial")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /WhatsApp 323 273 3927/ })).toHaveAttribute("href", "https://wa.me/573232733927");
+    expect(screen.getByRole("link", { name: "info@asodef.com.co" })).toHaveAttribute("href", "mailto:info@asodef.com.co");
+  });
+
+  it("Negative case (AC): when tratamiento-de-datos remains unpublished (DRAFT), shows a controlled unavailable state instead of the form, without hiding the rest of the page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/legal-documents/")) {
+          return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No se encontraron resultados." });
+        }
+        return Promise.reject(new Error("unexpected fetch call"));
+      }),
+    );
+    renderContactSection();
+
+    expect(await screen.findByText("Formulario no disponible por ahora")).toBeInTheDocument();
+    // The heading, description and contact channels still render - the
+    // page is never left blank just because the form itself is gated.
+    expect(screen.getByRole("heading", { level: 2, name: "Contáctanos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /WhatsApp 323 273 3927/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enviar mensaje" })).not.toBeInTheDocument();
   });
 });

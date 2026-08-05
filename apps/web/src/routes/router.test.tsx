@@ -74,12 +74,44 @@ describe("router", () => {
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
+  // Public-frontend correction: these 5 bare paths were reported blank -
+  // they were never missing content, they were long-orphaned
+  // RoutePlaceholder stubs left registered after the real sections moved
+  // onto the homepage as /#anchor targets (US-012 through US-018). Each
+  // now redirects to its real anchor; a direct visit/bookmark/refresh
+  // must land on substantive content, not a blank placeholder, and must
+  // not trip RouteErrorBoundary (a real regression this correction found
+  // and fixed - see useScrollToHash's own jsdom scrollIntoView note).
+  it.each([
+    ["/quienes-somos", "Quiénes somos"],
+    ["/beneficios", "¿Por qué hacer una alianza con ASODEF?"],
+    ["/portafolio", "Nuestro portafolio de beneficios"],
+    ["/cobertura", "Cobertura nacional"],
+    ["/contacto", "Contáctanos"],
+  ])("redirects the bare path %s to its real /#anchor content, with no runtime exception", (path, expectedHeading) => {
+    renderAtPath(path);
+    expect(screen.getByRole("heading", { name: expectedHeading })).toBeInTheDocument();
+    expect(screen.queryByText("Servicio no disponible")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
+    expect(screen.getByRole("contentinfo")).toBeInTheDocument();
+  });
+
+  it("still renders /empresas as an honest, deliberate placeholder (no PRD story requires a public empresas page)", () => {
+    renderAtPath("/empresas");
+    expect(screen.getByRole("heading", { name: "Empresas" })).toBeInTheDocument();
+    expect(screen.getByText("Esta sección se implementará en una historia posterior.")).toBeInTheDocument();
+    expect(screen.queryByText("Servicio no disponible")).not.toBeInTheDocument();
+  });
+
   it("renders AuthLayout (no marketing nav/footer) for /iniciar-sesion when unauthenticated", async () => {
     renderAtPath("/iniciar-sesion");
 
     expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
+    // Public-frontend correction, Section 4: the official logo above the
+    // login card, not the old plain-text company name.
+    expect(screen.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
   });
 
   it("redirects an already-authenticated visitor away from /iniciar-sesion (GuestOnlyRoute)", async () => {

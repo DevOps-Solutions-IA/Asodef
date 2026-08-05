@@ -28,10 +28,7 @@ function renderPublicLayout(initialEntries: string[] = ["/"]) {
       {
         path: "/",
         element: <PublicLayout />,
-        children: [
-          { index: true, element: <div>Contenido de la página</div> },
-          { path: "beneficios", element: <div>Contenido de beneficios</div> },
-        ],
+        children: [{ index: true, element: <div id="beneficios">Contenido de la página</div> }],
       },
     ],
     { initialEntries },
@@ -55,6 +52,27 @@ describe("PublicLayout", () => {
 
   afterEach(() => {
     localStorage.clear();
+  });
+
+  it("renders the official ASODEF logo in the desktop navbar and footer (public-frontend correction, Section 4)", () => {
+    renderPublicLayout();
+    // Desktop nav: the brand Link wraps only the logo image, no text
+    // fallback alongside it.
+    const navbarLink = screen.getByRole("link", { name: "ASODEF S.A.S." });
+    expect(within(navbarLink).getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+
+    const footer = within(screen.getByRole("contentinfo"));
+    expect(footer.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+  });
+
+  it("renders the official ASODEF logo inside the mobile drawer (public-frontend correction, Section 4)", async () => {
+    const user = userEvent.setup();
+    renderPublicLayout();
+
+    await user.click(screen.getByRole("button", { name: "Abrir menú de navegación" }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
   });
 
   it("renders the footer's navigation links (US-018)", () => {
@@ -168,9 +186,11 @@ describe("PublicLayout", () => {
       await user.click(screen.getByRole("button", { name: "Abrir menú de navegación" }));
       const dialog = await screen.findByRole("dialog");
 
+      // "Beneficios" is a same-page /#beneficios anchor (nav-composition
+      // fix), not a separate route - the drawer must still close on
+      // activation even though the pathname itself doesn't change.
       await user.click(within(dialog).getByRole("link", { name: "Beneficios" }));
 
-      expect(await screen.findByText("Contenido de beneficios")).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     });
 
