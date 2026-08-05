@@ -2231,8 +2231,8 @@
         "Modificar el catalogo de 8 ConsentPurpose (se reutiliza el existente)",
         "Formularios puramente internos de staff que no involucran datos del titular (p. ej. formularios admin de gestion CRM que no son autoservicio)"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "cd75867",
       "notes": "This is an audit-first story: implementation only touches forms found to be genuinely non-conformant, per user's explicit 'no dupliques historias ya implementadas' instruction."
     },
     {
