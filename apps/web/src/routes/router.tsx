@@ -158,33 +158,81 @@ export const routeConfig: RouteObject[] = [
     errorElement: <RouteErrorBoundary />,
     children: [
       {
-        // Only SUPER_ADMIN/ADMIN may reach /admin/* (US-010 recommended
-        // role routing).
-        element: <RoleRoute roles={["SUPER_ADMIN", "ADMIN"]} />,
+        // Outer gate (US-060): any internal-staff role may reach /admin/*.
+        // External/self-service roles (COMPANY_PARTNER, AFFILIATE, CUSTOMER)
+        // hold overlapping permission keys (e.g. payments.read) for their
+        // OWN self-service views only, and must stay blocked here even
+        // though they'd otherwise pass a bare permission check. Each
+        // section below adds its own PermissionRoute for the specific
+        // capability it requires.
+        element: <RoleRoute roles={["SUPER_ADMIN", "ADMIN", "FINANCE", "COMMERCIAL", "CUSTOMER_SERVICE", "AUDITOR"]} />,
         children: [
           {
             path: "admin",
             element: <AdminLayout />,
             children: [
               { index: true, element: <AdminDashboardPage /> },
-              { path: "clientes", element: <RoutePlaceholder title="Clientes" /> },
-              { path: "afiliados", element: <RoutePlaceholder title="Afiliados" /> },
-              { path: "empresas", element: <RoutePlaceholder title="Empresas" /> },
-              { path: "aliados", element: <RoutePlaceholder title="Aliados" /> },
+              {
+                element: <PermissionRoute permissions={["crm.manage"]} />,
+                children: [{ path: "crm", element: <RoutePlaceholder title="CRM" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["companies.read"]} />,
+                children: [{ path: "empresas-y-aliados", element: <RoutePlaceholder title="Empresas y aliados" /> }],
+              },
               { path: "planes", element: <RoutePlaceholder title="Planes" /> },
-              { path: "pagos", element: <RoutePlaceholder title="Pagos" /> },
-              { path: "conciliacion", element: <RoutePlaceholder title="Conciliación" /> },
-              { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-              { path: "legal", element: <RoutePlaceholder title="Legal" /> },
-              { path: "pqr", element: <RoutePlaceholder title="PQR" /> },
-              { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
-              { path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> },
-              { path: "configuracion", element: <RoutePlaceholder title="Configuración" /> },
+              {
+                element: <PermissionRoute permissions={["payments.read"]} />,
+                children: [{ path: "pagos", element: <RoutePlaceholder title="Pagos" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["payments.reconcile"]} />,
+                children: [{ path: "conciliacion", element: <RoutePlaceholder title="Conciliación" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["contracts.read"]} />,
+                children: [{ path: "contratos", element: <RoutePlaceholder title="Contratos" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["legal.approve"]} />,
+                children: [{ path: "legal", element: <RoutePlaceholder title="Legal" /> }],
+              },
+              { path: "consentimientos", element: <RoutePlaceholder title="Consentimientos" /> },
+              {
+                element: <PermissionRoute permissions={["data.manage"]} />,
+                children: [{ path: "solicitudes-de-datos", element: <RoutePlaceholder title="Solicitudes de datos" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["pqr.manage"]} />,
+                children: [{ path: "pqr", element: <RoutePlaceholder title="PQR" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["approvals.manage"]} />,
+                children: [{ path: "aprobaciones", element: <RoutePlaceholder title="Aprobaciones" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["reports.read"]} />,
+                children: [{ path: "reportes", element: <RoutePlaceholder title="Reportes" /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["audit.read"]} />,
+                children: [{ path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> }],
+              },
               {
                 path: "usuarios",
                 children: [
                   {
-                    // users.read gates the list/detail read views.
+                    // users.read gates the list/detail read views. US-060's
+                    // AC Example prose says "/admin/usuarios (requires
+                    // users.manage)", but this gate predates US-060 (built
+                    // and tested under an earlier user-management story)
+                    // and every role that currently holds users.manage also
+                    // holds users.read (ADMIN/SUPER_ADMIN only) - no seeded
+                    // role is affected either way. Per the standing "do not
+                    // modify completed auth/RBAC work absent a verified
+                    // regression" instruction, left as users.read; flagging
+                    // the AC-prose/implementation naming mismatch here
+                    // instead of silently changing a working, tested gate.
                     element: <PermissionRoute permissions={["users.read"]} />,
                     children: [
                       { index: true, element: <UserListPage /> },

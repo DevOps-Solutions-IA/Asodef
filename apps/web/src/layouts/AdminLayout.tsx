@@ -1,39 +1,61 @@
 import { useRef } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
+import { useAuth } from "../lib/auth/auth-context";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 import { LogoutButton } from "./shared/LogoutButton";
 
-const NAV_ITEMS = [
-  { to: "/admin", label: "Dashboard", end: true },
-  { to: "/admin/clientes", label: "Clientes" },
-  { to: "/admin/afiliados", label: "Afiliados" },
-  { to: "/admin/empresas", label: "Empresas" },
-  { to: "/admin/aliados", label: "Aliados" },
-  { to: "/admin/planes", label: "Planes" },
-  { to: "/admin/pagos", label: "Pagos" },
-  { to: "/admin/conciliacion", label: "Conciliación" },
-  { to: "/admin/contratos", label: "Contratos" },
-  { to: "/admin/legal", label: "Legal" },
-  { to: "/admin/pqr", label: "PQR" },
-  { to: "/admin/reportes", label: "Reportes" },
-  { to: "/admin/auditoria", label: "Auditoría" },
-  { to: "/admin/usuarios", label: "Usuarios" },
-  { to: "/admin/configuracion", label: "Configuración" },
+// US-060's literal nav list. `permission` is the key required to SHOW the
+// item (and matches the PermissionRoute guarding its route in router.tsx -
+// see that file for the "usuarios stays users.read, not the AC Example's
+// users.manage" note). Items with no `permission` (Dashboard, Planes,
+// Consentimientos) render for every internal-staff role that already
+// cleared the outer RoleRoute gate - no permission key exists for them and
+// none is invented.
+interface AdminNavItem {
+  to: string;
+  label: string;
+  end?: true;
+  permission: string | null;
+}
+
+const NAV_ITEMS: AdminNavItem[] = [
+  { to: "/admin", label: "Dashboard", end: true, permission: null },
+  { to: "/admin/crm", label: "CRM", permission: "crm.manage" },
+  { to: "/admin/empresas-y-aliados", label: "Empresas y aliados", permission: "companies.read" },
+  { to: "/admin/planes", label: "Planes", permission: null },
+  { to: "/admin/contratos", label: "Contratos", permission: "contracts.read" },
+  { to: "/admin/pagos", label: "Pagos", permission: "payments.read" },
+  { to: "/admin/conciliacion", label: "Conciliación", permission: "payments.reconcile" },
+  { to: "/admin/legal", label: "Legal", permission: "legal.approve" },
+  { to: "/admin/consentimientos", label: "Consentimientos", permission: null },
+  { to: "/admin/solicitudes-de-datos", label: "Solicitudes de datos", permission: "data.manage" },
+  { to: "/admin/pqr", label: "PQR", permission: "pqr.manage" },
+  { to: "/admin/aprobaciones", label: "Aprobaciones", permission: "approvals.manage" },
+  { to: "/admin/reportes", label: "Reportes", permission: "reports.read" },
+  { to: "/admin/auditoria", label: "Auditoría", permission: "audit.read" },
+  { to: "/admin/usuarios", label: "Usuarios", permission: "users.read" },
 ];
 
 /**
  * Administrative platform shell (/admin/*). This is the widest nav of the
- * three authenticated portals (matches the master prompt's full admin
- * navigation), always lazy-loaded (see routes/router.tsx) since it's
- * never needed on first paint of the public site. Real RBAC-driven
- * nav filtering and route guarding land in a later story (US-060); today
- * every item renders, unguarded.
+ * three authenticated portals, always lazy-loaded (see routes/router.tsx)
+ * since it's never needed on first paint of the public site.
+ *
+ * US-060: the outer RoleRoute (router.tsx) gates who reaches /admin/* at
+ * all; this component additionally hides nav items the current user lacks
+ * permission for (AC1's "render only the navigation sections the current
+ * user's permissions allow"). Hiding the nav item is a UX nicety only -
+ * direct navigation to a hidden section is independently blocked by that
+ * section's own PermissionRoute, which renders ForbiddenPage, per AC1's
+ * explicit "not just a hidden nav item" requirement.
  */
 export function AdminLayout() {
   const mainRef = useRef<HTMLElement>(null);
   useFocusMainOnRouteChange(mainRef);
+  const { hasPermission } = useAuth();
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.permission === null || hasPermission(item.permission));
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-base sm:flex-row">
@@ -47,7 +69,7 @@ export function AdminLayout() {
         </div>
         <nav aria-label="Administración">
           <ul className="flex flex-col gap-1 px-3 pb-5 text-sm">
-            {NAV_ITEMS.map((item) => (
+            {visibleNavItems.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { routeConfig, routerFutureConfig } from "./router";
 import { buildCurrentUser, mockAuthFetch, renderWithAuth } from "../test-utils/auth-test-helpers";
@@ -17,6 +18,32 @@ function renderAtPath(
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+/** A stateful fetch mock (mirrors LoginPage.test.tsx's mockLoginFlow): GET
+ * /auth/me starts unauthenticated and flips to `user` only after a
+ * successful POST /auth/login, matching the real backend's actual
+ * before/after session state. */
+function mockLoginFlow(user: CurrentUser) {
+  let loggedIn = false;
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/auth/login")) {
+      loggedIn = true;
+      return jsonResponse(200, { user });
+    }
+    if (url.includes("/auth/me")) {
+      return loggedIn ? jsonResponse(200, user) : jsonResponse(401, { statusCode: 401, error: "Unauthorized", message: "No autenticado." });
+    }
+    if (url.includes("/auth/refresh")) {
+      return jsonResponse(401, { statusCode: 401, error: "Unauthorized", message: "No autenticado." });
+    }
+    return jsonResponse(200, {});
+  });
+
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 describe("router", () => {
@@ -84,6 +111,62 @@ describe("router", () => {
 
     expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dashboard administrativo" })).not.toBeInTheDocument();
+  });
+
+  it("Example (AC): a FINANCE user with only payments.read can open /admin/pagos", async () => {
+    renderAtPath("/admin/pagos", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }));
+
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Administración" })).toBeInTheDocument();
+  });
+
+  it("Example (AC): that same FINANCE/payments.read-only user attempting /admin/usuarios shows the unauthorized state", async () => {
+    renderAtPath("/admin/usuarios", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Usuarios" })).not.toBeInTheDocument();
+  });
+
+  it("Negative case (AC): an unauthenticated request to /admin/pagos redirects to /iniciar-sesion and returns there after login", async () => {
+    renderAtPath("/admin/pagos");
+
+    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+  });
+
+  it("Negative case (AC), full login round-trip: after logging in from the preserved return location, actually lands back on /admin/pagos (not the default landing page)", async () => {
+    // Regression guard for a real bug found while manually verifying this
+    // AC in a live browser: GuestOnlyRoute (wrapping /iniciar-sesion) fires
+    // its own Navigate the instant login flips isAuthenticated to true,
+    // racing LoginPage's own post-login navigate() - and GuestOnlyRoute
+    // used to ignore the preserved `from` location entirely, so whichever
+    // one won the race silently dropped the return path. Isolated
+    // LoginPage.test.tsx renders LoginPage without GuestOnlyRoute wrapping
+    // it, so it never exercised this race; only a full-router composition
+    // test like this one catches it.
+    const financeUser = buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] });
+    mockLoginFlow(financeUser);
+    const user = userEvent.setup();
+    const testRouter = createMemoryRouter(routeConfig, { initialEntries: ["/admin/pagos"], future: routerFutureConfig });
+    renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
+
+    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), financeUser.email);
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+  });
+
+  it("hides nav sections the current user lacks permission for, without hiding always-visible sections (AC1)", async () => {
+    renderAtPath("/admin", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read", "payments.reconcile", "reports.read", "audit.read"] }));
+
+    await screen.findByRole("navigation", { name: "Administración" });
+    expect(screen.getByRole("link", { name: "Pagos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Conciliación" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Planes" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "CRM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Legal" })).not.toBeInTheDocument();
   });
 
   it("renders the real UserListPage for /admin/usuarios when the actor holds users.read", async () => {
