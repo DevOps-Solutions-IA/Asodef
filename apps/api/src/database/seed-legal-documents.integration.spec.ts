@@ -82,7 +82,22 @@ describe("Legal documents seed (integration, real Postgres)", () => {
   it("only renders confirmed facts or the explicit placeholder - never a fabricated legal representative, address, price, or guarantee", async () => {
     await seedLegalDocuments(prisma);
 
-    const confirmedFragments = ["ASODEF S.A.S.", "info@asodef.com.co", "Cali", "Colombia", "Juan Pablo Filigrana", "Director Comercial", "wa.me"];
+    const confirmedFragments = [
+      "ASODEF S.A.S.",
+      "info@asodef.com.co",
+      "Cali",
+      "Colombia",
+      "Juan Pablo Filigrana",
+      "Director Comercial",
+      "wa.me",
+      // Corporate-data update: corroborated public-registry facts, each
+      // carrying its own verification-status note where the source
+      // isn't yet a Certificate of Existence and Legal Representation.
+      "Valle del Cauca",
+      "NIT",
+      "Carrera 40",
+      "Nota de verificación interna",
+    ];
     for (const entry of LEGAL_DOCUMENT_CATALOG) {
       for (const section of entry.sections) {
         const isPlaceholder = section.body === LEGAL_CONTENT_PLACEHOLDER;
@@ -94,6 +109,30 @@ describe("Legal documents seed (integration, real Postgres)", () => {
         expect(isPlaceholder || isConfirmedFact || isDraftStateNotice).toBe(true);
       }
     }
+  });
+
+  it("corporate-data update: informacion-empresarial carries the real NIT and a corroborated (never Certificate-verified) registered address, with the legal representative still a placeholder", async () => {
+    await seedLegalDocuments(prisma);
+
+    const document = await prisma.legalDocument.findUniqueOrThrow({ where: { slug: "informacion-empresarial" } });
+    const version = await prisma.legalDocumentVersion.findUniqueOrThrow({
+      where: { legalDocumentId_version: { legalDocumentId: document.id, version: 1 } },
+    });
+    const content = version.draftContent as { sections: Array<{ heading: string; body: string }> };
+
+    const nitSection = content.sections.find((s) => s.heading === "Identificación tributaria (NIT)");
+    expect(nitSection?.body).toBe("NIT 900552882-2");
+
+    const addressSection = content.sections.find((s) => s.heading === "Domicilio registrado");
+    expect(addressSection?.body).toContain("Carrera 40");
+    expect(addressSection?.body).toContain("Nota de verificación interna");
+    // Must never claim full certificate verification - only that it's
+    // been corroborated and remains unverified against one.
+    expect(addressSection?.body).not.toContain("CERTIFICATE_VERIFIED");
+    expect(addressSection?.body).toContain("aún no verificada contra un Certificado de Existencia y Representación Legal vigente");
+
+    const legalRepSection = content.sections.find((s) => s.heading === "Representante legal");
+    expect(legalRepSection?.body).toBe(LEGAL_CONTENT_PLACEHOLDER);
   });
 
   it("does not overwrite a version that has already moved past DRAFT on a subsequent seed run", async () => {

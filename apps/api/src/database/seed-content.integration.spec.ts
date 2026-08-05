@@ -46,12 +46,27 @@ describe("Content seed (integration, real Postgres)", () => {
     expect(heroEyebrow.status).toBe("PUBLISHED");
   });
 
-  it("never seeds a US-014-deferred statistic key", async () => {
+  it("never seeded a statistic under the old placeholder key names (US-014 was deferred, now reopened under institutional.statistics.*)", async () => {
     await seedContent(prisma);
 
     for (const key of ["stats.affiliates", "stats.beneficiaries", "stats.experienceYears"]) {
       const entry = await prisma.contentEntry.findUnique({ where: { key } });
       expect(entry).toBeNull();
     }
+  });
+
+  it("US-014 (reopened): seeds the exact dossier-sourced statistics, as plain unformatted numeric strings", async () => {
+    await seedContent(prisma);
+
+    const affiliateHolders = await prisma.contentEntry.findUniqueOrThrow({ where: { key: "institutional.statistics.affiliateHolders" } });
+    expect(affiliateHolders.value).toBe("8405");
+
+    const beneficiaries = await prisma.contentEntry.findUniqueOrThrow({ where: { key: "institutional.statistics.beneficiaries" } });
+    expect(beneficiaries.value).toBe("54692");
+
+    const experienceYearsLabel = await prisma.contentEntry.findUniqueOrThrow({
+      where: { key: "institutional.statistics.experienceYearsLabel" },
+    });
+    expect(experienceYearsLabel.value).toBe("Más de 20 años");
   });
 });
