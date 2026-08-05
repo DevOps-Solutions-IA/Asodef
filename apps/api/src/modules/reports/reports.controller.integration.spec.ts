@@ -167,7 +167,6 @@ describe("Admin reports endpoints (integration, real HTTP)", () => {
 
     let status = "PENDING";
     let attempts = 0;
-    let downloadResponse: request.Response | undefined;
     while (status !== "READY" && attempts < 30) {
       await new Promise((r) => setTimeout(r, 200));
       const poll = await request(app.getHttpServer()).get(`/api/v1/admin/reports/exports/${started.body.jobId}`).set("Cookie", finance.cookies);
@@ -176,7 +175,7 @@ describe("Admin reports endpoints (integration, real HTTP)", () => {
     }
     expect(status).toBe("READY");
 
-    downloadResponse = await request(app.getHttpServer()).get(`/api/v1/admin/reports/exports/${started.body.jobId}/download`).set("Cookie", finance.cookies);
+    const downloadResponse = await request(app.getHttpServer()).get(`/api/v1/admin/reports/exports/${started.body.jobId}/download`).set("Cookie", finance.cookies);
     expect(downloadResponse.status).toBe(200);
     expect(downloadResponse.text.split("\r\n").length).toBeGreaterThan(1000);
   }, 15000);
