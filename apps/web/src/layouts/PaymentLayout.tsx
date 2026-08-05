@@ -19,15 +19,15 @@ export function PaymentLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-bg-soft">
       <SkipToContent targetId="main-content" />
-      <header className="bg-brand-deep text-white">
+      <header className="relative z-10 bg-brand-deep text-white shadow-e2">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           {/* icon-only: the wordmark is low-contrast on this dark
               header - see BrandLogo's own doc comment. */}
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
             <BrandLogo variant="icon" className="h-9 w-auto" />
           </Link>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white/80">
-            <ShieldCheck aria-hidden="true" className="h-4 w-4" />
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/90">
+            <ShieldCheck aria-hidden="true" className="h-4 w-4 text-brand-light" />
             Centro de Pagos seguro
           </span>
         </div>

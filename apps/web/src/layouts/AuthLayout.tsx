@@ -13,7 +13,13 @@ export function AuthLayout() {
   useFocusMainOnRouteChange(mainRef);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg-soft px-4 py-12">
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-12"
+      style={{
+        background:
+          "radial-gradient(60% 50% at 50% 0%, rgba(11,77,56,0.06) 0%, rgba(244,245,241,0) 70%), var(--color-bg-soft)",
+      }}
+    >
       <SkipToContent targetId="main-content" />
       <Link to="/" className="mb-8" aria-label={ASODEF_COMPANY.legalName}>
         <BrandLogo variant="full" className="h-14 w-auto" />

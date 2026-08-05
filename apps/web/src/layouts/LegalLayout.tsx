@@ -17,7 +17,7 @@ export function LegalLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-bg-base">
       <SkipToContent targetId="main-content" />
-      <header className="border-b border-border-soft bg-white">
+      <header className="relative z-10 border-b border-border-soft bg-white shadow-e1">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
             <BrandLogo className="h-8 w-auto" />
@@ -39,8 +39,10 @@ export function LegalLayout() {
                 <NavLink
                   to={`/legal/${entry.slug}`}
                   className={({ isActive }) =>
-                    `block rounded-lg px-3 py-1.5 transition-colors ${
-                      isActive ? "bg-brand-dark/10 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
+                    `relative block rounded-lg py-1.5 pl-3.5 pr-3 transition-colors duration-150 ${
+                      isActive
+                        ? "bg-brand-dark-50 font-semibold text-brand-dark before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-orange"
+                        : "text-text-main hover:bg-bg-soft"
                     }`
                   }
                 >

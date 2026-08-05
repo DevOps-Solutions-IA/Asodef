@@ -24,25 +24,27 @@ export function CompanyLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-bg-base sm:flex-row">
       <SkipToContent targetId="main-content" />
-      <aside className="border-b border-border-soft bg-brand-deep text-white sm:w-64 sm:shrink-0 sm:border-b-0">
+      <aside className="relative z-10 border-b border-border-soft bg-brand-deep text-white shadow-e2 sm:w-64 sm:shrink-0 sm:border-b-0">
         <div className="px-5 py-5">
           {/* icon-only: the wordmark is low-contrast on this dark
               sidebar - see BrandLogo's own doc comment. */}
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
             <BrandLogo variant="icon" className="h-9 w-auto" />
           </Link>
-          <p className="mt-1 text-xs text-white/60">Portal de empresas</p>
+          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-white/60">Portal de empresas</p>
         </div>
         <nav aria-label="Empresa">
-          <ul className="flex flex-col gap-1 px-3 pb-5 text-sm">
+          <ul className="flex flex-col gap-0.5 px-3 pb-5 text-sm">
             {NAV_ITEMS.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `block rounded-xl px-3 py-2 transition-colors ${
-                      isActive ? "bg-white/15 font-medium text-white" : "text-white/70 hover:bg-white/10"
+                    `relative block rounded-lg py-2 pl-4 pr-3 transition-colors duration-150 ${
+                      isActive
+                        ? "bg-white/10 font-semibold text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-orange"
+                        : "text-white/70 hover:bg-white/5"
                     }`
                   }
                 >
@@ -57,7 +59,7 @@ export function CompanyLayout() {
         </div>
       </aside>
 
-      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8">
+      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8 sm:py-10">
         <Outlet />
       </main>
     </div>

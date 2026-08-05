@@ -49,7 +49,7 @@ const LEGAL_LINKS = [
 ];
 
 const NAV_LINK_CLASS =
-  "relative pb-0.5 after:absolute after:bottom-0 after:left-0 after:h-px after:w-0 after:bg-brand-dark after:transition-all after:duration-200 hover:text-brand-dark hover:after:w-full";
+  "relative py-1 font-medium text-text-main/90 transition-colors duration-150 after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 after:rounded-full after:bg-brand-orange after:transition-all after:duration-300 after:ease-out hover:text-brand-dark hover:after:w-full";
 
 /**
  * Public marketing site shell (US-011): header transitions from
@@ -101,8 +101,8 @@ export function PublicLayout() {
       <SkipToContent targetId="main-content" />
       <header
         className={
-          "sticky top-0 z-40 border-b transition-colors duration-200 " +
-          (scrolled ? "border-border-soft bg-[#F4F5F1]/85 backdrop-blur-xl" : "border-transparent bg-transparent")
+          "sticky top-0 z-40 border-b transition-[background-color,box-shadow,border-color] duration-300 " +
+          (scrolled ? "border-border-soft bg-[#F4F5F1]/85 shadow-e1 backdrop-blur-xl" : "border-transparent bg-transparent shadow-none")
         }
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-12">
@@ -184,7 +184,7 @@ export function PublicLayout() {
             <ul className="mt-3 flex flex-col gap-2">
               {NAV_LINKS.map((link) => (
                 <li key={link.to}>
-                  <Link to={link.to} className="text-white/80 hover:text-white hover:underline">
+                  <Link to={link.to} className="text-white/80 transition-colors duration-150 hover:text-brand-orange-200 hover:underline">
                     {link.label}
                   </Link>
                 </li>
@@ -203,7 +203,7 @@ export function PublicLayout() {
             <ul className="mt-4 flex flex-col gap-2">
               {LEGAL_LINKS.map((link) => (
                 <li key={link.to}>
-                  <Link to={link.to} className="text-white/60 hover:text-white hover:underline">
+                  <Link to={link.to} className="text-white/60 transition-colors duration-150 hover:text-brand-orange-200 hover:underline">
                     {link.label}
                   </Link>
                 </li>
@@ -212,7 +212,7 @@ export function PublicLayout() {
                 <button
                   type="button"
                   onClick={openCookiePreferences}
-                  className="text-white/60 hover:text-white hover:underline"
+                  className="text-white/60 transition-colors duration-150 hover:text-brand-orange-200 hover:underline"
                 >
                   Preferencias de cookies
                 </button>

@@ -25,23 +25,25 @@ export function AccountLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-bg-base sm:flex-row">
       <SkipToContent targetId="main-content" />
-      <aside className="border-b border-border-soft bg-white sm:w-64 sm:shrink-0 sm:border-b-0 sm:border-r">
+      <aside className="relative z-10 border-b border-border-soft bg-white shadow-e1 sm:w-64 sm:shrink-0 sm:border-b-0 sm:border-r">
         <div className="px-5 py-5">
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
             <BrandLogo className="h-8 w-auto" />
           </Link>
-          <p className="mt-1 text-xs text-text-muted">Mi cuenta</p>
+          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-text-muted">Mi cuenta</p>
         </div>
         <nav aria-label="Cuenta">
-          <ul className="flex flex-col gap-1 px-3 pb-5 text-sm">
+          <ul className="flex flex-col gap-0.5 px-3 pb-5 text-sm">
             {NAV_ITEMS.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `block rounded-xl px-3 py-2 transition-colors ${
-                      isActive ? "bg-brand-dark/10 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
+                    `relative block rounded-lg py-2 pl-4 pr-3 transition-colors duration-150 ${
+                      isActive
+                        ? "bg-brand-dark-50 font-semibold text-brand-dark before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-orange"
+                        : "text-text-main hover:bg-bg-soft"
                     }`
                   }
                 >
@@ -56,7 +58,7 @@ export function AccountLayout() {
         </div>
       </aside>
 
-      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8">
+      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8 sm:py-10">
         <Outlet />
       </main>
     </div>
