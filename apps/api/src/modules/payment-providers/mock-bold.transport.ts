@@ -53,6 +53,18 @@ export class MockBoldTransport implements BoldTransport {
     return state.payment;
   }
 
+  /** US-056: a synthetic success response - never a network call, same
+   * "never makes a network call" contract as every other method here.
+   * Requires the referenced payment to already exist, matching
+   * getPayment()'s own precondition. */
+  async createRefund(referenceId: string, amountCents: number): Promise<BoldApiResponse> {
+    const state = this.stateByReference.get(referenceId);
+    if (!state?.payment) {
+      throw new Error(`MockBoldTransport: no payment was created yet for reference_id "${referenceId}"`);
+    }
+    return { status: "APPROVED", reference_id: referenceId, amount: amountCents };
+  }
+
   /** Test-only helper: the next createPayment() call returns this
    * status instead of the default "APPROVED" - lets a test exercise
    * BoldPaymentProvider's REJECTED/FAILED/etc. handling without a real

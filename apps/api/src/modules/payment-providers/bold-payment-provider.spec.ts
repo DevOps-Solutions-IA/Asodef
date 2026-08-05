@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { BoldPaymentProvider } from "./bold-payment-provider.service";
 import { MockBoldTransport } from "./mock-bold.transport";
+import type { BoldTransport } from "./bold-transport.interface";
 
 describe("BoldPaymentProvider (mock mode)", () => {
   let mockTransport: MockBoldTransport;
@@ -56,9 +57,31 @@ describe("BoldPaymentProvider (mock mode)", () => {
     expect(result.raw).toBe(payload);
   });
 
-  it("createRefund throws rather than inventing an undocumented Bold refund endpoint", async () => {
-    await expect(provider.createRefund({ providerReferenceId: "ref-1", amountCents: 1000, reason: "test" })).rejects.toThrow(
-      /not implemented/,
-    );
+  it("US-056: createRefund succeeds in mock mode for an already-created payment, with no outbound HTTP request", async () => {
+    await provider.createPayment({ publicReference: "pub-ref-refund", amountCents: 3_000_000, currency: "COP" });
+    const fetchSpy = jest.spyOn(global, "fetch");
+
+    const result = await provider.createRefund({ providerReferenceId: "pub-ref-refund", amountCents: 1_000_000, reason: "test" });
+
+    expect(result.status).toBe("APPROVED");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("createRefund throws rather than inventing an undocumented Bold refund endpoint when the transport doesn't implement it (real HttpBoldTransport's own behavior)", async () => {
+    // A minimal transport double implementing only the 3 required
+    // BoldTransport methods, deliberately omitting createRefund -
+    // simulates HttpBoldTransport, which has no createRefund method at
+    // all. BoldPaymentProvider must still refuse cleanly.
+    const transportWithoutRefund: BoldTransport = {
+      createPaymentIntent: mockTransport.createPaymentIntent.bind(mockTransport),
+      createPayment: mockTransport.createPayment.bind(mockTransport),
+      getPayment: mockTransport.getPayment.bind(mockTransport),
+    };
+    const providerWithoutRefund = new BoldPaymentProvider(transportWithoutRefund);
+
+    await expect(
+      providerWithoutRefund.createRefund({ providerReferenceId: "ref-1", amountCents: 1000, reason: "test" }),
+    ).rejects.toThrow(/not implemented/);
   });
 });

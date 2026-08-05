@@ -6,6 +6,7 @@ import { ConfigService } from "@nestjs/config";
 import { ContractStatus } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
+import type { UploadedFile } from "../../common/http/uploaded-file.type";
 import { ContractDownloadTokenService } from "./contract-download-token.service";
 import type { CreateContractDto } from "./dto/create-contract.dto";
 import type { UploadContractVersionDto } from "./dto/upload-contract-version.dto";
@@ -24,11 +25,6 @@ import {
 } from "./contracts.types";
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
-
-export interface UploadedFile {
-  buffer: Buffer;
-  originalname: string;
-}
 
 @Injectable()
 export class ContractsService {

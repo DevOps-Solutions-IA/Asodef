@@ -78,18 +78,23 @@ export class BoldPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Deliberately not implemented: no Bold refund endpoint appears
-   * anywhere in this project's approved sources (only a later story's
-   * own refund-workflow acceptance criteria references
-   * BoldPaymentProvider.createRefund, without documenting Bold's actual
-   * refund API shape). Per "do not invent endpoint paths", this throws
-   * rather than guessing a path - the interface marks the method
-   * optional for exactly this reason.
+   * US-056: delegates to the injected transport, same as every other
+   * method - MockBoldTransport implements this (a synthetic mock-mode
+   * simulation), HttpBoldTransport deliberately does not (no real Bold
+   * refund endpoint is documented anywhere in this project's approved
+   * sources - per "do not invent endpoint paths", real mode still
+   * refuses rather than guessing one).
    */
-  // Deliberately `async` so the throw below is a rejected promise, not a
-  // synchronous throw - matches every other PaymentProvider method's
-  // calling convention.
-  async createRefund(_input: CreateRefundInput): Promise<CreateRefundResult> {
-    throw new Error("BoldPaymentProvider.createRefund is not implemented: no Bold refund endpoint is documented in approved project sources");
+  async createRefund(input: CreateRefundInput): Promise<CreateRefundResult> {
+    if (!this.transport.createRefund) {
+      throw new Error("BoldPaymentProvider.createRefund is not implemented for this transport: no Bold refund endpoint is documented in approved project sources");
+    }
+    const result = await this.transport.createRefund(input.providerReferenceId, input.amountCents);
+
+    if (!isKnownBoldPaymentStatus(result.status)) {
+      this.logger.warn(`Unknown Bold refund status "${result.status}" for reference_id ${input.providerReferenceId}`, BoldPaymentProvider.name);
+    }
+
+    return { status: result.status, raw: result };
   }
 }

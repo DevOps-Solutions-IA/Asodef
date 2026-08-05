@@ -186,6 +186,11 @@ export const envSchema = z.object({
   // specified by the PRD; a short-lived industry-standard default for a
   // one-off authenticated download link.
   CONTRACT_DOWNLOAD_URL_TTL_MINUTES: z.coerce.number().int().positive().default(15),
+
+  // refunds (US-056): evidence uploads, same rationale as
+  // RECEIPTS_STORAGE_DIR/CONTRACTS_STORAGE_DIR - a plain local path,
+  // gitignored, outside any public web root.
+  REFUNDS_STORAGE_DIR: z.string().default("./storage/refunds"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

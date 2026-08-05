@@ -25,6 +25,7 @@ import { PqrCasesModule } from "./modules/pqr-cases/pqr-cases.module";
 import { CrmModule } from "./modules/crm/crm.module";
 import { PartnersModule } from "./modules/partners/partners.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
+import { RefundsModule } from "./modules/refunds/refunds.module";
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ContractsModule } from "./modules/contracts/contracts.module";
     CrmModule,
     PartnersModule,
     ContractsModule,
+    RefundsModule,
   ],
   controllers: [AppController],
   providers: [],

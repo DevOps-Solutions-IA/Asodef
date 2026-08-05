@@ -19,7 +19,8 @@ interface RecordAuditBase {
 
 /** Exactly one entity reference per call - matches the audit_logs
  * table's own exactly-one-entity CHECK constraint (US-043, extended to
- * a 3rd domain in US-048, a 4th in US-050, and a 5th in US-051). */
+ * a 3rd domain in US-048, a 4th in US-050, a 5th in US-051, and a 6th
+ * in US-056). */
 export type RecordAuditParams =
   | (RecordAuditBase & {
       paymentOrderId: string;
@@ -27,6 +28,7 @@ export type RecordAuditParams =
       dataSubjectRequestId?: never;
       pqrCaseId?: never;
       opportunityId?: never;
+      refundId?: never;
     })
   | (RecordAuditBase & {
       legalDocumentVersionId: string;
@@ -34,6 +36,7 @@ export type RecordAuditParams =
       dataSubjectRequestId?: never;
       pqrCaseId?: never;
       opportunityId?: never;
+      refundId?: never;
     })
   | (RecordAuditBase & {
       dataSubjectRequestId: string;
@@ -41,6 +44,7 @@ export type RecordAuditParams =
       legalDocumentVersionId?: never;
       pqrCaseId?: never;
       opportunityId?: never;
+      refundId?: never;
     })
   | (RecordAuditBase & {
       pqrCaseId: string;
@@ -48,6 +52,7 @@ export type RecordAuditParams =
       legalDocumentVersionId?: never;
       dataSubjectRequestId?: never;
       opportunityId?: never;
+      refundId?: never;
     })
   | (RecordAuditBase & {
       opportunityId: string;
@@ -55,6 +60,15 @@ export type RecordAuditParams =
       legalDocumentVersionId?: never;
       dataSubjectRequestId?: never;
       pqrCaseId?: never;
+      refundId?: never;
+    })
+  | (RecordAuditBase & {
+      refundId: string;
+      paymentOrderId?: never;
+      legalDocumentVersionId?: never;
+      dataSubjectRequestId?: never;
+      pqrCaseId?: never;
+      opportunityId?: never;
     });
 
 /**
@@ -76,6 +90,7 @@ export class AuditService {
         dataSubjectRequestId: params.dataSubjectRequestId,
         pqrCaseId: params.pqrCaseId,
         opportunityId: params.opportunityId,
+        refundId: params.refundId,
         actorUserId: params.actorUserId,
         action: params.action,
         previousStatus: params.previousStatus,

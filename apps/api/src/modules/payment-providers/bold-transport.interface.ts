@@ -38,6 +38,16 @@ export interface BoldTransport {
   createPayment(referenceId: string): Promise<BoldApiResponse>;
   /** GET /v1/payment/{reference_id} */
   getPayment(referenceId: string): Promise<BoldApiResponse>;
+  /**
+   * US-056: optional - no real Bold refund endpoint is documented
+   * anywhere in this project's approved sources, so only
+   * MockBoldTransport implements this (a synthetic mock-mode
+   * simulation, not a claim about Bold's real API shape).
+   * HttpBoldTransport deliberately does not implement it -
+   * BoldPaymentProvider.createRefund() still refuses (throws) when
+   * running against the real transport.
+   */
+  createRefund?(referenceId: string, amountCents: number): Promise<BoldApiResponse>;
 }
 
 /** DI token - BoldTransport is a type-only interface. */

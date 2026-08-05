@@ -69,6 +69,7 @@ model User {
   assignedCommercialActivities  CommercialActivity[]       @relation("CommercialActivityAssignee")
   uploadedContractVersions      ContractVersion[]          @relation("ContractVersionUploader")
   issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
+  approvedRefunds               Refund[]                   @relation("RefundApprover")
 
   @@map("users")
 }
@@ -714,6 +715,7 @@ model PaymentOrder {
   receipts            PaymentReceipt[]
   auditLogs           AuditLog[]
   pqrCases            PqrCase[]
+  refunds             Refund[]
 
   @@index([customerId, status])
   @@index([obligationId])
@@ -832,6 +834,8 @@ model AuditLog {
   pqrCaseId              String?     @map("pqr_case_id") @db.Uuid
   // US-051: generalized to a 5th domain, same pattern.
   opportunityId          String?     @map("opportunity_id") @db.Uuid
+  // US-056: generalized to a 6th domain, same pattern.
+  refundId               String?     @map("refund_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -854,6 +858,7 @@ model AuditLog {
   dataSubjectRequest   DataSubjectRequest?   @relation(fields: [dataSubjectRequestId], references: [id], onDelete: Restrict)
   pqrCase              PqrCase?              @relation(fields: [pqrCaseId], references: [id], onDelete: Restrict)
   opportunity          Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  refund               Refund?               @relation(fields: [refundId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -863,6 +868,7 @@ model AuditLog {
   @@index([dataSubjectRequestId, createdAt])
   @@index([pqrCaseId, createdAt])
   @@index([opportunityId, createdAt])
+  @@index([refundId, createdAt])
   @@map("audit_logs")
 }
 
@@ -1627,4 +1633,36 @@ model ContractDownloadToken {
 
   @@index([expiresAt])
   @@map("contract_download_tokens")
+}
+
+enum RefundStatus {
+  PENDING_APPROVAL
+  APPROVED
+  FAILED
+
+  @@map("refund_status")
+}
+
+// US-056: no PRD-given enum for Refund.status - PENDING_APPROVAL/
+// APPROVED/FAILED are the 3 states this story's own workflow actually
+// drives (request -> pending, approve+provider-call succeeds ->
+// approved, provider call fails -> failed). No "rejected" endpoint is
+// built - out of scope, not asked for by this story's literal AC.
+model Refund {
+  id                String       @id @default(uuid()) @db.Uuid
+  paymentOrderId    String       @map("payment_order_id") @db.Uuid
+  amountCents       Int          @map("amount_cents")
+  reason            String
+  evidencePath      String?      @map("evidence_path")
+  status            RefundStatus @default(PENDING_APPROVAL)
+  approvedByUserId  String?      @map("approved_by_user_id") @db.Uuid
+  providerReference String?      @map("provider_reference")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  paymentOrder   PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+  approvedByUser User?        @relation("RefundApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  auditLogs      AuditLog[]
+
+  @@index([paymentOrderId])
+  @@map("refunds")
 }

@@ -35,7 +35,14 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "payments.read", description: "Ver órdenes y transacciones de pago" },
   { key: "payments.create", description: "Crear órdenes de pago" },
   { key: "payments.reconcile", description: "Ejecutar y resolver conciliación de pagos" },
-  { key: "payments.refund", description: "Solicitar y aprobar reembolsos o reversiones" },
+  // US-056's own AC requires the approval step to be gated by "a
+  // separate permission" from the request step - payments.refund's own
+  // catalog description already bundled "solicitar y aprobar" (request
+  // AND approve), so this splits the approve half out as its own key,
+  // using the RBAC design's own documented extension mechanism (new
+  // permission keys are a data seed, never a schema migration).
+  { key: "payments.refund", description: "Solicitar reembolsos o reversiones" },
+  { key: "payments.refund.approve", description: "Aprobar reembolsos o reversiones" },
   { key: "payments.export", description: "Exportar reportes de pagos" },
   { key: "customers.read", description: "Ver clientes" },
   { key: "customers.create", description: "Crear clientes" },
@@ -147,6 +154,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "payments.read",
     "payments.reconcile",
     "payments.refund",
+    "payments.refund.approve",
     "payments.export",
     "reports.read",
     "reports.export",
