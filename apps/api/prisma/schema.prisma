@@ -1247,8 +1247,9 @@ model CommercialContact {
   email      String?
   isPrimary  Boolean @default(false) @map("is_primary")
 
-  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
-  company  Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  prospect         Prospect          @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  company          Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  businessPartners BusinessPartner[]
 
   @@index([prospectId])
   @@map("commercial_contacts")
@@ -1366,4 +1367,68 @@ model Agreement {
 
   @@index([opportunityId])
   @@map("agreements")
+}
+
+// US-053: the AC names a "9-state enum PROSPECT..ARCHIVED" but only
+// gives the first and last state - the other 7 intermediate state
+// names are never enumerated anywhere in the PRD. Inventing them would
+// violate the standing "never invent business rules/taxonomies not
+// explicitly confirmed" rule, so `status` stays a free-form string
+// (same precedent as LegalDocument.type/Agreement.status) rather than
+// a closed Prisma enum. Same reasoning applies to approvalStatus and
+// publicationStatus - no PRD-given value sets exist for either.
+// BLOCKED pending an explicit list of the 9 status values from
+// someone with business/commercial authority over the partner
+// lifecycle.
+//
+// The 7 gate-check booleans below map 1:1 to the AC's own literal
+// list ("legal validation, commercial validation, benefit
+// confirmation, agreement-validity confirmation, logo authorization,
+// contact confirmation, and coverage confirmation") - note this is 7
+// checks, while the PRD's own qualityGates section elsewhere says
+// "all 6 checks" for this same gate. This numbering inconsistency is
+// flagged, not silently resolved: the implementation follows the
+// literal 7-item list from this story's own acceptanceCriteria text.
+model BusinessPartner {
+  id                  String    @id @default(uuid()) @db.Uuid
+  legalName           String    @map("legal_name")
+  tradeName           String    @map("trade_name")
+  nit                 String    @unique
+  sector              String
+  city                String
+  address             String
+  phone               String
+  corporateEmail      String    @map("corporate_email")
+  website             String?
+  legalRepresentative String?   @map("legal_representative")
+  commercialContactId String?   @map("commercial_contact_id") @db.Uuid
+  agreementType       String    @map("agreement_type")
+  benefitsOffered     Json      @map("benefits_offered")
+  discountConditions  String?   @map("discount_conditions")
+  geographicCoverage  String?   @map("geographic_coverage")
+  validFrom           DateTime? @map("valid_from") @db.Timestamptz(3)
+  validUntil          DateTime? @map("valid_until") @db.Timestamptz(3)
+  logoPath            String?   @map("logo_path")
+  status              String    @default("PROSPECT")
+  approvalStatus      String?   @map("approval_status")
+  publicationStatus   String    @default("UNPUBLISHED") @map("publication_status")
+  internalNotes       String?   @map("internal_notes")
+
+  // Publication-gate checks (AC's own literal 7-item list) - all must
+  // be true before publish() is permitted.
+  legalValidationConfirmed      Boolean @default(false) @map("legal_validation_confirmed")
+  commercialValidationConfirmed Boolean @default(false) @map("commercial_validation_confirmed")
+  benefitConfirmed              Boolean @default(false) @map("benefit_confirmed")
+  agreementValidityConfirmed    Boolean @default(false) @map("agreement_validity_confirmed")
+  logoAuthorizationConfirmed    Boolean @default(false) @map("logo_authorization_confirmed")
+  contactConfirmed              Boolean @default(false) @map("contact_confirmed")
+  coverageConfirmed             Boolean @default(false) @map("coverage_confirmed")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  commercialContact CommercialContact? @relation(fields: [commercialContactId], references: [id], onDelete: SetNull)
+
+  @@index([publicationStatus])
+  @@map("business_partners")
 }
