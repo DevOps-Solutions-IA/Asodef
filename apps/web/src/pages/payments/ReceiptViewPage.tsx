@@ -79,7 +79,7 @@ export function ReceiptViewPage() {
           </div>
           <div>
             <dt className="text-sm text-text-muted">Monto</dt>
-            <dd className="font-display text-lg font-semibold text-brand-dark">{formatCurrency(data.amountCents, data.currency)}</dd>
+            <dd className="font-display text-lg font-semibold tabular-nums text-brand-dark">{formatCurrency(data.amountCents, data.currency)}</dd>
           </div>
         </dl>
 

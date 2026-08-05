@@ -169,7 +169,7 @@ export function PaymentLookupPage() {
             {result.obligations.map((obligation) => (
               <li
                 key={obligation.obligationId}
-                className="flex flex-col gap-3 rounded-2xl border border-border-soft p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-shadow duration-150 hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="font-medium text-text-main">{obligation.concept}</p>
@@ -181,7 +181,7 @@ export function PaymentLookupPage() {
                   />
                 </div>
                 <div className="flex items-center gap-4">
-                  <p className="font-display text-lg font-semibold text-brand-dark">
+                  <p className="font-display text-lg font-semibold tabular-nums text-brand-dark">
                     {formatCurrency(obligation.amountCents, obligation.currency)}
                   </p>
                   <Button

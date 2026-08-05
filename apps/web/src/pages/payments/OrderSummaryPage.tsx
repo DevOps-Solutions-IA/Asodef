@@ -69,7 +69,7 @@ export function OrderSummaryPage() {
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <div>
             <p className="text-sm text-text-muted">Monto</p>
-            <p className="font-display text-xl font-semibold text-brand-dark">{formatCurrency(data.amountCents, data.currency)}</p>
+            <p className="font-display text-xl font-semibold tabular-nums text-brand-dark">{formatCurrency(data.amountCents, data.currency)}</p>
           </div>
           <div>
             <p className="text-sm text-text-muted">Fecha límite</p>
