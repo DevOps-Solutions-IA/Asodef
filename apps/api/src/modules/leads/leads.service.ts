@@ -4,8 +4,12 @@ import { PrismaService } from "../../database/prisma.service";
 import { RateLimiterService } from "../auth/rate-limiter.service";
 import type { RequestContext } from "../auth/auth.service";
 import type { EnvConfig } from "../../config/env.validation";
+import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
+import { ConsentService } from "../consent/consent.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { toLeadSubmissionResponse, type LeadSubmissionResponse } from "./leads.types";
+
+const DATA_PROCESSING_POLICY_SLUG = "tratamiento-de-datos";
 
 @Injectable()
 export class LeadsService {
@@ -13,6 +17,8 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly rateLimiterService: RateLimiterService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly legalDocumentsService: LegalDocumentsService,
+    private readonly consentService: ConsentService,
   ) {}
 
   /**
@@ -42,19 +48,41 @@ export class LeadsService {
       return this.unpersistedResponse(dto);
     }
 
-    const lead = await this.prisma.leadSubmission.create({
-      data: {
-        fullName: dto.nombreCompleto,
-        company: dto.empresa,
-        position: dto.cargo,
-        city: dto.ciudad,
-        phone: dto.telefono,
-        email: dto.correo,
-        sector: dto.sector,
-        message: dto.mensaje,
-        consentAccepted: dto.consentAccepted,
-        notification: { create: {} },
-      },
+    const lead = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.leadSubmission.create({
+        data: {
+          fullName: dto.nombreCompleto,
+          company: dto.empresa,
+          position: dto.cargo,
+          city: dto.ciudad,
+          phone: dto.telefono,
+          email: dto.correo,
+          sector: dto.sector,
+          message: dto.mensaje,
+          consentAccepted: dto.consentAccepted,
+          notification: { create: {} },
+        },
+      });
+
+      // US-046: the checked, required consent checkbox is now also a
+      // durable ConsentRecord tied to whatever tratamiento-de-datos
+      // version is actually published right now - not just the boolean
+      // column above. If nothing is published yet (true today - US-044
+      // seeded DRAFT-only content), data_processing requires a policy
+      // version, so this correctly fails closed rather than fabricate
+      // proof of consent to content that was never approved.
+      const policyVersionId = await this.legalDocumentsService.resolveCurrentPublishedVersionId(
+        DATA_PROCESSING_POLICY_SLUG,
+        tx,
+      );
+      await this.consentService.record(tx, "data_processing", { leadSubmissionId: created.id }, policyVersionId, {
+        ipAddress: context.ipAddress ?? null,
+        userAgent: context.userAgent ?? null,
+        source: "web_contact_form",
+        acceptanceMethod: "checkbox",
+      });
+
+      return created;
     });
 
     return toLeadSubmissionResponse(lead);

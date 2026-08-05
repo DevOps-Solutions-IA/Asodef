@@ -4,7 +4,12 @@ import type { Obligation, PaymentOrder } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { AuditService, AuditSource } from "../audit/audit.service";
+import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
+import { ConsentService } from "../consent/consent.service";
+import type { RequestContext } from "../auth/auth.service";
 import { generatePublicReference } from "./public-reference";
+
+const PAYMENT_TERMS_POLICY_SLUG = "terminos-de-pago";
 
 /** Obligation statuses that still represent money owed - anything else
  * (PAID, CANCELLED) is not payable. Matches the AC's own "outstanding"
@@ -32,6 +37,8 @@ export class PaymentOrdersService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly auditService: AuditService,
+    private readonly legalDocumentsService: LegalDocumentsService,
+    private readonly consentService: ConsentService,
   ) {}
 
   /**
@@ -48,7 +55,7 @@ export class PaymentOrdersService {
    * second one. Prisma has no first-class row-locking API, hence the
    * raw SQL for this one query; everything else uses the normal client.
    */
-  async create(obligationId: string): Promise<PaymentOrderWithObligation> {
+  async create(obligationId: string, context: RequestContext): Promise<PaymentOrderWithObligation> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<ObligationRow[]>`
         SELECT id, customer_id, status, amount_cents, currency, concept, due_date
@@ -92,6 +99,22 @@ export class PaymentOrdersService {
         newStatus: created.status,
         applied: true,
         source: AuditSource.ORDER_CREATE,
+      });
+
+      // US-046: proceeding to create a payment order is the customer's
+      // acceptance of the payment terms in effect right now - recorded
+      // as durable evidence, not just implied. Only on the genuinely
+      // new-order branch (not the reuse-existing-PENDING-order branch
+      // above), matching how the audit entry above is also only written
+      // here. payment_terms requires a resolvable policy version, so
+      // this correctly fails closed (no order created) while nothing is
+      // published yet - see the identical note on LeadsService.create.
+      const policyVersionId = await this.legalDocumentsService.resolveCurrentPublishedVersionId(PAYMENT_TERMS_POLICY_SLUG, tx);
+      await this.consentService.record(tx, "payment_terms", { customerId: obligation.customer_id }, policyVersionId, {
+        ipAddress: context.ipAddress ?? null,
+        userAgent: context.userAgent ?? null,
+        source: "web_payment_order",
+        acceptanceMethod: "implicit_action",
       });
 
       return { ...created, obligation: { concept: obligation.concept, dueDate: obligation.due_date } };

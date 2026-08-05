@@ -1,18 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { ConflictException, BadRequestException, NotFoundException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { createTestPrismaClient } from "../../database/test-db-client";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 import { AuditService } from "../audit/audit.service";
+import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
+import { ConsentService } from "../consent/consent.service";
+import type { RequestContext } from "../auth/auth.service";
 import { PaymentOrdersService } from "./payment-orders.service";
 
 function buildConfigService(ttlMinutes = 30) {
   return { get: () => ttlMinutes } as unknown as ConstructorParameters<typeof PaymentOrdersService>[1];
 }
 
+const REQUEST_CONTEXT: RequestContext = { ipAddress: "203.0.113.10", userAgent: "vitest", requestId: null };
+
 describe("PaymentOrdersService (integration, real Postgres)", () => {
   let prisma: PrismaClient;
   let service: PaymentOrdersService;
   const createdCustomerIds: string[] = [];
+  let terminosHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
     prisma = createTestPrismaClient();
@@ -21,11 +28,22 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
       prisma as unknown as ConstructorParameters<typeof PaymentOrdersService>[0],
       buildConfigService(),
       new AuditService(),
+      new LegalDocumentsService(prisma as unknown as ConstructorParameters<typeof LegalDocumentsService>[0], new AuditService()),
+      new ConsentService(prisma as unknown as ConstructorParameters<typeof ConsentService>[0]),
     );
+
+    // US-046: payment_terms consent requires a resolvable, currently
+    // PUBLISHED terminos-de-pago version - see publishDraftForTest's own
+    // doc comment for why/how this is set up and always restored.
+    terminosHandle = await publishDraftForTest(prisma, "terminos-de-pago");
   });
 
   afterAll(async () => {
+    if (terminosHandle) {
+      await terminosHandle.restore();
+    }
     if (createdCustomerIds.length > 0) {
+      await prisma.consentRecord.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.auditLog.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentOrder.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.obligation.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
@@ -70,7 +88,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
   it("creates a new PENDING PaymentOrder for an outstanding obligation, with amount/currency taken from the obligation", async () => {
     const { obligation } = await createCustomerWithObligation("PENDING");
 
-    const order = await service.create(obligation.id);
+    const order = await service.create(obligation.id, REQUEST_CONTEXT);
 
     expect(order.status).toBe("PENDING");
     expect(order.amountCents).toBe(1_234_500);
@@ -78,13 +96,24 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
     expect(order.obligationId).toBe(obligation.id);
     expect(order.publicReference).toMatch(/^[A-Za-z0-9_-]{20,}$/);
     expect(order.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    // US-046: creating an order now also records durable payment_terms
+    // consent evidence for the order's customer, tied to a real
+    // LegalDocumentVersion (not left null when one is resolvable).
+    const consentPurpose = await prisma.consentPurpose.findUniqueOrThrow({ where: { key: "payment_terms" } });
+    const consentRecord = await prisma.consentRecord.findFirst({
+      where: { customerId: order.customerId, consentPurposeId: consentPurpose.id },
+    });
+    expect(consentRecord).not.toBeNull();
+    expect(consentRecord?.status).toBe("GRANTED");
+    expect(consentRecord?.legalDocumentVersionId).not.toBeNull();
   });
 
   it("Example (AC): calling create() twice in a row for the same obligation returns the same publicReference both times", async () => {
     const { obligation } = await createCustomerWithObligation("PENDING");
 
-    const first = await service.create(obligation.id);
-    const second = await service.create(obligation.id);
+    const first = await service.create(obligation.id, REQUEST_CONTEXT);
+    const second = await service.create(obligation.id, REQUEST_CONTEXT);
 
     expect(second.publicReference).toBe(first.publicReference);
     expect(second.id).toBe(first.id);
@@ -96,10 +125,10 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
   it("mints a new order once the previous PENDING order has expired", async () => {
     const { obligation } = await createCustomerWithObligation("PENDING");
 
-    const first = await service.create(obligation.id);
+    const first = await service.create(obligation.id, REQUEST_CONTEXT);
     await prisma.paymentOrder.update({ where: { id: first.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
 
-    const second = await service.create(obligation.id);
+    const second = await service.create(obligation.id, REQUEST_CONTEXT);
 
     expect(second.publicReference).not.toBe(first.publicReference);
     const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
@@ -108,14 +137,14 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
 
   it("OVERDUE is still an outstanding (payable) status", async () => {
     const { obligation } = await createCustomerWithObligation("OVERDUE");
-    const order = await service.create(obligation.id);
+    const order = await service.create(obligation.id, REQUEST_CONTEXT);
     expect(order.status).toBe("PENDING");
   });
 
   it("Negative case (AC): create() for an already fully paid obligation returns 409 and creates no order", async () => {
     const { obligation } = await createCustomerWithObligation("PAID");
 
-    await expect(service.create(obligation.id)).rejects.toThrow(ConflictException);
+    await expect(service.create(obligation.id, REQUEST_CONTEXT)).rejects.toThrow(ConflictException);
 
     const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
     expect(orderCount).toBe(0);
@@ -124,25 +153,48 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
   it("a CANCELLED obligation is also ineligible - 409, no order created", async () => {
     const { obligation } = await createCustomerWithObligation("CANCELLED");
 
-    await expect(service.create(obligation.id)).rejects.toThrow(ConflictException);
+    await expect(service.create(obligation.id, REQUEST_CONTEXT)).rejects.toThrow(ConflictException);
 
     const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
     expect(orderCount).toBe(0);
   });
 
   it("a non-existent obligation id throws NotFoundException", async () => {
-    await expect(service.create(randomUUID())).rejects.toThrow(NotFoundException);
+    await expect(service.create(randomUUID(), REQUEST_CONTEXT)).rejects.toThrow(NotFoundException);
   });
 
   it("concurrent duplicate prevention: N simultaneous create() calls for the same obligation create exactly one order", async () => {
     const { obligation } = await createCustomerWithObligation("PENDING");
 
-    const results = await Promise.all(Array.from({ length: 10 }, () => service.create(obligation.id)));
+    const results = await Promise.all(Array.from({ length: 10 }, () => service.create(obligation.id, REQUEST_CONTEXT)));
 
     const uniqueReferences = new Set(results.map((order) => order.publicReference));
     expect(uniqueReferences.size).toBe(1);
 
     const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
     expect(orderCount).toBe(1);
+  });
+
+  it("Negative case (AC US-046): with no resolvable payment_terms policy version, create() fails closed and no order is created", async () => {
+    if (!terminosHandle) {
+      // beforeAll couldn't find a DRAFT terminos-de-pago to publish
+      // (e.g. it was already published by something else) - nothing to
+      // safely unpublish here without risking a permanent side effect,
+      // so this scenario is only exercised when the setup precondition
+      // actually held.
+      return;
+    }
+
+    await terminosHandle.unpublish();
+    try {
+      const { obligation } = await createCustomerWithObligation("PENDING");
+
+      await expect(service.create(obligation.id, REQUEST_CONTEXT)).rejects.toThrow(BadRequestException);
+
+      const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
+      expect(orderCount).toBe(0);
+    } finally {
+      await terminosHandle.republish();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -8,6 +9,7 @@ import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { RedisService } from "../../common/redis/redis.service";
 import type { EnvConfig } from "../../config/env.validation";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 
 function validLeadPayload(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -28,6 +30,7 @@ describe("Leads endpoints (integration, real HTTP via the exact configureApp() s
   let app: NestExpressApplication;
   let prisma: PrismaService;
   const createdEmails: string[] = [];
+  let tratamientoHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
@@ -46,9 +49,18 @@ describe("Leads endpoints (integration, real HTTP via the exact configureApp() s
     if (keysToClear.length > 0) {
       await redisClient.del(...keysToClear);
     }
+
+    // US-046: a persisted submission now also records data_processing
+    // consent, which requires a resolvable, currently PUBLISHED
+    // tratamiento-de-datos version - see publishDraftForTest's own doc
+    // comment.
+    tratamientoHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "tratamiento-de-datos");
   });
 
   afterAll(async () => {
+    if (tratamientoHandle) {
+      await tratamientoHandle.restore();
+    }
     if (createdEmails.length > 0) {
       await prisma.leadSubmission.deleteMany({ where: { email: { in: createdEmails } } });
     }
@@ -79,6 +91,35 @@ describe("Leads endpoints (integration, real HTTP via the exact configureApp() s
     const persisted = await prisma.leadSubmission.findFirst({ where: { email: payload.correo } });
     expect(persisted).not.toBeNull();
     expect(persisted?.status).toBe("PENDING");
+
+    // US-046 Example (AC): "submitting the contact form creates one
+    // ConsentRecord for data_processing tied to the currently PUBLISHED
+    // tratamiento-de-datos version".
+    const purpose = await prisma.consentPurpose.findUniqueOrThrow({ where: { key: "data_processing" } });
+    const consentRecords = await prisma.consentRecord.findMany({
+      where: { leadSubmissionId: persisted!.id, consentPurposeId: purpose.id },
+    });
+    expect(consentRecords).toHaveLength(1);
+    expect(consentRecords[0]?.status).toBe("GRANTED");
+    expect(consentRecords[0]?.legalDocumentVersionId).toBe(tratamientoHandle?.versionId);
+  });
+
+  it("Negative case (AC US-046): with no resolvable data_processing policy version, submission fails with a real error (not a silent 201) and nothing is persisted", async () => {
+    if (!tratamientoHandle) {
+      return;
+    }
+
+    await tratamientoHandle.unpublish();
+    try {
+      const payload = validLeadPayload();
+      const response = await request(app.getHttpServer()).post("/api/v1/leads").send(payload);
+
+      expect(response.status).toBe(400);
+      const persisted = await prisma.leadSubmission.findFirst({ where: { email: payload.correo } });
+      expect(persisted).toBeNull();
+    } finally {
+      await tratamientoHandle.republish();
+    }
   });
 
   it("creates a pending LeadNotification stub for every persisted submission", async () => {

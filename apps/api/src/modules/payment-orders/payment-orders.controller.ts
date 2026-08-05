@@ -1,6 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Public } from "../auth/decorators/public.decorator";
+import { buildRequestContext } from "../../common/http/request-context.util";
+import type { AuthenticatedRequest } from "../auth/types/request-user.type";
 import { PaymentOrdersService } from "./payment-orders.service";
 import { CreatePaymentOrderDto } from "./dto/create-payment-order.dto";
 import { toPaymentOrderResponse } from "./payment-order.types";
@@ -20,8 +22,8 @@ export class PaymentOrdersController {
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreatePaymentOrderDto) {
-    const order = await this.paymentOrdersService.create(dto.obligationId);
+  async create(@Body() dto: CreatePaymentOrderDto, @Req() request: AuthenticatedRequest) {
+    const order = await this.paymentOrdersService.create(dto.obligationId, buildRequestContext(request));
     return toPaymentOrderResponse(order);
   }
 

@@ -359,6 +359,33 @@ export class LegalDocumentsService {
   }
 
   /**
+   * US-046: internal-only resolver (never exposed via a public response
+   * type) for callers that need the actual LegalDocumentVersion id of
+   * "whatever is currently published and effective for this slug" - e.g.
+   * ConsentService's callers, which must tie a consent record to a real
+   * version id, not just the public-facing version *number*
+   * getPublishedBySlug returns. Accepts an optional transaction client so
+   * a caller can resolve this atomically alongside the write it's
+   * gating (see PaymentOrdersService.create). Same effective-now rule as
+   * getPublishedBySlug: null for no document, no current version,
+   * not-yet-PUBLISHED, or a future effectiveDate.
+   */
+  async resolveCurrentPublishedVersionId(
+    slug: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<string | null> {
+    const document = await client.legalDocument.findUnique({ where: { slug }, include: { currentVersion: true } });
+    const version = document?.currentVersion;
+
+    const isEffectiveNow = version?.effectiveDate == null || version.effectiveDate.getTime() <= Date.now();
+    if (!document || !version || version.status !== LegalDocumentVersionStatus.PUBLISHED || !isEffectiveNow) {
+      return null;
+    }
+
+    return version.id;
+  }
+
+  /**
    * The ConflictException in every blocked branch across this service
    * is deliberately thrown *outside* the $transaction callback, never
    * inside it: a throw inside a Prisma interactive transaction rolls

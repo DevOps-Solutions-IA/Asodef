@@ -1,24 +1,35 @@
 import { randomUUID } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 
 describe("Payment orders endpoints (integration, real HTTP via the exact configureApp() setup)", () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   const createdCustomerIds: string[] = [];
+  let terminosHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
     configureApp(app);
     await app.init();
     prisma = app.get(PrismaService);
+
+    // US-046: order creation now records payment_terms consent, which
+    // requires a resolvable, currently PUBLISHED terminos-de-pago
+    // version - see publishDraftForTest's own doc comment.
+    terminosHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "terminos-de-pago");
   });
 
   afterAll(async () => {
+    if (terminosHandle) {
+      await terminosHandle.restore();
+    }
     if (createdCustomerIds.length > 0) {
       await prisma.auditLog.deleteMany({ where: { paymentOrder: { customerId: { in: createdCustomerIds } } } });
       await prisma.paymentOrder.deleteMany({ where: { customerId: { in: createdCustomerIds } } });

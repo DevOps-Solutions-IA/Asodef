@@ -51,15 +51,16 @@ model User {
   // otherwise-stateless access token without a per-request session lookup).
   passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
 
-  roles                        UserRole[]
-  sessions                     Session[]
-  passwordResets               PasswordReset[]
-  passwordHistory              PasswordHistoryEntry[]
-  loginAttempts                LoginAttempt[]
-  securityEvents               SecurityEvent[]
-  notificationJobs             NotificationJob[]
+  roles                         UserRole[]
+  sessions                      Session[]
+  passwordResets                PasswordReset[]
+  passwordHistory               PasswordHistoryEntry[]
+  loginAttempts                 LoginAttempt[]
+  securityEvents                SecurityEvent[]
+  notificationJobs              NotificationJob[]
   approvedLegalDocumentVersions LegalDocumentVersion[] @relation("LegalDocumentVersionApprover")
-  auditLogActions              AuditLog[]             @relation("AuditLogActor")
+  auditLogActions               AuditLog[]             @relation("AuditLogActor")
+  consentRecords                ConsentRecord[]
 
   @@map("users")
 }
@@ -400,7 +401,8 @@ model LeadSubmission {
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  notification LeadNotification?
+  notification   LeadNotification?
+  consentRecords ConsentRecord[]
 
   @@index([createdAt])
   @@map("lead_submissions")
@@ -530,9 +532,10 @@ model Customer {
   phone          String
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  affiliates    Affiliate[]
-  obligations   Obligation[]
-  paymentOrders PaymentOrder[]
+  affiliates     Affiliate[]
+  obligations    Obligation[]
+  paymentOrders  PaymentOrder[]
+  consentRecords ConsentRecord[]
 
   // Natural business key: US-021's own Example queries "the seeded demo
   // customer's document number", implying (type, number) uniquely
@@ -794,31 +797,32 @@ model LegalDocument {
 }
 
 model LegalDocumentVersion {
-  id              String                     @id @default(uuid()) @db.Uuid
-  legalDocumentId String                     @map("legal_document_id") @db.Uuid
-  version         Int
-  status          LegalDocumentVersionStatus @default(DRAFT)
+  id               String                     @id @default(uuid()) @db.Uuid
+  legalDocumentId  String                     @map("legal_document_id") @db.Uuid
+  version          Int
+  status           LegalDocumentVersionStatus @default(DRAFT)
   // Freely editable while status = DRAFT. Never mutated once the
   // version moves past DRAFT - approve() snapshots it into
   // approvedContent below, which is what publish()/public reads
   // actually serve.
-  draftContent    Json                       @map("draft_content")
+  draftContent     Json                       @map("draft_content")
   // Null until approve() sets it (draftContent snapshot at the exact
   // moment of approval) - "draftContent may exist and be edited freely
   // without ever implying public approval" (PRD rule, verbatim).
-  approvedContent Json?                      @map("approved_content")
-  effectiveDate   DateTime?                  @map("effective_date") @db.Timestamptz(3)
-  expirationDate  DateTime?                  @map("expiration_date") @db.Timestamptz(3)
-  changeSummary   String?                    @map("change_summary")
-  approvedByUserId String?                   @map("approved_by_user_id") @db.Uuid
-  approvalDate    DateTime?                  @map("approval_date") @db.Timestamptz(3)
-  publicationDate DateTime?                  @map("publication_date") @db.Timestamptz(3)
-  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  approvedContent  Json?                      @map("approved_content")
+  effectiveDate    DateTime?                  @map("effective_date") @db.Timestamptz(3)
+  expirationDate   DateTime?                  @map("expiration_date") @db.Timestamptz(3)
+  changeSummary    String?                    @map("change_summary")
+  approvedByUserId String?                    @map("approved_by_user_id") @db.Uuid
+  approvalDate     DateTime?                  @map("approval_date") @db.Timestamptz(3)
+  publicationDate  DateTime?                  @map("publication_date") @db.Timestamptz(3)
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  legalDocument      LegalDocument  @relation("DocumentVersions", fields: [legalDocumentId], references: [id], onDelete: Restrict)
-  currentForDocument LegalDocument? @relation("CurrentVersion")
-  approvedByUser     User?          @relation("LegalDocumentVersionApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  legalDocument      LegalDocument   @relation("DocumentVersions", fields: [legalDocumentId], references: [id], onDelete: Restrict)
+  currentForDocument LegalDocument?  @relation("CurrentVersion")
+  approvedByUser     User?           @relation("LegalDocumentVersionApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   auditLogs          AuditLog[]
+  consentRecords     ConsentRecord[]
 
   // Version numbers are deterministic and database-protected (PRD
   // rule, verbatim) - this constraint is what actually enforces it,
@@ -826,4 +830,87 @@ model LegalDocumentVersion {
   @@unique([legalDocumentId, version])
   @@index([legalDocumentId, status])
   @@map("legal_document_versions")
+}
+
+// ---------------------------------------------------------------------------
+// Consent (US-046)
+//
+// ConsentPurpose is the literal, PRD-given catalog of 8 purpose keys
+// (seeded, not user-editable). requiresPolicyVersion marks the purposes
+// that must be tied to a specific LegalDocumentVersion to be recorded
+// at all (terms_and_conditions, data_processing, cookie_preferences,
+// payment_terms - the 4 purposes that correspond to one of the 11
+// seeded legal document types, US-044) versus the ones that don't
+// correspond to any seeded document today (commercial_communications,
+// electronic_notifications, contract_acceptance, optional_marketing).
+// This flag is the mechanism behind the story's own negative case
+// ("without a resolvable policy version where one is required").
+// ---------------------------------------------------------------------------
+
+enum ConsentStatus {
+  GRANTED
+  DENIED
+  REVOKED
+  EXPIRED
+  REPLACED
+
+  @@map("consent_status")
+}
+
+model ConsentPurpose {
+  id                    String   @id @default(uuid()) @db.Uuid
+  key                   String   @unique
+  requiresPolicyVersion Boolean  @default(false) @map("requires_policy_version")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  consentRecords ConsentRecord[]
+
+  @@map("consent_purposes")
+}
+
+// The "subject" (who gave consent) is exactly one of userId /
+// leadSubmissionId / customerId at creation time (enforced by
+// ConsentService.record()'s discriminated-union parameter type) - a
+// public contact-form or payment flow has no authenticated User to
+// attach to, so this can't be a single required userId FK. Mirrors
+// AuditLog's US-043 real-per-domain-FKs design rather than a generic
+// polymorphic entityType/entityId pair. Subject FKs use onDelete:
+// SetNull (evidence must outlive the subject, e.g. a future erasure
+// request - matches AuditLog.actorUserId); consentPurposeId/
+// legalDocumentVersionId use onDelete: Restrict (what the record is
+// evidence *of* must never silently disappear from under it).
+//
+// The DB-level CHECK is deliberately "at most one" (<=1), not "exactly
+// one" (=1): a "=1" check is incompatible with onDelete: SetNull on
+// these same columns - deleting a subject nulls its FK out, which a
+// "=1" check would then reject as a constraint violation on the very
+// deletion that was supposed to succeed. A record legitimately reaching
+// zero subjects (its subject was later deleted) is expected, durable
+// evidence, not a data integrity error.
+model ConsentRecord {
+  id                     String        @id @default(uuid()) @db.Uuid
+  consentPurposeId       String        @map("consent_purpose_id") @db.Uuid
+  legalDocumentVersionId String?       @map("legal_document_version_id") @db.Uuid
+  userId                 String?       @map("user_id") @db.Uuid
+  leadSubmissionId       String?       @map("lead_submission_id") @db.Uuid
+  customerId             String?       @map("customer_id") @db.Uuid
+  status                 ConsentStatus @default(GRANTED)
+  ipAddress              String?       @map("ip_address")
+  userAgent              String?       @map("user_agent")
+  source                 String
+  acceptanceMethod       String        @map("acceptance_method")
+  revokedAt              DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  consentPurpose       ConsentPurpose        @relation(fields: [consentPurposeId], references: [id], onDelete: Restrict)
+  legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  leadSubmission       LeadSubmission?       @relation(fields: [leadSubmissionId], references: [id], onDelete: SetNull)
+  customer             Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([consentPurposeId, createdAt])
+  @@index([userId, createdAt])
+  @@index([leadSubmissionId, createdAt])
+  @@index([customerId, createdAt])
+  @@map("consent_records")
 }
