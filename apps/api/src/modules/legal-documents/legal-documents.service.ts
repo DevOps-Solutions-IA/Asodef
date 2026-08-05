@@ -9,6 +9,7 @@ import {
   toAdminVersionResponse,
   toPublicLegalDocumentResponse,
   type AdminLegalDocumentResponse,
+  type AdminLegalDocumentSummaryResponse,
   type AdminLegalDocumentVersionResponse,
   type PublicLegalDocumentResponse,
 } from "./legal-document.types";
@@ -326,6 +327,24 @@ export class LegalDocumentsService {
       throw new ConflictException("Solo una versión aprobada puede publicarse.");
     }
     return toAdminVersionResponse(outcome.version);
+  }
+
+  /** US-062: /admin/legal's document picker. */
+  async list(): Promise<AdminLegalDocumentSummaryResponse[]> {
+    const documents = await this.prisma.legalDocument.findMany({
+      include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      orderBy: { title: "asc" },
+    });
+    return documents.map((document) => ({
+      id: document.id,
+      type: document.type,
+      title: document.title,
+      slug: document.slug,
+      currentVersionId: document.currentVersionId,
+      latestVersionStatus: document.versions[0]?.status ?? null,
+      latestVersionNumber: document.versions[0]?.version ?? null,
+      createdAt: document.createdAt,
+    }));
   }
 
   async getDocument(documentId: string): Promise<AdminLegalDocumentResponse> {

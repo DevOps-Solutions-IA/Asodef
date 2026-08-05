@@ -55,3 +55,48 @@ export function toConsentRecordResponse(record: ConsentRecord, purposeKey: strin
     revokedAt: record.revokedAt,
   };
 }
+
+/** US-062: /admin/consentimientos's full evidence view - "policy
+ * version, ip, timestamp, method" from the AC, plus which of the three
+ * discriminated subject fields this record actually belongs to. */
+export interface AdminConsentRecordResponse {
+  id: string;
+  purposeKey: string;
+  status: string;
+  subjectType: "user" | "leadSubmission" | "customer" | "anonymous";
+  subjectId: string | null;
+  legalDocumentVersionId: string | null;
+  policyVersionNumber: number | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  source: string;
+  acceptanceMethod: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+}
+
+type ConsentRecordWithRelations = ConsentRecord & {
+  consentPurpose: { key: string };
+  legalDocumentVersion: { version: number } | null;
+};
+
+export function toAdminConsentRecordResponse(record: ConsentRecordWithRelations): AdminConsentRecordResponse {
+  const subjectType = record.userId ? "user" : record.leadSubmissionId ? "leadSubmission" : record.customerId ? "customer" : "anonymous";
+  const subjectId = record.userId ?? record.leadSubmissionId ?? record.customerId ?? null;
+
+  return {
+    id: record.id,
+    purposeKey: record.consentPurpose.key,
+    status: record.status,
+    subjectType,
+    subjectId,
+    legalDocumentVersionId: record.legalDocumentVersionId,
+    policyVersionNumber: record.legalDocumentVersion?.version ?? null,
+    ipAddress: record.ipAddress,
+    userAgent: record.userAgent,
+    source: record.source,
+    acceptanceMethod: record.acceptanceMethod,
+    createdAt: record.createdAt,
+    revokedAt: record.revokedAt,
+  };
+}

@@ -9,10 +9,9 @@ import { LogoutButton } from "./shared/LogoutButton";
 // US-060's literal nav list. `permission` is the key required to SHOW the
 // item (and matches the PermissionRoute guarding its route in router.tsx -
 // see that file for the "usuarios stays users.read, not the AC Example's
-// users.manage" note). Items with no `permission` (Dashboard, Planes,
-// Consentimientos) render for every internal-staff role that already
-// cleared the outer RoleRoute gate - no permission key exists for them and
-// none is invented.
+// users.manage" note). Items with no `permission` (Dashboard, Planes)
+// render for every internal-staff role that already cleared the outer
+// RoleRoute gate - no permission key exists for them and none is invented.
 interface AdminNavItem {
   to: string;
   label: string;
@@ -32,8 +31,10 @@ const NAV_ITEMS: AdminNavItem[] = [
   { to: "/admin/contratos", label: "Contratos", permission: "contracts.read" },
   { to: "/admin/pagos", label: "Pagos", permission: "payments.read" },
   { to: "/admin/conciliacion", label: "Conciliación", permission: "payments.reconcile" },
-  { to: "/admin/legal", label: "Legal", permission: "legal.approve" },
-  { to: "/admin/consentimientos", label: "Consentimientos", permission: null },
+  // content.manage gates visibility (legal.approve additionally gates
+  // approve/publish inside the page - see router.tsx).
+  { to: "/admin/legal", label: "Legal", permission: "content.manage" },
+  { to: "/admin/consentimientos", label: "Consentimientos", permission: "data.manage" },
   { to: "/admin/solicitudes-de-datos", label: "Solicitudes de datos", permission: "data.manage" },
   { to: "/admin/pqr", label: "PQR", permission: "pqr.manage" },
   { to: "/admin/aprobaciones", label: "Aprobaciones", permission: "approvals.manage" },

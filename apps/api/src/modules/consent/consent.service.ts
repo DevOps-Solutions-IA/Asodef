@@ -3,11 +3,34 @@ import { ConsentStatus, type Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import {
   subjectToRecordFields,
+  toAdminConsentRecordResponse,
   toConsentRecordResponse,
+  type AdminConsentRecordResponse,
   type ConsentRecordResponse,
   type RecordConsentRequestMeta,
   type RecordConsentSubject,
 } from "./consent.types";
+
+export interface SearchConsentRecordsFilters {
+  subjectType?: "user" | "leadSubmission" | "customer";
+  subjectId?: string;
+  purposeKey?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AdminConsentRecordListResponse {
+  items: AdminConsentRecordResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+const SUBJECT_TYPE_TO_FIELD = {
+  user: "userId",
+  leadSubmission: "leadSubmissionId",
+  customer: "customerId",
+} as const;
 
 /**
  * US-046. Takes the same transaction client every other domain write
@@ -66,9 +89,47 @@ export class ConsentService {
     return toConsentRecordResponse(record, purposeKey);
   }
 
-  /** Not yet wired to a route (no AC in this story calls for one) - a
-   * future admin consent-management story (US-062) is expected to
-   * expose this. */
+  /** US-062 AC2: "searching consent records by subject/purpose". Both
+   * filters are optional and combine with AND when both given. */
+  async search(filters: SearchConsentRecordsFilters): Promise<AdminConsentRecordListResponse> {
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 20;
+
+    const where: Prisma.ConsentRecordWhereInput = {};
+    if (filters.subjectType && filters.subjectId) {
+      where[SUBJECT_TYPE_TO_FIELD[filters.subjectType]] = filters.subjectId;
+    }
+    if (filters.purposeKey) {
+      where.consentPurpose = { key: filters.purposeKey };
+    }
+
+    const [records, total] = await Promise.all([
+      this.prisma.consentRecord.findMany({
+        where,
+        include: { consentPurpose: true, legalDocumentVersion: true },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.consentRecord.count({ where }),
+    ]);
+
+    return { items: records.map(toAdminConsentRecordResponse), total, page, pageSize };
+  }
+
+  /** US-062 AC2: "viewing full evidence (policy version, ip, timestamp,
+   * method)". */
+  async getDetail(consentRecordId: string): Promise<AdminConsentRecordResponse> {
+    const record = await this.prisma.consentRecord.findUnique({
+      where: { id: consentRecordId },
+      include: { consentPurpose: true, legalDocumentVersion: true },
+    });
+    if (!record) {
+      throw new NotFoundException("El registro de consentimiento no existe.");
+    }
+    return toAdminConsentRecordResponse(record);
+  }
+
   async revoke(consentRecordId: string): Promise<ConsentRecordResponse> {
     const record = await this.prisma.consentRecord.findUnique({
       where: { id: consentRecordId },

@@ -28,6 +28,10 @@ import { OpportunityDetailPage } from "../pages/admin/crm/OpportunityDetailPage"
 import { CrmCompaniesPage } from "../pages/admin/crm/CrmCompaniesPage";
 import { CompanyDetailPage } from "../pages/admin/crm/CompanyDetailPage";
 import { BusinessPartnerDetailPage } from "../pages/admin/crm/BusinessPartnerDetailPage";
+import { AdminLegalPage } from "../pages/admin/legal/AdminLegalPage";
+import { ConsentSearchPage } from "../pages/admin/legal/ConsentSearchPage";
+import { DataSubjectRequestQueuePage } from "../pages/admin/legal/DataSubjectRequestQueuePage";
+import { PqrQueuePage } from "../pages/admin/legal/PqrQueuePage";
 import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
 import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
@@ -223,17 +227,25 @@ export const routeConfig: RouteObject[] = [
                 children: [{ path: "contratos", element: <RoutePlaceholder title="Contratos" /> }],
               },
               {
-                element: <PermissionRoute permissions={["legal.approve"]} />,
-                children: [{ path: "legal", element: <RoutePlaceholder title="Legal" /> }],
+                // content.manage gates visibility (edit/submit/reject);
+                // legal.approve additionally gates approve/publish inside
+                // the page (AdminLegalPage's own hasPermission checks) -
+                // same read-vs-manage split as every other section here.
+                // Only ADMIN/SUPER_ADMIN currently hold content.manage.
+                element: <PermissionRoute permissions={["content.manage"]} />,
+                children: [{ path: "legal", element: <AdminLegalPage /> }],
               },
-              { path: "consentimientos", element: <RoutePlaceholder title="Consentimientos" /> },
               {
                 element: <PermissionRoute permissions={["data.manage"]} />,
-                children: [{ path: "solicitudes-de-datos", element: <RoutePlaceholder title="Solicitudes de datos" /> }],
+                children: [{ path: "consentimientos", element: <ConsentSearchPage /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["data.manage"]} />,
+                children: [{ path: "solicitudes-de-datos", element: <DataSubjectRequestQueuePage /> }],
               },
               {
                 element: <PermissionRoute permissions={["pqr.manage"]} />,
-                children: [{ path: "pqr", element: <RoutePlaceholder title="PQR" /> }],
+                children: [{ path: "pqr", element: <PqrQueuePage /> }],
               },
               {
                 element: <PermissionRoute permissions={["approvals.manage"]} />,

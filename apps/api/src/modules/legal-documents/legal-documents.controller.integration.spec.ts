@@ -97,6 +97,18 @@ describe("Legal documents endpoints (integration, real HTTP)", () => {
     return response.body as { id: string; versions: { id: string; version: number; status: string }[] };
   }
 
+  it("US-062: list() returns the document with its latest version's status and number", async () => {
+    const document = await createDraftDocument();
+
+    const response = await request(app.getHttpServer()).get("/api/v1/admin/legal-documents").set("Cookie", admin.cookies);
+    expect(response.status).toBe(200);
+
+    const entry = response.body.find((d: { id: string }) => d.id === document.id);
+    expect(entry).toBeDefined();
+    expect(entry.latestVersionStatus).toBe("DRAFT");
+    expect(entry.latestVersionNumber).toBe(1);
+  });
+
   describe("Example (AC): draft -> review -> approval produces exactly one APPROVED version with a full audit trail", () => {
     it("runs the full happy path", async () => {
       const document = await createDraftDocument();

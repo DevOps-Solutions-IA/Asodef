@@ -78,3 +78,17 @@ export interface AdminLegalDocumentResponse {
   createdAt: Date;
   versions: AdminLegalDocumentVersionResponse[];
 }
+
+/** US-062: /admin/legal's document picker - the summary shape (no
+ * version bodies) needed to list every LegalDocument before drilling
+ * into one via getDocument(). */
+export interface AdminLegalDocumentSummaryResponse {
+  id: string;
+  type: string;
+  title: string;
+  slug: string;
+  currentVersionId: string | null;
+  latestVersionStatus: string | null;
+  latestVersionNumber: number | null;
+  createdAt: Date;
+}

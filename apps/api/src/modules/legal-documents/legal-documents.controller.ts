@@ -32,6 +32,13 @@ export class LegalDocumentsController {
 
   @ApiCookieAuth("asodef_at")
   @RequirePermissions("content.manage")
+  @Get("admin/legal-documents")
+  list() {
+    return this.legalDocumentsService.list();
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @RequirePermissions("content.manage")
   @Get("admin/legal-documents/:documentId")
   getDocument(@Param("documentId", ParseUUIDPipe) documentId: string) {
     return this.legalDocumentsService.getDocument(documentId);

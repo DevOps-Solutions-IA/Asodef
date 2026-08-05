@@ -189,6 +189,29 @@ describe("router", () => {
     expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
   });
 
+  it("US-062: a user with content.manage (but not legal.approve) can open /admin/legal", async () => {
+    renderAtPath("/admin/legal", buildCurrentUser({ roles: ["ADMIN"], permissions: ["content.manage"] }), (url) => {
+      if (url.includes("/admin/legal-documents")) return jsonResponse(200, []);
+      return undefined;
+    });
+
+    expect(await screen.findByRole("heading", { name: "Legal" })).toBeInTheDocument();
+  });
+
+  it("US-062: a user with data.manage can open /admin/consentimientos", async () => {
+    renderAtPath("/admin/consentimientos", buildCurrentUser({ roles: ["CUSTOMER_SERVICE"], permissions: ["data.manage"] }), (url) => {
+      if (url.includes("/admin/consent-records")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+      return undefined;
+    });
+
+    expect(await screen.findByRole("heading", { name: "Consentimientos" })).toBeInTheDocument();
+  });
+
+  it("Negative case (AC): a user without content.manage/data.manage is shown the unauthorized state for /admin/legal and /admin/consentimientos", async () => {
+    renderAtPath("/admin/legal", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }));
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+  });
+
   it("renders the real UserListPage for /admin/usuarios when the actor holds users.read", async () => {
     renderAtPath(
       "/admin/usuarios",

@@ -65,5 +65,21 @@ export const queryKeys = {
       partners: () => ["admin", "crm", "partners"] as const,
       partner: (partnerId: string) => ["admin", "crm", "partners", partnerId] as const,
     },
+    legal: {
+      documents: () => ["admin", "legal", "documents"] as const,
+      document: (documentId: string) => ["admin", "legal", "documents", documentId] as const,
+    },
+    consent: {
+      search: (filters: unknown) => ["admin", "consent", "search", filters] as const,
+      detail: (recordId: string) => ["admin", "consent", "detail", recordId] as const,
+    },
+    dsr: {
+      list: (filters: unknown) => ["admin", "dsr", "list", filters] as const,
+      detail: (id: string) => ["admin", "dsr", "detail", id] as const,
+    },
+    pqr: {
+      list: (filters: unknown) => ["admin", "pqr", "list", filters] as const,
+      detail: (id: string) => ["admin", "pqr", "detail", id] as const,
+    },
   },
 } as const;
