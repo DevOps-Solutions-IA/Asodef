@@ -91,6 +91,18 @@ export function getCompany(companyId: string, signal?: AbortSignal): Promise<Adm
   return apiClient.get<AdminCompanyDetail>(`/admin/companies/${companyId}`, { signal });
 }
 
+export interface CreateCompanyPayload {
+  name: string;
+  nit: string;
+  contactName: string;
+  contactEmail: string;
+  sector: string;
+}
+
+export function createCompany(payload: CreateCompanyPayload): Promise<AdminCompany> {
+  return apiClient.post<AdminCompany>("/admin/companies", payload);
+}
+
 export function listBusinessPartners(signal?: AbortSignal): Promise<AdminBusinessPartner[]> {
   return apiClient.get<AdminBusinessPartner[]>("/admin/partners", { signal });
 }
