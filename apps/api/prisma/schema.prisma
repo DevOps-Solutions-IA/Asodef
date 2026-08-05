@@ -591,6 +591,7 @@ model Company {
   opportunities      Opportunity[]
   agreements         Agreement[]
   contracts          Contract[]
+  auditLogs          AuditLog[]
 
   @@map("companies")
 }
@@ -841,6 +842,8 @@ model AuditLog {
   opportunityId          String?     @map("opportunity_id") @db.Uuid
   // US-056: generalized to a 6th domain, same pattern.
   refundId               String?     @map("refund_id") @db.Uuid
+  // US-074: generalized to a 7th domain, same pattern.
+  companyId              String?     @map("company_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -864,6 +867,7 @@ model AuditLog {
   pqrCase              PqrCase?              @relation(fields: [pqrCaseId], references: [id], onDelete: Restrict)
   opportunity          Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
   refund               Refund?               @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  company              Company?              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -874,6 +878,7 @@ model AuditLog {
   @@index([pqrCaseId, createdAt])
   @@index([opportunityId, createdAt])
   @@index([refundId, createdAt])
+  @@index([companyId, createdAt])
   @@map("audit_logs")
 }
 
