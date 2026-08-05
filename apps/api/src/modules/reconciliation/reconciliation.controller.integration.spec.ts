@@ -365,6 +365,93 @@ describe("Reconciliation endpoints (integration, real HTTP)", () => {
     expect(differences.body.some((d: { kind: string }) => d.kind === "UNPROCESSED_NOTIFICATION")).toBe(true);
   });
 
+  it("US-065: detects reference-mismatch when an event's payload reference_id doesn't match its order's publicReference", async () => {
+    const anchor = uniqueAnchor();
+    const { order } = await createOrder(anchor, "PENDING");
+    await prisma.paymentEvent.create({
+      data: {
+        paymentOrderId: order.id,
+        source: "bold",
+        eventType: "webhook",
+        idempotencyKey: `manual-${randomUUID()}`,
+        payload: { reference_id: `not-${order.publicReference}`, status: "RUNNING" },
+        processedAt: new Date(),
+        receivedAt: anchor,
+      },
+    });
+
+    const run = await request(app.getHttpServer())
+      .post("/api/v1/admin/reconciliation/runs")
+      .set("Cookie", finance.cookies)
+      .send(dateRangeAround(anchor));
+    const differences = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reconciliation/runs/${run.body.id}/differences`)
+      .set("Cookie", finance.cookies);
+
+    const referenceMismatch = differences.body.find((d: { kind: string }) => d.kind === "REFERENCE_MISMATCH");
+    expect(referenceMismatch).toBeDefined();
+    expect(referenceMismatch.paymentOrderId).toBe(order.id);
+  });
+
+  it("US-065: detects duplicate-event when 2+ distinct events for the same order report the identical raw provider status", async () => {
+    const anchor = uniqueAnchor();
+    const { order } = await createOrder(anchor, "PENDING");
+    await prisma.paymentEvent.create({
+      data: {
+        paymentOrderId: order.id,
+        source: "bold",
+        eventType: "webhook",
+        idempotencyKey: `manual-${randomUUID()}-1`,
+        payload: { reference_id: order.publicReference, status: "RUNNING" },
+        processedAt: new Date(),
+        receivedAt: anchor,
+      },
+    });
+    await prisma.paymentEvent.create({
+      data: {
+        paymentOrderId: order.id,
+        source: "bold",
+        eventType: "poll",
+        idempotencyKey: `manual-${randomUUID()}-2`,
+        payload: { reference_id: order.publicReference, status: "RUNNING" },
+        processedAt: new Date(),
+        receivedAt: anchor,
+      },
+    });
+
+    const run = await request(app.getHttpServer())
+      .post("/api/v1/admin/reconciliation/runs")
+      .set("Cookie", finance.cookies)
+      .send(dateRangeAround(anchor));
+    const differences = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reconciliation/runs/${run.body.id}/differences`)
+      .set("Cookie", finance.cookies);
+
+    const duplicateEvent = differences.body.find((d: { kind: string }) => d.kind === "DUPLICATE_EVENT");
+    expect(duplicateEvent).toBeDefined();
+    expect(duplicateEvent.paymentOrderId).toBe(order.id);
+    expect(duplicateEvent.details.eventIds).toHaveLength(2);
+  });
+
+  it("US-065: detects internal-approved-no-provider-confirmation when an order reached APPROVED with no on-record approval event", async () => {
+    const anchor = uniqueAnchor();
+    // Deliberately no PaymentEvent at all for this order - it reached
+    // APPROVED with zero corresponding provider confirmation on record.
+    const { order } = await createOrder(anchor, "APPROVED");
+
+    const run = await request(app.getHttpServer())
+      .post("/api/v1/admin/reconciliation/runs")
+      .set("Cookie", finance.cookies)
+      .send(dateRangeAround(anchor));
+    const differences = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reconciliation/runs/${run.body.id}/differences`)
+      .set("Cookie", finance.cookies);
+
+    const internalApprovedNoConfirmation = differences.body.find((d: { kind: string }) => d.kind === "INTERNAL_APPROVED_NO_PROVIDER_CONFIRMATION");
+    expect(internalApprovedNoConfirmation).toBeDefined();
+    expect(internalApprovedNoConfirmation.paymentOrderId).toBe(order.id);
+  });
+
   it("list()/get() return created reconciliation runs for authorized users", async () => {
     const run = await request(app.getHttpServer())
       .post("/api/v1/admin/reconciliation/runs")

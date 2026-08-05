@@ -156,6 +156,35 @@ describe("Business partner endpoints (integration, real HTTP)", () => {
     expect(response.body.message).toEqual(expect.stringContaining("cobertura"));
   });
 
+  it("US-065: each of the 7 gate checks individually blocks publication when it alone is missing (AC's own text says 6, the literal enumerated list has 7 - same flagged inconsistency as US-053)", async () => {
+    const allChecks = {
+      legalValidationConfirmed: true,
+      commercialValidationConfirmed: true,
+      benefitConfirmed: true,
+      agreementValidityConfirmed: true,
+      logoAuthorizationConfirmed: true,
+      contactConfirmed: true,
+      coverageConfirmed: true,
+    };
+
+    for (const omittedCheck of Object.keys(allChecks)) {
+      const partner = await createPartner();
+      const checksWithOneMissing = { ...allChecks, [omittedCheck]: false };
+
+      const checksUpdate = await request(app.getHttpServer())
+        .patch(`/api/v1/admin/partners/${partner.id}/checks`)
+        .set("Cookie", admin.cookies)
+        .send(checksWithOneMissing);
+      expect(checksUpdate.status).toBe(200);
+
+      const publish = await request(app.getHttpServer()).post(`/api/v1/admin/partners/${partner.id}/publish`).set("Cookie", admin.cookies);
+      expect(publish.status).toBe(409);
+
+      const reloaded = await prisma.businessPartner.findUniqueOrThrow({ where: { id: partner.id } });
+      expect(reloaded.publicationStatus).toBe("UNPUBLISHED");
+    }
+  });
+
   it("Example (AC): a partner with all 7 validations recorded true can be published and then appears via the public endpoint", async () => {
     const partner = await createPartner();
 

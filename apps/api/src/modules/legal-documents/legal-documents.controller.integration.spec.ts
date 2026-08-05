@@ -180,6 +180,45 @@ describe("Legal documents endpoints (integration, real HTTP)", () => {
       const version = await prisma.legalDocumentVersion.findUniqueOrThrow({ where: { id: versionId } });
       expect(version.status).toBe("PENDING_APPROVAL");
     });
+
+    it("US-065 Negative case (AC): a PENDING_APPROVAL v2 fails to publish, and the public query still serves the previous PUBLISHED v1 unaffected", async () => {
+      const document = await createDraftDocument();
+      const v1Id = document.versions[0]!.id;
+      await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v1Id}/submit-for-review`).set("Cookie", admin.cookies);
+      await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v1Id}/submit-for-approval`).set("Cookie", admin.cookies);
+      await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v1Id}/approve`).set("Cookie", superAdmin.cookies);
+      const v1Publish = await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v1Id}/publish`).set("Cookie", superAdmin.cookies);
+      expect(v1Publish.status).toBe(200);
+      const slug: string = (await prisma.legalDocument.findUniqueOrThrow({ where: { id: document.id } })).slug;
+
+      const v2Response = await request(app.getHttpServer())
+        .post(`/api/v1/admin/legal-documents/${document.id}/versions`)
+        .set("Cookie", admin.cookies)
+        .send({ draftContent: { sections: [{ heading: "Identificación de la empresa", body: "ASODEF S.A.S. (borrador v2, nunca aprobado)" }] } });
+      expect(v2Response.status).toBe(201);
+      const v2Id = v2Response.body.id;
+      await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v2Id}/submit-for-review`).set("Cookie", admin.cookies);
+      await request(app.getHttpServer()).post(`/api/v1/admin/legal-documents/versions/${v2Id}/submit-for-approval`).set("Cookie", admin.cookies);
+
+      const v2Publish = await request(app.getHttpServer())
+        .post(`/api/v1/admin/legal-documents/versions/${v2Id}/publish`)
+        .set("Cookie", superAdmin.cookies);
+      expect(v2Publish.status).toBe(409);
+
+      const v2After = await prisma.legalDocumentVersion.findUniqueOrThrow({ where: { id: v2Id } });
+      expect(v2After.status).toBe("PENDING_APPROVAL");
+      expect(v2After.publicationDate).toBeNull();
+
+      // The public-facing query is completely unaffected by the failed
+      // v2 publish attempt - it still serves v1's own content.
+      const publicResponse = await request(app.getHttpServer()).get(`/api/v1/legal-documents/${slug}`);
+      expect(publicResponse.status).toBe(200);
+      expect(publicResponse.body.version).toBe(1);
+      expect(publicResponse.body.content).toEqual({ sections: [{ heading: "Identificación de la empresa", body: "ASODEF S.A.S." }] });
+
+      const documentAfter = await prisma.legalDocument.findUniqueOrThrow({ where: { id: document.id } });
+      expect(documentAfter.currentVersionId).toBe(v1Id);
+    });
   });
 
   async function approveVersion(versionId: string) {
