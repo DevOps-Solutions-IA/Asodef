@@ -8,6 +8,8 @@ import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { PasswordService } from "../auth/password.service";
 import { RedisService } from "../../common/redis/redis.service";
+import { seedCommunicationTemplates } from "../../database/seed-communication-templates";
+import { NotificationService } from "../notifications/notification.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -111,5 +113,128 @@ describe("GET /me/consent-records (US-071, integration, real HTTP)", () => {
     const response = await request(app.getHttpServer()).get("/api/v1/me/consent-records").set("Cookie", userB.cookies);
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
+  });
+});
+
+describe("POST /me/consent-records/:purposeKey/revoke (US-073, integration, real HTTP + Postgres)", () => {
+  let app: NestExpressApplication;
+  let prisma: PrismaService;
+  let passwordService: PasswordService;
+  let notificationService: NotificationService;
+  const createdUserIds: string[] = [];
+
+  let actor: { user: User; cookies: string[] };
+  let otherActor: { user: User; cookies: string[] };
+
+  beforeAll(async () => {
+    app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
+    configureApp(app);
+    await app.init();
+    prisma = app.get(PrismaService);
+    passwordService = app.get(PasswordService);
+    notificationService = app.get(NotificationService);
+    await seedCommunicationTemplates(prisma);
+
+    const redisClient = app.get(RedisService).getClient();
+    const loginKeys = await redisClient.keys("ratelimit:login:*");
+    if (loginKeys.length > 0) {
+      await redisClient.del(...loginKeys);
+    }
+
+    actor = await createActor();
+    otherActor = await createActor();
+  });
+
+  afterAll(async () => {
+    if (createdUserIds.length > 0) {
+      await prisma.consentRecord.deleteMany({ where: { userId: { in: createdUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    }
+    await app.close();
+  });
+
+  async function createUser(): Promise<User> {
+    const user = await prisma.user.create({
+      data: {
+        email: `revoke-actor-${randomUUID()}@example.com`,
+        passwordHash: await passwordService.hash(TEST_PASSWORD),
+        fullName: "Revoke Test User",
+        status: "ACTIVE",
+      },
+    });
+    createdUserIds.push(user.id);
+    return user;
+  }
+
+  async function loginAs(user: User): Promise<string[]> {
+    const response = await request(app.getHttpServer()).post("/api/v1/auth/login").send({ email: user.email, password: TEST_PASSWORD });
+    expect(response.status).toBe(200);
+    const raw = response.headers["set-cookie"];
+    return Array.isArray(raw) ? raw : raw ? [raw] : [];
+  }
+
+  async function createActor(): Promise<{ user: User; cookies: string[] }> {
+    const user = await createUser();
+    const cookies = await loginAs(user);
+    return { user, cookies };
+  }
+
+  async function grantOptionalMarketing(userId: string): Promise<void> {
+    const purpose = await prisma.consentPurpose.findUniqueOrThrow({ where: { key: "optional_marketing" } });
+    await prisma.consentRecord.create({
+      data: { consentPurposeId: purpose.id, userId, status: "GRANTED", source: "test", acceptanceMethod: "checkbox" },
+    });
+  }
+
+  it("Negative case (AC): revoking a non-revocable purpose (terms_and_conditions) returns 400", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/me/consent-records/terms_and_conditions/revoke")
+      .set("Cookie", actor.cookies);
+    expect(response.status).toBe(400);
+  });
+
+  it("Negative case: revoking a revocable purpose with no active grant returns 409", async () => {
+    const response = await request(app.getHttpServer()).post("/api/v1/me/consent-records/optional_marketing/revoke").set("Cookie", actor.cookies);
+    expect(response.status).toBe(409);
+  });
+
+  it("Example (AC): revokes the caller's own GRANTED optional_marketing consent", async () => {
+    await grantOptionalMarketing(actor.user.id);
+
+    const response = await request(app.getHttpServer()).post("/api/v1/me/consent-records/optional_marketing/revoke").set("Cookie", actor.cookies);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ purposeKey: "optional_marketing", status: "REVOKED" });
+    expect(response.body.revokedAt).toBeTruthy();
+
+    const record = await prisma.consentRecord.findFirst({ where: { userId: actor.user.id, consentPurpose: { key: "optional_marketing" } } });
+    expect(record?.status).toBe("REVOKED");
+  });
+
+  it("IDOR guard: revoking only ever affects the caller's own record, never another user's grant for the same purpose", async () => {
+    await grantOptionalMarketing(otherActor.user.id);
+
+    // actor has no active grant at this point (revoked in the previous test).
+    const blocked = await request(app.getHttpServer()).post("/api/v1/me/consent-records/optional_marketing/revoke").set("Cookie", actor.cookies);
+    expect(blocked.status).toBe(409);
+
+    const otherRecord = await prisma.consentRecord.findFirst({ where: { userId: otherActor.user.id, consentPurpose: { key: "optional_marketing" } } });
+    expect(otherRecord?.status).toBe("GRANTED");
+  });
+
+  it("End-to-end (AC): after self-service revocation, NotificationService.send() suppresses a subsequent marketing message to that user", async () => {
+    const thirdActor = await createActor();
+    await grantOptionalMarketing(thirdActor.user.id);
+
+    const beforeRevoke = await notificationService.send("general_marketing", thirdActor.user.email, {});
+    expect(beforeRevoke.status).toBe("SENT");
+
+    const revokeResponse = await request(app.getHttpServer())
+      .post("/api/v1/me/consent-records/optional_marketing/revoke")
+      .set("Cookie", thirdActor.cookies);
+    expect(revokeResponse.status).toBe(200);
+
+    const afterRevoke = await notificationService.send("general_marketing", thirdActor.user.email, {});
+    expect(afterRevoke.status).toBe("SUPPRESSED");
+    expect(afterRevoke.errorCategory).toBe("marketing_consent_not_granted");
   });
 });

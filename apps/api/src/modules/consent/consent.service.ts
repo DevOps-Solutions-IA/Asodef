@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConsentStatus, type Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import {
@@ -33,6 +33,12 @@ const SUBJECT_TYPE_TO_FIELD = {
   leadSubmission: "leadSubmissionId",
   customer: "customerId",
 } as const;
+
+/** US-073: purposes a titular may unilaterally revoke themselves.
+ * terms_and_conditions/data_processing/payment_terms/contract_acceptance
+ * are conditions of service, not revocable consents - deliberately
+ * excluded. */
+const REVOCABLE_PURPOSE_KEYS = new Set(["commercial_communications", "optional_marketing"]);
 
 /**
  * US-046. Takes the same transaction client every other domain write
@@ -145,6 +151,36 @@ export class ConsentService {
       orderBy: { createdAt: "desc" },
     });
     return records.map(toMyConsentRecordResponse);
+  }
+
+  /**
+   * US-073: self-service revocation, scoped to (userId, purposeKey) -
+   * never a raw consentRecordId, so a caller can only ever revoke their
+   * own most recent grant for a purpose they name, not an arbitrary
+   * record. Reuses the same in-place status update as revoke() (the
+   * original GRANTED record is preserved, not deleted - createdAt is
+   * still the original grant time, revokedAt now marks the revocation).
+   */
+  async revokeMyConsent(userId: string, purposeKey: string): Promise<ConsentRecordResponse> {
+    if (!REVOCABLE_PURPOSE_KEYS.has(purposeKey)) {
+      throw new BadRequestException(`El propósito "${purposeKey}" no puede revocarse desde esta acción.`);
+    }
+
+    const record = await this.prisma.consentRecord.findFirst({
+      where: { userId, consentPurpose: { key: purposeKey }, status: "GRANTED", revokedAt: null },
+      include: { consentPurpose: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!record) {
+      throw new ConflictException(`No tienes un consentimiento vigente para "${purposeKey}".`);
+    }
+
+    const updated = await this.prisma.consentRecord.update({
+      where: { id: record.id },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    });
+
+    return toConsentRecordResponse(updated, record.consentPurpose.key);
   }
 
   async revoke(consentRecordId: string): Promise<ConsentRecordResponse> {

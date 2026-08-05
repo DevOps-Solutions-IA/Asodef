@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, HttpCode, HttpStatus, Param, Post } from "@nestjs/common";
 import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { RequestUser } from "../auth/types/request-user.type";
@@ -22,5 +22,13 @@ export class MeConsentController {
   @Get()
   list(@CurrentUser() user: RequestUser) {
     return this.consentService.listForUser(user.id);
+  }
+
+  /** US-073: purposeKey comes from the route, userId always from the
+   * session - identical IDOR-safety shape as list() above. */
+  @Post(":purposeKey/revoke")
+  @HttpCode(HttpStatus.OK)
+  revoke(@CurrentUser() user: RequestUser, @Param("purposeKey") purposeKey: string) {
+    return this.consentService.revokeMyConsent(user.id, purposeKey);
   }
 }
