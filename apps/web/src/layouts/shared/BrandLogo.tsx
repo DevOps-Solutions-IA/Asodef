@@ -1,5 +1,5 @@
-import fullLogo from "../../assets/asodef-logo-interim.png";
-import compactLogo from "../../assets/asodef-logo-interim-compact.png";
+import fullLogo from "../../assets/asodef-logo.webp";
+import compactLogo from "../../assets/asodef-logo-compact.webp";
 
 export interface BrandLogoProps {
   /** "compact" (icon + wordmark) fits tight nav/sidebar contexts; "full"
@@ -12,17 +12,20 @@ export interface BrandLogoProps {
 /**
  * Official ASODEF brand mark (public-frontend correction, Section 4).
  *
- * INTERIM ASSET: cropped directly (pixels only - no redraw/recolor/
- * redesign/typography change) from the official dossier's cover slide,
- * the cleanest and highest-resolution instance of the logo across the
- * 5 slide images supplied. No standalone logo file (vector or
- * transparent raster) existed anywhere in the supplied materials.
- * Kept on its original flat white background: a background-removal
- * attempt produced visible white fringing/halo around the wordmark and
- * tagline strokes, which the correction's own requirements explicitly
- * rule out, so it was discarded rather than shipped mislabeled as true
- * transparency. A standalone original (SVG/AI/EPS/PNG-with-alpha)
- * remains pending from ASODEF for production use.
+ * Real, official assets - the user supplied the original transparent
+ * lockup (`asodef-logo.webp`, lossless WebP with alpha) after the first
+ * correction pass flagged that no such file existed anywhere in the
+ * supplied dossier. `asodef-logo-compact.webp` is a pixel crop of that
+ * same original (icon + wordmark only, tagline row removed) - no redraw/
+ * recolor/redesign/typography change - for contexts too short for the
+ * full lockup (navbar, sidebars, mobile drawer).
+ *
+ * The wordmark is dark green and reads fine directly on light
+ * backgrounds, but is genuinely low-contrast against the brand's own
+ * dark green (#003F2D) - callers placing this over a dark background
+ * (see PublicLayout's footer, CompanyLayout, PaymentLayout) wrap it in
+ * a small white card rather than rely on a color filter, which would
+ * misrender a multi-color asset.
  */
 export function BrandLogo({ variant = "compact", className = "h-9 w-auto" }: BrandLogoProps) {
   const src = variant === "full" ? fullLogo : compactLogo;
