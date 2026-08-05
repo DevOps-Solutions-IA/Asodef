@@ -1,8 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AuditSource, type Prisma } from "@prisma/client";
 
-export interface RecordAuditParams {
-  paymentOrderId: string;
+interface RecordAuditBase {
   action: string;
   previousStatus: string | null;
   newStatus: string | null;
@@ -10,15 +9,28 @@ export interface RecordAuditParams {
    * "still logs an audit entry indicating no-op, not silence"). */
   applied: boolean;
   source: AuditSource;
+  /** Who performed a MANUAL (human-triggered) action - the payment
+   * domain's own automated sources (webhook/poll/order-create/bold-
+   * create) never set this; legal-workflow actions (US-043), always
+   * human-triggered, always do. */
+  actorUserId?: string;
   metadata?: Prisma.InputJsonValue;
 }
 
+/** Exactly one entity reference per call - matches the audit_logs
+ * table's own exactly-one-entity CHECK constraint (US-043). */
+export type RecordAuditParams =
+  | (RecordAuditBase & { paymentOrderId: string; legalDocumentVersionId?: never })
+  | (RecordAuditBase & { legalDocumentVersionId: string; paymentOrderId?: never });
+
 /**
- * US-028. Deliberately takes the same transaction client every other
- * payment-domain write in this story goes through, not PrismaService
- * directly - an audit row must commit atomically with the status
- * change/order it describes, never as an afterthought that could
- * succeed or fail independently of the thing it's auditing.
+ * US-028 (payment domain), generalized in US-043 to also cover the
+ * legal-document domain. Deliberately takes the same transaction
+ * client every other domain write already goes through, not
+ * PrismaService directly - an audit row must commit atomically with
+ * the status change/order/version it describes, never as an
+ * afterthought that could succeed or fail independently of the thing
+ * it's auditing.
  */
 @Injectable()
 export class AuditService {
@@ -26,6 +38,8 @@ export class AuditService {
     await tx.auditLog.create({
       data: {
         paymentOrderId: params.paymentOrderId,
+        legalDocumentVersionId: params.legalDocumentVersionId,
+        actorUserId: params.actorUserId,
         action: params.action,
         previousStatus: params.previousStatus,
         newStatus: params.newStatus,

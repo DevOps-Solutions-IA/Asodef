@@ -16,6 +16,7 @@ import { PaymentsLookupModule } from "./modules/payments-lookup/payments-lookup.
 import { BoldPaymentsModule } from "./modules/bold-payments/bold-payments.module";
 import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 import { ReceiptsModule } from "./modules/receipts/receipts.module";
+import { LegalDocumentsModule } from "./modules/legal-documents/legal-documents.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ReceiptsModule } from "./modules/receipts/receipts.module";
     BoldPaymentsModule,
     WebhooksModule,
     ReceiptsModule,
+    LegalDocumentsModule,
   ],
   controllers: [AppController],
   providers: [],

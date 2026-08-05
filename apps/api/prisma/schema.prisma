@@ -51,13 +51,15 @@ model User {
   // otherwise-stateless access token without a per-request session lookup).
   passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
 
-  roles            UserRole[]
-  sessions         Session[]
-  passwordResets   PasswordReset[]
-  passwordHistory  PasswordHistoryEntry[]
-  loginAttempts    LoginAttempt[]
-  securityEvents   SecurityEvent[]
-  notificationJobs NotificationJob[]
+  roles                        UserRole[]
+  sessions                     Session[]
+  passwordResets               PasswordReset[]
+  passwordHistory              PasswordHistoryEntry[]
+  loginAttempts                LoginAttempt[]
+  securityEvents               SecurityEvent[]
+  notificationJobs             NotificationJob[]
+  approvedLegalDocumentVersions LegalDocumentVersion[] @relation("LegalDocumentVersionApprover")
+  auditLogActions              AuditLog[]             @relation("AuditLogActor")
 
   @@map("users")
 }
@@ -710,23 +712,118 @@ enum AuditSource {
   @@map("audit_source")
 }
 
+// US-043: generalized beyond the payment domain, exactly as this
+// model's own original comment anticipated ("a cross-domain AuditLog,
+// if a later story needs one, is that story's own design decision to
+// make - extending forward, never rewriting this one"). paymentOrderId
+// is now nullable and a new nullable legalDocumentVersionId sits
+// alongside it - a real, referentially-integral FK per domain rather
+// than a generic polymorphic entityType/entityId pair, matching this
+// project's own preference for database-enforced constraints over
+// application-only checks. A raw-SQL CHECK constraint (added by hand
+// in this story's migration) enforces "exactly one of the two is set"
+// at the database level - every pre-existing row already satisfies it
+// (payment_order_id always set, legal_document_version_id always
+// null), so this is a safe, non-destructive addition.
 model AuditLog {
-  id             String      @id @default(uuid()) @db.Uuid
-  paymentOrderId String      @map("payment_order_id") @db.Uuid
-  action         String
-  previousStatus String?     @map("previous_status")
-  newStatus      String?     @map("new_status")
+  id                     String      @id @default(uuid()) @db.Uuid
+  paymentOrderId         String?     @map("payment_order_id") @db.Uuid
+  legalDocumentVersionId String?     @map("legal_document_version_id") @db.Uuid
+  // US-043: who performed a MANUAL (human-triggered) action - always
+  // null for the payment domain's own automated sources (webhook/poll/
+  // order-create/bold-create); set for legal-workflow actions, which
+  // are always a human admin acting through the API.
+  actorUserId            String?     @map("actor_user_id") @db.Uuid
+  action                 String
+  previousStatus         String?     @map("previous_status")
+  newStatus              String?     @map("new_status")
   // False for the negative-case AC: an attempted transition that was
   // blocked (e.g. an invalid regression) still gets an audit row -
   // "indicating no-op, not silence" - distinguished from a real
   // transition by this flag rather than by parsing `action` text.
-  applied        Boolean     @default(true)
-  source         AuditSource
-  metadata       Json?
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  applied                Boolean     @default(true)
+  source                 AuditSource
+  metadata               Json?
+  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+  paymentOrder         PaymentOrder?         @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
+  legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)
+  // Audit history must survive even a (currently unsupported) user
+  // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
+  actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([paymentOrderId, createdAt])
+  @@index([legalDocumentVersionId, createdAt])
   @@map("audit_logs")
+}
+
+enum LegalDocumentVersionStatus {
+  DRAFT
+  LEGAL_REVIEW
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHED
+  REPLACED
+  ARCHIVED
+
+  @@map("legal_document_version_status")
+}
+
+// US-043. One row per document *type* (e.g. "términos y condiciones") -
+// currentVersionId points at whichever LegalDocumentVersion is
+// currently PUBLISHED for it (null until the first publish ever
+// happens). `type` is deliberately a plain string, not a Prisma enum -
+// no exhaustive value list is given anywhere in this story's own AC
+// (the later US-044 seed story is what actually enumerates the real
+// document types), and a plain string means seeding a new type never
+// requires a schema migration.
+model LegalDocument {
+  id               String   @id @default(uuid()) @db.Uuid
+  type             String
+  title            String
+  slug             String   @unique
+  currentVersionId String?  @unique @map("current_version_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Restrict, not SetNull/Cascade: the currently-published version of
+  // a legal document must never be silently detached or removed.
+  currentVersion LegalDocumentVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  versions       LegalDocumentVersion[] @relation("DocumentVersions")
+
+  @@map("legal_documents")
+}
+
+model LegalDocumentVersion {
+  id              String                     @id @default(uuid()) @db.Uuid
+  legalDocumentId String                     @map("legal_document_id") @db.Uuid
+  version         Int
+  status          LegalDocumentVersionStatus @default(DRAFT)
+  // Freely editable while status = DRAFT. Never mutated once the
+  // version moves past DRAFT - approve() snapshots it into
+  // approvedContent below, which is what publish()/public reads
+  // actually serve.
+  draftContent    Json                       @map("draft_content")
+  // Null until approve() sets it (draftContent snapshot at the exact
+  // moment of approval) - "draftContent may exist and be edited freely
+  // without ever implying public approval" (PRD rule, verbatim).
+  approvedContent Json?                      @map("approved_content")
+  effectiveDate   DateTime?                  @map("effective_date") @db.Timestamptz(3)
+  expirationDate  DateTime?                  @map("expiration_date") @db.Timestamptz(3)
+  changeSummary   String?                    @map("change_summary")
+  approvedByUserId String?                   @map("approved_by_user_id") @db.Uuid
+  approvalDate    DateTime?                  @map("approval_date") @db.Timestamptz(3)
+  publicationDate DateTime?                  @map("publication_date") @db.Timestamptz(3)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  legalDocument      LegalDocument  @relation("DocumentVersions", fields: [legalDocumentId], references: [id], onDelete: Restrict)
+  currentForDocument LegalDocument? @relation("CurrentVersion")
+  approvedByUser     User?          @relation("LegalDocumentVersionApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  auditLogs          AuditLog[]
+
+  // Version numbers are deterministic and database-protected (PRD
+  // rule, verbatim) - this constraint is what actually enforces it,
+  // not just the application-level MAX(version)+1 computation.
+  @@unique([legalDocumentId, version])
+  @@index([legalDocumentId, status])
+  @@map("legal_document_versions")
 }
