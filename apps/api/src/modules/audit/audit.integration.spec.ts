@@ -7,6 +7,7 @@ import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
+import { upsertActivePlanDemo } from "../../database/seed-payments";
 
 describe("Audit wiring for the payment domain (integration, real HTTP, BOLD_MODE=mock)", () => {
   let app: NestExpressApplication;
@@ -55,11 +56,7 @@ describe("Audit wiring for the payment domain (integration, real HTTP, BOLD_MODE
     });
     createdCustomerIds.push(customer.id);
 
-    const plan = await prisma.plan.upsert({
-      where: { name: "Plan Demo" },
-      update: {},
-      create: { name: "Plan Demo", description: "Plan de prueba para entorno local.", active: true },
-    });
+    const plan = await upsertActivePlanDemo(prisma);
 
     const obligation = await prisma.obligation.create({
       data: {

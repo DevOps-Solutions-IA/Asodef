@@ -3,6 +3,7 @@ import { ConflictException, BadRequestException, NotFoundException } from "@nest
 import { PrismaClient } from "@prisma/client";
 import { createTestPrismaClient } from "../../database/test-db-client";
 import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
+import { upsertActivePlanDemo } from "../../database/seed-payments";
 import { AuditService } from "../audit/audit.service";
 import { LegalDocumentsService } from "../legal-documents/legal-documents.service";
 import { ConsentService } from "../consent/consent.service";
@@ -19,6 +20,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
   let prisma: PrismaClient;
   let service: PaymentOrdersService;
   const createdCustomerIds: string[] = [];
+  const createdPlanIds: string[] = [];
   let terminosHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
@@ -49,6 +51,11 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
       await prisma.obligation.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
     }
+    if (createdPlanIds.length > 0) {
+      await prisma.plan.updateMany({ where: { id: { in: createdPlanIds } }, data: { currentVersionId: null } });
+      await prisma.planVersion.deleteMany({ where: { planId: { in: createdPlanIds } } });
+      await prisma.plan.deleteMany({ where: { id: { in: createdPlanIds } } });
+    }
     await prisma.$disconnect();
   });
 
@@ -64,11 +71,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
     });
     createdCustomerIds.push(customer.id);
 
-    const plan = await prisma.plan.upsert({
-      where: { name: "Plan Demo" },
-      update: {},
-      create: { name: "Plan Demo", description: "Plan de prueba para entorno local.", active: true },
-    });
+    const plan = await upsertActivePlanDemo(prisma);
 
     const obligation = await prisma.obligation.create({
       data: {
@@ -84,6 +87,126 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
 
     return { customer, obligation };
   }
+
+  /** A dedicated (not shared) Plan/PlanVersion pair, used only by the
+   * version-pinning Example test below - bumping versions on the
+   * globally-shared "Plan Demo" fixture would be unsafe for every
+   * other test in this suite. */
+  async function createCustomerWithDedicatedPlanObligation() {
+    const customer = await prisma.customer.create({
+      data: {
+        documentType: "CC",
+        documentNumber: `dedicated-plan-${randomUUID()}`,
+        fullName: "Cliente Plan Dedicado",
+        email: `${randomUUID()}@example.com`,
+        phone: "3000000000",
+      },
+    });
+    createdCustomerIds.push(customer.id);
+
+    const plan = await prisma.plan.create({ data: { name: `Plan Dedicado ${randomUUID()}` } });
+    createdPlanIds.push(plan.id);
+    const versionOne = await prisma.planVersion.create({
+      data: {
+        planId: plan.id,
+        version: 1,
+        internalName: "Plan Dedicado v1",
+        publicName: "Plan Dedicado v1",
+        description: "Versión 1 de prueba.",
+        priceCents: 200_000,
+        billingFrequency: "mensual",
+        status: "ACTIVE",
+      },
+    });
+    await prisma.plan.update({ where: { id: plan.id }, data: { currentVersionId: versionOne.id } });
+
+    const obligation = await prisma.obligation.create({
+      data: {
+        customerId: customer.id,
+        planId: plan.id,
+        concept: "Obligación con plan dedicado",
+        amountCents: 200_000,
+        currency: "COP",
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        status: "PENDING",
+      },
+    });
+
+    return { plan, versionOne, obligation };
+  }
+
+  it("Example (AC): records the exact PlanVersion accepted at creation time, unchanged even after the plan is later edited to a new version", async () => {
+    const { plan, versionOne, obligation } = await createCustomerWithDedicatedPlanObligation();
+
+    const order = await service.create(obligation.id, REQUEST_CONTEXT);
+    expect(order.planVersionAcceptedId).toBe(versionOne.id);
+
+    // Edit the plan to version 2 - version 1 is retired, version 2
+    // becomes the new current/ACTIVE version.
+    const versionTwo = await prisma.planVersion.create({
+      data: {
+        planId: plan.id,
+        version: 2,
+        internalName: "Plan Dedicado v2",
+        publicName: "Plan Dedicado v2",
+        description: "Versión 2 de prueba.",
+        priceCents: 250_000,
+        billingFrequency: "mensual",
+        status: "ACTIVE",
+      },
+    });
+    await prisma.planVersion.update({ where: { id: versionOne.id }, data: { status: "RETIRED" } });
+    await prisma.plan.update({ where: { id: plan.id }, data: { currentVersionId: versionTwo.id } });
+
+    const reloaded = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
+    expect(reloaded.planVersionAcceptedId).toBe(versionOne.id);
+    expect(reloaded.planVersionAcceptedId).not.toBe(versionTwo.id);
+  });
+
+  it("Negative case (AC): an obligation whose plan is SUSPENDED (not ACTIVE) returns 409, no order created", async () => {
+    const customer = await prisma.customer.create({
+      data: {
+        documentType: "CC",
+        documentNumber: `suspended-plan-${randomUUID()}`,
+        fullName: "Cliente Plan Suspendido",
+        email: `${randomUUID()}@example.com`,
+        phone: "3000000000",
+      },
+    });
+    createdCustomerIds.push(customer.id);
+
+    const plan = await prisma.plan.create({ data: { name: `Plan Suspendido Servicio ${randomUUID()}` } });
+    createdPlanIds.push(plan.id);
+    const version = await prisma.planVersion.create({
+      data: {
+        planId: plan.id,
+        version: 1,
+        internalName: "Plan Suspendido",
+        publicName: "Plan Suspendido",
+        description: "Plan de prueba suspendido.",
+        priceCents: 150_000,
+        billingFrequency: "mensual",
+        status: "SUSPENDED",
+      },
+    });
+    await prisma.plan.update({ where: { id: plan.id }, data: { currentVersionId: version.id } });
+
+    const obligation = await prisma.obligation.create({
+      data: {
+        customerId: customer.id,
+        planId: plan.id,
+        concept: "Obligación con plan suspendido",
+        amountCents: 150_000,
+        currency: "COP",
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        status: "PENDING",
+      },
+    });
+
+    await expect(service.create(obligation.id, REQUEST_CONTEXT)).rejects.toThrow(ConflictException);
+    const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
+    expect(orderCount).toBe(0);
+  });
 
   it("creates a new PENDING PaymentOrder for an outstanding obligation, with amount/currency taken from the obligation", async () => {
     const { obligation } = await createCustomerWithObligation("PENDING");

@@ -8,6 +8,7 @@ import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { MockBoldTransport } from "../payment-providers/mock-bold.transport";
 import { generatePublicReference } from "../payment-orders/public-reference";
+import { upsertActivePlanDemo } from "../../database/seed-payments";
 
 describe("Bold payment creation and status endpoints (integration, real HTTP, BOLD_MODE=mock)", () => {
   let app: NestExpressApplication;
@@ -54,11 +55,7 @@ describe("Bold payment creation and status endpoints (integration, real HTTP, BO
     });
     createdCustomerIds.push(customer.id);
 
-    const plan = await prisma.plan.upsert({
-      where: { name: "Plan Demo" },
-      update: {},
-      create: { name: "Plan Demo", description: "Plan de prueba para entorno local.", active: true },
-    });
+    const plan = await upsertActivePlanDemo(prisma);
 
     const obligation = await prisma.obligation.create({
       data: {

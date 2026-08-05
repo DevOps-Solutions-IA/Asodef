@@ -8,6 +8,7 @@ import { LegalDocumentsService } from "../legal-documents/legal-documents.servic
 import { ConsentService } from "../consent/consent.service";
 import type { RequestContext } from "../auth/auth.service";
 import { generatePublicReference } from "./public-reference";
+import { toPrePaymentDisclosureResponse, type PrePaymentDisclosureResponse } from "./plan-disclosure.types";
 
 const PAYMENT_TERMS_POLICY_SLUG = "terminos-de-pago";
 
@@ -29,6 +30,11 @@ interface ObligationRow {
   currency: string;
   concept: string;
   due_date: Date;
+  plan_id: string;
+  // Null when the plan has no current_version_id set at all (never
+  // configured yet) - distinct from "has a version but it isn't ACTIVE".
+  plan_version_id: string | null;
+  plan_version_status: string | null;
 }
 
 @Injectable()
@@ -58,10 +64,14 @@ export class PaymentOrdersService {
   async create(obligationId: string, context: RequestContext): Promise<PaymentOrderWithObligation> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<ObligationRow[]>`
-        SELECT id, customer_id, status, amount_cents, currency, concept, due_date
-        FROM obligations
-        WHERE id = ${obligationId}::uuid
-        FOR UPDATE
+        SELECT
+          o.id, o.customer_id, o.status, o.amount_cents, o.currency, o.concept, o.due_date,
+          o.plan_id, p.current_version_id AS plan_version_id, pv.status AS plan_version_status
+        FROM obligations o
+        JOIN plans p ON p.id = o.plan_id
+        LEFT JOIN plan_versions pv ON pv.id = p.current_version_id
+        WHERE o.id = ${obligationId}::uuid
+        FOR UPDATE OF o
       `;
       const obligation = rows[0];
 
@@ -70,6 +80,12 @@ export class PaymentOrdersService {
       }
       if (!(OUTSTANDING_OBLIGATION_STATUSES as readonly string[]).includes(obligation.status)) {
         throw new ConflictException("Esta obligación ya no está pendiente de pago.");
+      }
+      // US-054 negative case: an obligation whose plan has no current
+      // ACTIVE version (e.g. SUSPENDED, or none configured at all)
+      // cannot be paid - there is nothing valid left to disclose/accept.
+      if (obligation.plan_version_status !== "ACTIVE") {
+        throw new ConflictException("El plan asociado a esta obligación no está activo actualmente.");
       }
 
       const existingOrder = await tx.paymentOrder.findFirst({
@@ -89,6 +105,10 @@ export class PaymentOrdersService {
           currency: obligation.currency,
           status: "PENDING",
           expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
+          // Example (AC): the exact PlanVersion disclosed/accepted right
+          // now - captured permanently even if the plan is later edited
+          // to a new version.
+          planVersionAcceptedId: obligation.plan_version_id,
         },
       });
 
@@ -128,5 +148,30 @@ export class PaymentOrdersService {
       where: { publicReference },
       include: { obligation: { select: { concept: true, dueDate: true } } },
     });
+  }
+
+  /**
+   * Pre-payment disclosure (AC): the exact ACTIVE plan/service version
+   * for a given obligation - the same eligibility rule create() enforces
+   * (plan must have a current version with status ACTIVE), since there
+   * is nothing valid to disclose otherwise.
+   */
+  async getDisclosure(obligationId: string): Promise<PrePaymentDisclosureResponse> {
+    const obligation = await this.prisma.obligation.findUnique({
+      where: { id: obligationId },
+      select: {
+        concept: true,
+        currency: true,
+        plan: { select: { currentVersion: true } },
+      },
+    });
+    if (!obligation) {
+      throw new NotFoundException("La obligación indicada no existe.");
+    }
+    if (!obligation.plan.currentVersion || obligation.plan.currentVersion.status !== "ACTIVE") {
+      throw new ConflictException("El plan asociado a esta obligación no está activo actualmente.");
+    }
+
+    return toPrePaymentDisclosureResponse(obligation.plan.currentVersion, obligation);
   }
 }

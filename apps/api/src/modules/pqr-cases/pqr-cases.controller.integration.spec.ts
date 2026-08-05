@@ -7,6 +7,7 @@ import type { User } from "@prisma/client";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
+import { upsertActivePlanDemo } from "../../database/seed-payments";
 import { PasswordService } from "../auth/password.service";
 import { RedisService } from "../../common/redis/redis.service";
 
@@ -152,11 +153,7 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
       },
     });
     createdCustomerIds.push(customer.id);
-    const plan = await prisma.plan.upsert({
-      where: { name: "Plan Demo" },
-      update: {},
-      create: { name: "Plan Demo", description: "Plan de prueba.", active: true },
-    });
+    const plan = await upsertActivePlanDemo(prisma);
     const obligation = await prisma.obligation.create({
       data: {
         customerId: customer.id,

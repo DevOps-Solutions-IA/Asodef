@@ -1,4 +1,45 @@
-import { PrismaClient } from "@prisma/client";
+import type { Plan, PrismaClient } from "@prisma/client";
+
+/**
+ * US-054: shared by seedPayments below and directly imported by every
+ * integration spec that needs a working, payable "Plan Demo" fixture
+ * (payment-orders, receipts, PQR, audit, webhooks, etc.) - one place
+ * for the Plan + its ACTIVE PlanVersion, instead of duplicating the
+ * upsert in 8 spec files. Idempotent: reuses an already-migrated or
+ * previously-seeded version-1 row rather than overwriting it.
+ */
+export async function upsertActivePlanDemo(client: PrismaClient): Promise<Plan> {
+  const plan = await client.plan.upsert({
+    where: { name: "Plan Demo" },
+    update: {},
+    create: { name: "Plan Demo" },
+  });
+
+  let version = await client.planVersion.findUnique({
+    where: { planId_version: { planId: plan.id, version: 1 } },
+  });
+
+  if (!version) {
+    version = await client.planVersion.create({
+      data: {
+        planId: plan.id,
+        version: 1,
+        internalName: "Plan Demo",
+        publicName: "Plan Demo",
+        description: "Plan de prueba para entorno local - no es un plan comercial real.",
+        priceCents: 500_000,
+        billingFrequency: "mensual",
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  if (plan.currentVersionId !== version.id) {
+    await client.plan.update({ where: { id: plan.id }, data: { currentVersionId: version.id } });
+  }
+
+  return client.plan.findUniqueOrThrow({ where: { id: plan.id } });
+}
 
 /**
  * Demo-only data for local testing (US-021's own stated purpose -
@@ -12,15 +53,7 @@ import { PrismaClient } from "@prisma/client";
  * (customerId, concept) instead of a DB-level upsert.
  */
 export async function seedPayments(client: PrismaClient): Promise<void> {
-  const plan = await client.plan.upsert({
-    where: { name: "Plan Demo" },
-    update: {},
-    create: {
-      name: "Plan Demo",
-      description: "Plan de prueba para entorno local - no es un plan comercial real.",
-      active: true,
-    },
-  });
+  const plan = await upsertActivePlanDemo(client);
 
   const demoCustomers = [
     {

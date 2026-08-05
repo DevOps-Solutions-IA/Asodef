@@ -586,18 +586,80 @@ model Company {
   @@map("companies")
 }
 
+// US-054: Plan is now a stable identity (mirrors LegalDocument's own
+// identity/version split from US-043) - all rich, editable content
+// lives on PlanVersion instead. description/active (US-021) moved
+// into PlanVersion as part of that expansion; the "active" boolean is
+// superseded by PlanVersion.status === ACTIVE.
 model Plan {
-  id          String  @id @default(uuid()) @db.Uuid
+  id               String   @id @default(uuid()) @db.Uuid
   // @unique is a constraint on an existing PRD-listed field, not an
   // added field - needed so the seed script can upsert idempotently
   // (the PRD's dataModel gives no other natural unique key for Plan).
-  name        String  @unique
-  description String
-  active      Boolean @default(true)
+  name             String   @unique
+  currentVersionId String?  @unique @map("current_version_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  obligations Obligation[]
+  // Restrict, not SetNull/Cascade: the currently-active version of a
+  // plan must never be silently detached, same reasoning as
+  // LegalDocument.currentVersion.
+  currentVersion PlanVersion?  @relation("CurrentPlanVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  versions       PlanVersion[] @relation("PlanVersions")
+  obligations    Obligation[]
 
   @@map("plans")
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  UNDER_REVIEW
+  ACTIVE
+  SUSPENDED
+  RETIRED
+  ARCHIVED
+
+  @@map("plan_version_status")
+}
+
+// US-054: "taxes", "coverage", "eligibility", "beneficiaryRules",
+// "terms", "cancellationRules", "renewalRules", "paymentConditions"
+// have no PRD-given shape/enum - all kept as free-form text (or jsonb
+// for the two explicitly list-shaped fields, includedServices and
+// exclusions, mirroring BusinessPartner.benefitsOffered's precedent),
+// never an invented structure.
+model PlanVersion {
+  id                String            @id @default(uuid()) @db.Uuid
+  planId            String            @map("plan_id") @db.Uuid
+  version           Int
+  internalName      String            @map("internal_name")
+  publicName        String            @map("public_name")
+  description       String
+  coverage          String?
+  includedServices  Json?             @map("included_services")
+  exclusions        Json?
+  eligibility       String?
+  beneficiaryRules  String?           @map("beneficiary_rules")
+  priceCents        Int               @map("price_cents")
+  billingFrequency  String            @map("billing_frequency")
+  taxes             String?
+  startDate         DateTime?         @map("start_date") @db.Timestamptz(3)
+  endDate           DateTime?         @map("end_date") @db.Timestamptz(3)
+  status            PlanVersionStatus @default(DRAFT)
+  terms             String?
+  cancellationRules String?           @map("cancellation_rules")
+  renewalRules      String?           @map("renewal_rules")
+  paymentConditions String?           @map("payment_conditions")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  plan           Plan           @relation("PlanVersions", fields: [planId], references: [id], onDelete: Restrict)
+  currentForPlan Plan?          @relation("CurrentPlanVersion")
+  paymentOrders  PaymentOrder[]
+
+  // Version numbers are database-protected, same as
+  // LegalDocumentVersion - never just an application-level MAX+1.
+  @@unique([planId, version])
+  @@index([planId, status])
+  @@map("plan_versions")
 }
 
 model Obligation {
@@ -619,26 +681,35 @@ model Obligation {
 }
 
 model PaymentOrder {
-  id              String             @id @default(uuid()) @db.Uuid
+  id                    String             @id @default(uuid()) @db.Uuid
   // Cryptographically random, never the internal uuid/sequence exposed
   // as a guessable ordering - per the PRD's own rule on public
   // references.
-  publicReference String             @unique @map("public_reference")
-  obligationId    String             @map("obligation_id") @db.Uuid
-  customerId      String             @map("customer_id") @db.Uuid
-  amountCents     Int                @map("amount_cents")
-  currency        String             @default("COP")
-  status          PaymentOrderStatus @default(DRAFT)
-  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  expiresAt       DateTime           @map("expires_at") @db.Timestamptz(3)
+  publicReference       String             @unique @map("public_reference")
+  obligationId          String             @map("obligation_id") @db.Uuid
+  customerId            String             @map("customer_id") @db.Uuid
+  amountCents           Int                @map("amount_cents")
+  currency              String             @default("COP")
+  status                PaymentOrderStatus @default(DRAFT)
+  // US-054: which exact PlanVersion was disclosed/accepted at the
+  // moment of creation - nullable because orders created before this
+  // story never captured it (existing data is never backfilled with
+  // fabricated acceptance evidence), required in practice for every
+  // order the service creates going forward.
+  planVersionAcceptedId String?            @map("plan_version_accepted_id") @db.Uuid
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt             DateTime           @map("expires_at") @db.Timestamptz(3)
 
-  obligation Obligation       @relation(fields: [obligationId], references: [id], onDelete: Restrict)
-  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  attempts   PaymentAttempt[]
-  events     PaymentEvent[]
-  receipts   PaymentReceipt[]
-  auditLogs  AuditLog[]
-  pqrCases   PqrCase[]
+  obligation          Obligation       @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+  customer            Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  // Restrict: the accepted plan version is immutable financial/legal
+  // acceptance evidence and must never be silently detached.
+  planVersionAccepted PlanVersion?     @relation(fields: [planVersionAcceptedId], references: [id], onDelete: Restrict)
+  attempts            PaymentAttempt[]
+  events              PaymentEvent[]
+  receipts            PaymentReceipt[]
+  auditLogs           AuditLog[]
+  pqrCases            PqrCase[]
 
   @@index([customerId, status])
   @@index([obligationId])

@@ -7,11 +7,13 @@ import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
 import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
+import { upsertActivePlanDemo } from "../../database/seed-payments";
 
 describe("Payment orders endpoints (integration, real HTTP via the exact configureApp() setup)", () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   const createdCustomerIds: string[] = [];
+  const createdPlanIds: string[] = [];
   let terminosHandle: PublishedForTestHandle | null = null;
 
   beforeAll(async () => {
@@ -36,6 +38,13 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
       await prisma.obligation.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
     }
+    if (createdPlanIds.length > 0) {
+      // plans.current_version_id -> plan_versions is Restrict, so it
+      // must be cleared before the version rows can be deleted.
+      await prisma.plan.updateMany({ where: { id: { in: createdPlanIds } }, data: { currentVersionId: null } });
+      await prisma.planVersion.deleteMany({ where: { planId: { in: createdPlanIds } } });
+      await prisma.plan.deleteMany({ where: { id: { in: createdPlanIds } } });
+    }
     await app.close();
   });
 
@@ -51,11 +60,7 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
     });
     createdCustomerIds.push(customer.id);
 
-    const plan = await prisma.plan.upsert({
-      where: { name: "Plan Demo" },
-      update: {},
-      create: { name: "Plan Demo", description: "Plan de prueba para entorno local.", active: true },
-    });
+    const plan = await upsertActivePlanDemo(prisma);
 
     const obligation = await prisma.obligation.create({
       data: {
@@ -71,6 +76,95 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
 
     return { customer, obligation };
   }
+
+  /** Negative case (AC): a customer whose obligation is tied to a plan
+   * that is not ACTIVE (e.g. SUSPENDED) - a dedicated fixture separate
+   * from the shared "Plan Demo", so no other test's assumptions are
+   * disturbed by this one deliberately-not-ACTIVE plan. */
+  async function createCustomerWithSuspendedPlanObligation() {
+    const customer = await prisma.customer.create({
+      data: {
+        documentType: "CC",
+        documentNumber: `http-suspended-${randomUUID()}`,
+        fullName: "Cliente Plan Suspendido",
+        email: `${randomUUID()}@example.com`,
+        phone: "3000000000",
+      },
+    });
+    createdCustomerIds.push(customer.id);
+
+    const plan = await prisma.plan.create({ data: { name: `Plan Suspendido ${randomUUID()}` } });
+    createdPlanIds.push(plan.id);
+    const version = await prisma.planVersion.create({
+      data: {
+        planId: plan.id,
+        version: 1,
+        internalName: "Plan Suspendido de Prueba",
+        publicName: "Plan Suspendido de Prueba",
+        description: "Plan de prueba en estado suspendido.",
+        priceCents: 100_000,
+        billingFrequency: "mensual",
+        status: "SUSPENDED",
+      },
+    });
+    await prisma.plan.update({ where: { id: plan.id }, data: { currentVersionId: version.id } });
+
+    const obligation = await prisma.obligation.create({
+      data: {
+        customerId: customer.id,
+        planId: plan.id,
+        concept: "Cuota con plan suspendido",
+        amountCents: 100_000,
+        currency: "COP",
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+        status: "PENDING",
+      },
+    });
+
+    return { customer, obligation };
+  }
+
+  describe("GET /api/v1/payment-orders/disclosure/:obligationId", () => {
+    it("Example (AC): returns the exact ACTIVE plan version fields for the obligation", async () => {
+      const { obligation } = await createCustomerWithObligation("PENDING");
+      const plan = await upsertActivePlanDemo(prisma);
+      const activeVersion = await prisma.planVersion.findUniqueOrThrow({ where: { id: plan.currentVersionId! } });
+
+      const response = await request(app.getHttpServer()).get(`/api/v1/payment-orders/disclosure/${obligation.id}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        planVersionId: activeVersion.id,
+        name: activeVersion.publicName,
+        description: activeVersion.description,
+        total: activeVersion.priceCents,
+        currency: "COP",
+        concept: "Cuota HTTP de prueba",
+        frequency: activeVersion.billingFrequency,
+      });
+      expect(response.body.contactChannel).toBeTruthy();
+      expect(response.body.pqrChannel).toBeTruthy();
+    });
+
+    it("Negative case (AC): an obligation whose plan is SUSPENDED (not ACTIVE) returns 409", async () => {
+      const { obligation } = await createCustomerWithSuspendedPlanObligation();
+
+      const response = await request(app.getHttpServer()).get(`/api/v1/payment-orders/disclosure/${obligation.id}`);
+
+      expect(response.status).toBe(409);
+    });
+
+    it("returns 404 for a non-existent obligationId", async () => {
+      const response = await request(app.getHttpServer()).get(`/api/v1/payment-orders/disclosure/${randomUUID()}`);
+      expect(response.status).toBe(404);
+    });
+
+    it("does not require authentication", async () => {
+      const { obligation } = await createCustomerWithObligation("PENDING");
+      const response = await request(app.getHttpServer()).get(`/api/v1/payment-orders/disclosure/${obligation.id}`);
+      expect(response.status).toBe(200);
+    });
+  });
 
   describe("POST /api/v1/payment-orders", () => {
     it("creates a new order and returns only safe public fields, no internal ids", async () => {
@@ -126,6 +220,16 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
     it("rejects a malformed obligationId with 400", async () => {
       const response = await request(app.getHttpServer()).post("/api/v1/payment-orders").send({ obligationId: "not-a-uuid" });
       expect(response.status).toBe(400);
+    });
+
+    it("Negative case (AC): an obligation whose plan is SUSPENDED returns 409 and creates no order", async () => {
+      const { obligation } = await createCustomerWithSuspendedPlanObligation();
+
+      const response = await request(app.getHttpServer()).post("/api/v1/payment-orders").send({ obligationId: obligation.id });
+
+      expect(response.status).toBe(409);
+      const orderCount = await prisma.paymentOrder.count({ where: { obligationId: obligation.id } });
+      expect(orderCount).toBe(0);
     });
   });
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Public } from "../auth/decorators/public.decorator";
 import { buildRequestContext } from "../../common/http/request-context.util";
@@ -25,6 +25,16 @@ export class PaymentOrdersController {
   async create(@Body() dto: CreatePaymentOrderDto, @Req() request: AuthenticatedRequest) {
     const order = await this.paymentOrdersService.create(dto.obligationId, buildRequestContext(request));
     return toPaymentOrderResponse(order);
+  }
+
+  // US-054: must be registered before the ":reference" route below -
+  // NestJS matches param routes in registration order, so a literal
+  // "disclosure" prefix has to come first or it would be swallowed as
+  // a :reference value.
+  @Public()
+  @Get("disclosure/:obligationId")
+  getDisclosure(@Param("obligationId", ParseUUIDPipe) obligationId: string) {
+    return this.paymentOrdersService.getDisclosure(obligationId);
   }
 
   @Public()
