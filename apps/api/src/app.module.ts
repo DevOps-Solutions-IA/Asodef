@@ -26,6 +26,7 @@ import { CrmModule } from "./modules/crm/crm.module";
 import { PartnersModule } from "./modules/partners/partners.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
 import { RefundsModule } from "./modules/refunds/refunds.module";
+import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module";
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { RefundsModule } from "./modules/refunds/refunds.module";
     PartnersModule,
     ContractsModule,
     RefundsModule,
+    ReconciliationModule,
   ],
   controllers: [AppController],
   providers: [],

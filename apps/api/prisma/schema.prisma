@@ -70,6 +70,7 @@ model User {
   uploadedContractVersions      ContractVersion[]          @relation("ContractVersionUploader")
   issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
   approvedRefunds               Refund[]                   @relation("RefundApprover")
+  reconciliationRuns            Reconciliation[]
 
   @@map("users")
 }
@@ -705,17 +706,18 @@ model PaymentOrder {
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt             DateTime           @map("expires_at") @db.Timestamptz(3)
 
-  obligation          Obligation       @relation(fields: [obligationId], references: [id], onDelete: Restrict)
-  customer            Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  obligation                Obligation                 @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+  customer                  Customer                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
   // Restrict: the accepted plan version is immutable financial/legal
   // acceptance evidence and must never be silently detached.
-  planVersionAccepted PlanVersion?     @relation(fields: [planVersionAcceptedId], references: [id], onDelete: Restrict)
-  attempts            PaymentAttempt[]
-  events              PaymentEvent[]
-  receipts            PaymentReceipt[]
-  auditLogs           AuditLog[]
-  pqrCases            PqrCase[]
-  refunds             Refund[]
+  planVersionAccepted       PlanVersion?               @relation(fields: [planVersionAcceptedId], references: [id], onDelete: Restrict)
+  attempts                  PaymentAttempt[]
+  events                    PaymentEvent[]
+  receipts                  PaymentReceipt[]
+  auditLogs                 AuditLog[]
+  pqrCases                  PqrCase[]
+  refunds                   Refund[]
+  reconciliationDifferences ReconciliationDifference[]
 
   @@index([customerId, status])
   @@index([obligationId])
@@ -1665,4 +1667,76 @@ model Refund {
 
   @@index([paymentOrderId])
   @@map("refunds")
+}
+
+// US-057: no PRD-given enum for either resolutionStatus field - the
+// AC's own "each independently resolvable with notes" implies exactly
+// two meaningful states (still needs attention / resolved), so a real
+// Prisma enum is used rather than a free-form string (unlike fields
+// with genuinely no discernible closed set, e.g. Agreement.status).
+enum ReconciliationResolutionStatus {
+  OPEN
+  RESOLVED
+
+  @@map("reconciliation_resolution_status")
+}
+
+// The 7 mismatch kinds are the AC's own literal, fully-enumerated list
+// (unlike BusinessPartner's blocked 9-state case) - a real enum.
+enum ReconciliationDifferenceKind {
+  PROVIDER_APPROVED_INTERNALLY_PENDING
+  INTERNAL_APPROVED_NO_PROVIDER_CONFIRMATION
+  DUPLICATE_EVENT
+  AMOUNT_MISMATCH
+  REFERENCE_MISMATCH
+  UNPROCESSED_NOTIFICATION
+  REFUND_INCONSISTENCY
+
+  @@map("reconciliation_difference_kind")
+}
+
+// rangeStart/rangeEnd aren't in the PRD's own sparse dataModel list for
+// this entity, but are added because the AC's own literal text requires
+// them functionally ("compares ... for a date range") - runDate alone
+// (when dataModel says the run itself happened) can't express a range.
+model Reconciliation {
+  id                String                         @id @default(uuid()) @db.Uuid
+  runDate           DateTime                       @default(now()) @map("run_date") @db.Timestamptz(3)
+  rangeStart        DateTime                       @map("range_start") @db.Timestamptz(3)
+  rangeEnd          DateTime                       @map("range_end") @db.Timestamptz(3)
+  responsibleUserId String                         @map("responsible_user_id") @db.Uuid
+  differencesFound  Int                            @default(0) @map("differences_found")
+  resolutionStatus  ReconciliationResolutionStatus @default(OPEN) @map("resolution_status")
+  notes             String?
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  responsibleUser User                       @relation(fields: [responsibleUserId], references: [id], onDelete: Restrict)
+  differences     ReconciliationDifference[]
+
+  @@index([rangeStart, rangeEnd])
+  @@map("reconciliations")
+}
+
+// paymentOrderId nullable per the PRD dataModel - not every difference
+// is traceable to one specific order (e.g. an orphaned notification).
+model ReconciliationDifference {
+  id               String                         @id @default(uuid()) @db.Uuid
+  reconciliationId String                         @map("reconciliation_id") @db.Uuid
+  paymentOrderId   String?                        @map("payment_order_id") @db.Uuid
+  kind             ReconciliationDifferenceKind
+  details          Json
+  resolutionStatus ReconciliationResolutionStatus @default(OPEN) @map("resolution_status")
+  resolutionNotes  String?                        @map("resolution_notes")
+  createdAt        DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  reconciliation Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Restrict)
+  paymentOrder   PaymentOrder?  @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+
+  // Same-issue de-duplication: at most one difference of a given kind
+  // per order may exist at a time (Negative case AC - re-running
+  // reconciliation must never duplicate an already-tracked issue,
+  // resolved or not).
+  @@unique([paymentOrderId, kind])
+  @@index([reconciliationId])
+  @@map("reconciliation_differences")
 }
