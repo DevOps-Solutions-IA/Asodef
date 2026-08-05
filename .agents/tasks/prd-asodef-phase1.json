@@ -2163,8 +2163,8 @@
         "Comparacion visual tipo diff entre versiones (fuera del alcance literal pedido)",
         "Exponer el historial de versiones en la pagina publica /legal/*"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "1f84a21",
       "notes": "Verified live: AdminLegalPage.tsx linea 94 usa unicamente document?.versions[0]."
     },
     {
