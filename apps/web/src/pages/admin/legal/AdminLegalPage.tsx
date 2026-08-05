@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Dialog, EmptyState, ErrorState, PageHeader, Skeleton, Textarea } from "@asodef/ui";
+import { Alert, Badge, Button, Dialog, EmptyState, ErrorState, PageHeader, Skeleton, Textarea } from "@asodef/ui";
 import {
   approveLegalDocumentVersion,
   getLegalDocument,
@@ -38,6 +38,11 @@ export function AdminLegalPage() {
   const [draftError, setDraftError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
+  // US-070: which version the detail panel is currently showing - null
+  // means "the latest version" (the normal, fully-interactive case).
+  // Any other id means the viewer picked a past version from the
+  // history list, which is always read-only.
+  const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
 
   const documentsQuery = useQuery({ queryKey: queryKeys.admin.legal.documents(), queryFn: ({ signal }) => listLegalDocuments(signal) });
   const documentQuery = useQuery({
@@ -77,6 +82,7 @@ export function AdminLegalPage() {
     setSelectedDocumentId(documentId);
     setDraftText("");
     setDraftError(null);
+    setViewedVersionId(null);
   }
 
   function handleSaveDraft(versionId: string) {
@@ -92,6 +98,10 @@ export function AdminLegalPage() {
 
   const document = documentQuery.data;
   const latestVersion = document?.versions[0];
+  // Non-null: only ever read within the `document && latestVersion &&`
+  // guarded block below, where latestVersion (the fallback) is defined.
+  const viewedVersion = (document?.versions.find((v) => v.id === viewedVersionId) ?? latestVersion)!;
+  const isViewingLatest = !viewedVersionId || viewedVersionId === latestVersion?.id;
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,12 +154,55 @@ export function AdminLegalPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-display text-xl font-semibold text-text-main">{document.title}</h3>
-                  <p className="text-sm text-text-muted">Versión {latestVersion.version}</p>
+                  <p className="text-sm text-text-muted">Versión {viewedVersion.version}</p>
                 </div>
-                <Badge variant="neutral">{LEGAL_VERSION_STATUS_LABELS[latestVersion.status] ?? latestVersion.status}</Badge>
+                <Badge variant="neutral">{LEGAL_VERSION_STATUS_LABELS[viewedVersion.status] ?? viewedVersion.status}</Badge>
               </div>
 
-              {latestVersion.status === "DRAFT" && (
+              {document.versions.length > 1 && (
+                <div>
+                  <h4 className="mb-2 text-sm font-medium text-text-main">Historial de versiones</h4>
+                  <ul aria-label="Historial de versiones" className="flex flex-col gap-1">
+                    {document.versions.map((v) => (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          onClick={() => setViewedVersionId(v.id === latestVersion.id ? null : v.id)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                            v.id === viewedVersion.id ? "bg-brand-dark-50 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
+                          }`}
+                        >
+                          <span>
+                            Versión {v.version}
+                            {v.id === latestVersion.id ? " (actual)" : ""}
+                          </span>
+                          <span className="flex items-center gap-2 text-xs text-text-muted">
+                            {v.publicationDate ? `Publicada ${formatDate(v.publicationDate)}` : v.approvalDate ? `Aprobada ${formatDate(v.approvalDate)}` : formatDate(v.createdAt)}
+                            <Badge variant="neutral">{LEGAL_VERSION_STATUS_LABELS[v.status] ?? v.status}</Badge>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!isViewingLatest && (
+                <div className="flex flex-col gap-3">
+                  <Alert variant="info">Estás viendo una versión anterior en modo de solo lectura. Solo la versión actual puede editarse.</Alert>
+                  {viewedVersion.approvedByUserId && (
+                    <p className="text-sm text-text-muted">Aprobada por: {viewedVersion.approvedByUserId}</p>
+                  )}
+                  <pre className="overflow-x-auto rounded-xl border border-border-soft bg-bg-soft p-4 text-xs text-text-main">
+                    {JSON.stringify(viewedVersion.approvedContent ?? viewedVersion.draftContent, null, 2)}
+                  </pre>
+                  <Button type="button" variant="outline" className="self-start" onClick={() => setViewedVersionId(null)}>
+                    Volver a la versión actual
+                  </Button>
+                </div>
+              )}
+
+              {isViewingLatest && latestVersion.status === "DRAFT" && (
                 <div>
                   <label htmlFor="draft-content" className="mb-1.5 block text-sm font-medium text-text-main">
                     Contenido (JSON)
@@ -185,7 +238,7 @@ export function AdminLegalPage() {
                 </div>
               )}
 
-              {latestVersion.status === "LEGAL_REVIEW" && (
+              {isViewingLatest && latestVersion.status === "LEGAL_REVIEW" && (
                 <div className="flex flex-wrap gap-3">
                   <Button
                     type="button"
@@ -207,7 +260,7 @@ export function AdminLegalPage() {
                 </div>
               )}
 
-              {latestVersion.status === "PENDING_APPROVAL" && (
+              {isViewingLatest && latestVersion.status === "PENDING_APPROVAL" && (
                 <div className="flex flex-wrap gap-3">
                   <Button
                     type="button"
@@ -232,7 +285,7 @@ export function AdminLegalPage() {
                 </div>
               )}
 
-              {latestVersion.status === "APPROVED" && (
+              {isViewingLatest && latestVersion.status === "APPROVED" && (
                 <Button
                   type="button"
                   disabled={!canApprove}
@@ -246,7 +299,7 @@ export function AdminLegalPage() {
                 </Button>
               )}
 
-              {latestVersion.status === "PUBLISHED" && (
+              {isViewingLatest && latestVersion.status === "PUBLISHED" && (
                 <p className="text-sm text-success">
                   Publicado el {latestVersion.publicationDate ? formatDate(latestVersion.publicationDate) : "—"}. Visible en /legal/{document.slug}.
                 </p>

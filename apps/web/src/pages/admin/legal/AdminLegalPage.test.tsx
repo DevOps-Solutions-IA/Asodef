@@ -100,6 +100,67 @@ describe("AdminLegalPage", () => {
     await waitFor(() => expect(approveCalled).toBe(true));
   });
 
+  it("US-070: shows the full version history and renders a past version read-only, without its workflow actions", async () => {
+    const detail = {
+      ...buildDocumentDetail("PUBLISHED"),
+      versions: [
+        {
+          id: "version-2",
+          version: 2,
+          status: "PUBLISHED",
+          draftContent: { sections: [{ heading: "Contacto", body: "v2" }] },
+          approvedContent: { sections: [{ heading: "Contacto", body: "v2" }] },
+          effectiveDate: null,
+          expirationDate: null,
+          changeSummary: null,
+          approvedByUserId: "user-approver-1",
+          approvalDate: "2026-02-01T00:00:00.000Z",
+          publicationDate: "2026-02-02T00:00:00.000Z",
+          createdAt: "2026-02-01T00:00:00.000Z",
+        },
+        {
+          id: "version-1",
+          version: 1,
+          status: "REPLACED",
+          draftContent: { sections: [{ heading: "Contacto", body: "v1" }] },
+          approvedContent: { sections: [{ heading: "Contacto", body: "v1" }] },
+          effectiveDate: null,
+          expirationDate: null,
+          changeSummary: null,
+          approvedByUserId: "user-approver-1",
+          approvalDate: "2026-01-01T00:00:00.000Z",
+          publicationDate: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    renderPage(buildCurrentUser({ roles: ["ADMIN"], permissions: ["content.manage", "legal.approve"] }), (url) => {
+      if (url.includes("/admin/legal-documents/doc-1")) return jsonResponse(200, detail);
+      if (url.includes("/admin/legal-documents")) return jsonResponse(200, [buildDocumentSummary()]);
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /Política de privacidad/ }));
+
+    const history = await screen.findByRole("list", { name: "Historial de versiones" });
+    expect(within(history).getByText(/Versión 2 \(actual\)/)).toBeInTheDocument();
+    expect(within(history).getByText("Versión 1")).toBeInTheDocument();
+
+    // Viewing the latest version still shows its normal PUBLISHED info.
+    expect(screen.getByText(/Visible en \/legal\//)).toBeInTheDocument();
+
+    await user.click(within(history).getByText("Versión 1"));
+
+    expect(screen.getByText(/versión anterior en modo de solo lectura/)).toBeInTheDocument();
+    expect(screen.getByText(/"v1"/)).toBeInTheDocument();
+    expect(screen.queryByText(/Visible en \/legal\//)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publicar" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Volver a la versión actual" }));
+    expect(screen.getByText(/Visible en \/legal\//)).toBeInTheDocument();
+  });
+
   it("Negative case (AC): the approve action is disabled for an actor without legal.approve", async () => {
     renderPage(buildCurrentUser({ roles: ["ADMIN"], permissions: ["content.manage"] }), (url) => {
       if (url.includes("/admin/legal-documents/doc-1")) return jsonResponse(200, buildDocumentDetail("PENDING_APPROVAL"));
