@@ -58,7 +58,7 @@ export function Dialog({ open, onClose, title, description, children, className 
         }
       }}
       className={cn(
-        "m-auto w-full max-w-lg rounded-[28px] border border-black/[0.06] bg-white p-0 shadow-[0_20px_60px_rgba(0,63,45,0.15)]",
+        "m-auto w-full max-w-lg rounded-xl3 border border-black/[0.06] bg-white p-0 shadow-e4",
         "backdrop:bg-brand-dark/40 backdrop:backdrop-blur-sm",
         className,
       )}

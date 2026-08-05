@@ -76,7 +76,7 @@ export function Drawer({ open, onClose, title, description, children, side = "ri
       }}
       className={cn(
         "fixed inset-y-0 m-0 h-full max-h-none w-full max-w-sm border-0 bg-white p-0",
-        "shadow-[0_20px_60px_rgba(0,63,45,0.15)]",
+        "shadow-e4",
         "backdrop:bg-brand-dark/40 backdrop:backdrop-blur-sm",
         "transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
         side === "right" ? "right-0 left-auto" : "left-0 right-auto",

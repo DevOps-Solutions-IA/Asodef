@@ -6,7 +6,7 @@ export interface UserDetailTabsProps {
 }
 
 const TAB_CLASS =
-  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors data-[active=true]:bg-brand-dark data-[active=true]:text-white data-[active=false]:text-text-muted data-[active=false]:hover:bg-bg-soft";
+  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors data-[active=true]:bg-brand-dark data-[active=true]:text-white data-[active=true]:shadow-e1 data-[active=false]:text-text-muted data-[active=false]:hover:bg-bg-soft";
 
 /** Shared sub-navigation between the pages that all describe one user
  * (detail/edit/roles/sessions/security) - each tab is only shown if the
