@@ -2267,8 +2267,8 @@
       "outOfScope": [
         "Permitir revertir una revocacion con un simple 'deshacer' (el usuario debe volver a otorgar el consentimiento explicitamente, con el mismo flujo de aceptacion)"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "5fe8b30",
       "notes": "Confirmed via grep: no 'revoke'/'revocar' string exists anywhere in apps/api/src/modules/consent or apps/web before this story."
     },
     {
