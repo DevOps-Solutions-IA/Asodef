@@ -62,6 +62,35 @@ export function mockAuthFetch(
         : jsonResponse(401, { statusCode: 401, error: "Unauthorized", message: "No autenticado." });
     }
 
+    // AdminDashboardPage (US-064) is /admin's index route and queries
+    // this unconditionally on every authenticated-admin test, even ones
+    // that don't care about dashboard content - a bare `{}` fallback
+    // makes it try to Object.entries(undefined) once the query settles.
+    if (url.includes("/admin/dashboard")) {
+      return jsonResponse(200, {
+        newProspects30d: 0,
+        opportunitiesByStage: {},
+        conversionRate: 0,
+        activeCompanies: 0,
+        activeAgreements: 0,
+        contractsPendingSignature: 0,
+        contractsNearingExpiration: 0,
+        commercialActivities30d: 0,
+        leadsWithoutFollowUp: 0,
+        opportunitiesWon: 0,
+        opportunitiesLost: 0,
+        recaudoDiarioCents: 0,
+        recaudoMensualCents: 0,
+        pagosAprobados: 0,
+        pagosPendientes: 0,
+        pagosRechazados: 0,
+        tasaAprobacion: 0,
+        obligacionesPendientes: 0,
+        obligacionesVencidas: 0,
+        reconciliationDifferencesOpen: 0,
+      });
+    }
+
     return jsonResponse(200, {});
   });
 

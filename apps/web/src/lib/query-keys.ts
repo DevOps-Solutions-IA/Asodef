@@ -91,5 +91,11 @@ export const queryKeys = {
       runs: () => ["admin", "reconciliation", "runs"] as const,
       differences: (runId: string) => ["admin", "reconciliation", "runs", runId, "differences"] as const,
     },
+    dashboard: () => ["admin", "dashboard"] as const,
+    reports: {
+      list: () => ["admin", "reports", "list"] as const,
+      run: (key: string, filters: unknown) => ["admin", "reports", "run", key, filters] as const,
+      job: (jobId: string) => ["admin", "reports", "job", jobId] as const,
+    },
   },
 } as const;

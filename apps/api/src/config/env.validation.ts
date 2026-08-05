@@ -191,6 +191,10 @@ export const envSchema = z.object({
   // RECEIPTS_STORAGE_DIR/CONTRACTS_STORAGE_DIR - a plain local path,
   // gitignored, outside any public web root.
   REFUNDS_STORAGE_DIR: z.string().default("./storage/refunds"),
+
+  // reports (US-064): background-job CSV exports (>1000 rows), same
+  // rationale as the other STORAGE_DIR vars.
+  REPORTS_STORAGE_DIR: z.string().default("./storage/reports"),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

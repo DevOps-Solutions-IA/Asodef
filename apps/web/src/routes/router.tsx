@@ -35,6 +35,7 @@ import { PqrQueuePage } from "../pages/admin/legal/PqrQueuePage";
 import { AdminPaymentsPage } from "../pages/admin/payments/AdminPaymentsPage";
 import { PaymentOrderDetailPage } from "../pages/admin/payments/PaymentOrderDetailPage";
 import { AdminReconciliationPage } from "../pages/admin/payments/AdminReconciliationPage";
+import { AdminReportsPage } from "../pages/admin/reports/AdminReportsPage";
 import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
 import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
@@ -259,7 +260,7 @@ export const routeConfig: RouteObject[] = [
               },
               {
                 element: <PermissionRoute permissions={["reports.read"]} />,
-                children: [{ path: "reportes", element: <RoutePlaceholder title="Reportes" /> }],
+                children: [{ path: "reportes", element: <AdminReportsPage /> }],
               },
               {
                 element: <PermissionRoute permissions={["audit.read"]} />,

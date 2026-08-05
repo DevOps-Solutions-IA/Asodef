@@ -72,6 +72,7 @@ model User {
   approvedRefunds               Refund[]                   @relation("RefundApprover")
   reconciliationRuns            Reconciliation[]
   resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
+  requestedExportJobs            ExportJob[]
   approvedApprovalGates         ApprovalGate[]
 
   @@map("users")
@@ -1870,4 +1871,41 @@ model SuppressionListEntry {
   // dataModel's own "(unique per channel)" annotation on recipient.
   @@unique([channel, recipient])
   @@map("suppression_list_entries")
+}
+
+enum ExportJobStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+
+  @@map("export_job_status")
+}
+
+// US-064 AC2: "large exports (>1000 rows) run via a background job with
+// a downloadable-when-ready state." No job-queue library exists
+// anywhere in this codebase yet (only Redis for rate limiting) - rather
+// than adding a new dependency for the one story that needs it, this is
+// a DB-tracked job row processed by a plain in-process async task
+// (ReportsService), same "no invented infrastructure beyond what's
+// asked for" discipline as everywhere else this session. filePath
+// mirrors Refund.evidencePath/ContractVersion.documentPath - never
+// exposed directly, only served through an authenticated download
+// route.
+model ExportJob {
+  id            String          @id @default(uuid()) @db.Uuid
+  reportKey     String          @map("report_key")
+  filters       Json
+  status        ExportJobStatus @default(PENDING)
+  rowCount      Int?            @map("row_count")
+  filePath      String?         @map("file_path")
+  errorMessage  String?         @map("error_message")
+  requestedByUserId String       @map("requested_by_user_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt   DateTime?       @map("completed_at") @db.Timestamptz(3)
+
+  requestedByUser User @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([requestedByUserId, createdAt])
+  @@map("export_jobs")
 }

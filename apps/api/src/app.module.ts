@@ -30,6 +30,8 @@ import { RefundsModule } from "./modules/refunds/refunds.module";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module";
 import { ApprovalGatesModule } from "./modules/approval-gates/approval-gates.module";
 import { CommunicationsModule } from "./modules/communications/communications.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { CommunicationsModule } from "./modules/communications/communications.mo
     ReconciliationModule,
     ApprovalGatesModule,
     CommunicationsModule,
+    DashboardModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [],
