@@ -2376,8 +2376,8 @@
         "Agregar BullMQ, Redis, o cualquier cola externa (evaluado y descartado explicitamente)",
         "Coordinacion multi-instancia mas alla de lo que el lease atomico de Postgres ya resuelve (no se agrega un sistema de eleccion de lider separado)"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "4226481",
       "notes": "Verified live: reports.service.ts's own comment already documents this exact gap before this story existed."
     },
     {
