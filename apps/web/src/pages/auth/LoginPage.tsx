@@ -124,7 +124,7 @@ export function LoginPage() {
         </FormField>
 
         <div className="flex justify-end">
-          <Link to="/recuperar-clave" className="text-sm font-medium text-brand-dark hover:underline">
+          <Link to="/recuperar-clave" className="text-sm font-medium text-brand-dark transition-colors duration-150 hover:text-brand-dark-600 hover:underline">
             ¿Olvidaste tu contraseña?
           </Link>
         </div>

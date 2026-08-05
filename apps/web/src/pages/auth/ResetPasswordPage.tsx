@@ -163,7 +163,7 @@ export function ResetPasswordPage() {
 
       {succeeded && (
         <p className="mt-6 text-center text-sm text-text-muted">
-          <Link to="/iniciar-sesion" className="font-medium text-brand-dark hover:underline">
+          <Link to="/iniciar-sesion" className="font-medium text-brand-dark transition-colors duration-150 hover:text-brand-dark-600 hover:underline">
             Ir a iniciar sesión ahora
           </Link>
         </p>
