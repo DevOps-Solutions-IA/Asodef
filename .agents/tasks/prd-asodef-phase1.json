@@ -2406,8 +2406,8 @@
         "Rediseñar el logo o crear variantes de marca nuevas",
         "Metadata social para paginas distintas de la home (og:image por ruta especifica), salvo que ya existiera ese patron"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "a8c60f9",
       "notes": "Verified live via grep: no favicon link/file exists; ReceiptViewPage.tsx has zero references to Logo/logo before this story."
     },
     {
