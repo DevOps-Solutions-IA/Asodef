@@ -1909,8 +1909,23 @@ model ExportJob {
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   completedAt   DateTime?       @map("completed_at") @db.Timestamptz(3)
 
+  // US-076: durable-queue fields, resolving the preproduction technical
+  // debt the original comment above documented ("if the process
+  // restarts mid-export the job simply stays PROCESSING forever").
+  // Postgres-native, atomic-claim-based - evaluated against adding
+  // BullMQ/Redis and rejected as unnecessary infrastructure for this
+  // deployment's export volume (see ReportsService's own doc comment
+  // for the full decision record).
+  leaseOwner    String?         @map("lease_owner")
+  leaseExpiresAt DateTime?      @map("lease_expires_at") @db.Timestamptz(3)
+  attemptCount  Int             @default(0) @map("attempt_count")
+  maxAttempts   Int             @default(3) @map("max_attempts")
+  nextAttemptAt DateTime?       @map("next_attempt_at") @db.Timestamptz(3)
+  failedAt      DateTime?       @map("failed_at") @db.Timestamptz(3)
+
   requestedByUser User @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
 
   @@index([requestedByUserId, createdAt])
+  @@index([status, leaseExpiresAt])
   @@map("export_jobs")
 }
