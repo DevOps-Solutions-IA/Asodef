@@ -2337,8 +2337,8 @@
       "outOfScope": [
         "Edicion de empresas existentes desde esta misma pantalla"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "5322a6b",
       "notes": null
     },
     {
