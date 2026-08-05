@@ -2303,8 +2303,8 @@
         "Edicion o eliminacion de empresas (solo creacion, que es el gap literal reportado)",
         "Importacion masiva de empresas"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "edd0cdb",
       "notes": "Verified live: CompaniesController (apps/api/src/modules/companies/companies.controller.ts) has only 2 GET routes; companies.manage already exists in rbac-catalog.spec.ts unused."
     },
     {
