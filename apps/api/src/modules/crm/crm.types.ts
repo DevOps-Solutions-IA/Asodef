@@ -1,4 +1,4 @@
-import type { CommercialActivity, Opportunity, Prospect } from "@prisma/client";
+import type { Agreement, CommercialActivity, Opportunity, Proposal, Prospect } from "@prisma/client";
 
 export interface AdminProspectResponse {
   id: string;
@@ -96,5 +96,52 @@ export function toAdminCommercialActivityResponse(activity: CommercialActivity):
     assignedUserId: activity.assignedUserId,
     note: activity.note,
     createdAt: activity.createdAt,
+  };
+}
+
+/** `isCurrent` is never persisted - computed each time as "highest
+ * version among the opportunity's proposals" (AC's Example: "the
+ * latest flagged as current"). */
+export interface AdminProposalResponse {
+  id: string;
+  opportunityId: string;
+  version: number;
+  content: unknown;
+  status: string;
+  sentAt: Date | null;
+  createdAt: Date;
+  isCurrent: boolean;
+}
+
+export function toAdminProposalResponse(proposal: Proposal, maxVersion: number): AdminProposalResponse {
+  return {
+    id: proposal.id,
+    opportunityId: proposal.opportunityId,
+    version: proposal.version,
+    content: proposal.content,
+    status: proposal.status,
+    sentAt: proposal.sentAt,
+    createdAt: proposal.createdAt,
+    isCurrent: proposal.version === maxVersion,
+  };
+}
+
+export interface AdminAgreementResponse {
+  id: string;
+  opportunityId: string;
+  companyId: string;
+  status: string | null;
+  signedDate: Date | null;
+  createdAt: Date;
+}
+
+export function toAdminAgreementResponse(agreement: Agreement): AdminAgreementResponse {
+  return {
+    id: agreement.id,
+    opportunityId: agreement.opportunityId,
+    companyId: agreement.companyId,
+    status: agreement.status,
+    signedDate: agreement.signedDate,
+    createdAt: agreement.createdAt,
   };
 }

@@ -19,6 +19,7 @@ describe("CRM endpoints (integration, real HTTP)", () => {
   const createdLeadIds: string[] = [];
   const createdProspectIds: string[] = [];
   const createdOpportunityIds: string[] = [];
+  const createdCompanyIds: string[] = [];
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
@@ -41,14 +42,18 @@ describe("CRM endpoints (integration, real HTTP)", () => {
   });
 
   afterAll(async () => {
-    // commercial_activities / opportunity_status_history / audit_logs
-    // all hold Restrict FKs into opportunities, which itself holds a
-    // Restrict FK into prospects - this order mirrors that dependency
-    // chain exactly (same lesson as US-050's own cleanup fix).
+    // commercial_activities / opportunity_status_history / audit_logs /
+    // proposals / agreements all hold Restrict FKs into opportunities,
+    // which itself holds a Restrict FK into prospects - this order
+    // mirrors that dependency chain exactly (same lesson as US-050's
+    // own cleanup fix). agreements also hold a Restrict FK into
+    // companies, so they must clear before companies are deleted.
     if (createdOpportunityIds.length > 0) {
       await prisma.commercialActivity.deleteMany({ where: { opportunityId: { in: createdOpportunityIds } } });
       await prisma.opportunityStatusHistory.deleteMany({ where: { opportunityId: { in: createdOpportunityIds } } });
       await prisma.auditLog.deleteMany({ where: { opportunityId: { in: createdOpportunityIds } } });
+      await prisma.proposal.deleteMany({ where: { opportunityId: { in: createdOpportunityIds } } });
+      await prisma.agreement.deleteMany({ where: { opportunityId: { in: createdOpportunityIds } } });
       await prisma.opportunity.deleteMany({ where: { id: { in: createdOpportunityIds } } });
     }
     if (createdProspectIds.length > 0) {
@@ -56,6 +61,9 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     }
     if (createdLeadIds.length > 0) {
       await prisma.leadSubmission.deleteMany({ where: { id: { in: createdLeadIds } } });
+    }
+    if (createdCompanyIds.length > 0) {
+      await prisma.company.deleteMany({ where: { id: { in: createdCompanyIds } } });
     }
     if (createdUserIds.length > 0) {
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -115,6 +123,20 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     });
     createdLeadIds.push(lead.id);
     return lead;
+  }
+
+  async function createCompany() {
+    const company = await prisma.company.create({
+      data: {
+        name: "Empresa Acuerdo CRM",
+        nit: `900${randomUUID().slice(0, 6)}-${Math.floor(Math.random() * 10)}`,
+        contactName: "Contacto Empresa",
+        contactEmail: `crm-company-${randomUUID()}@example.com`,
+        sector: "Servicios",
+      },
+    });
+    createdCompanyIds.push(company.id);
+    return company;
   }
 
   async function promoteLeadAndCreateOpportunity() {
@@ -292,5 +314,83 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     const opportunities = await request(app.getHttpServer()).get("/api/v1/admin/opportunities").set("Cookie", admin.cookies);
     expect(opportunities.status).toBe(200);
     expect(opportunities.body.some((o: { id: string }) => o.id === opportunity.id)).toBe(true);
+  });
+
+  it("Example (AC): creating two Proposal versions for the same opportunity preserves both, with the latest flagged as current", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/proposals`)
+      .set("Cookie", admin.cookies)
+      .send({ content: { benefit: "Plan básico", priceCents: 50000 } });
+    expect(first.status).toBe(201);
+    expect(first.body.version).toBe(1);
+    expect(first.body.isCurrent).toBe(true);
+
+    const second = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/proposals`)
+      .set("Cookie", admin.cookies)
+      .send({ content: { benefit: "Plan premium", priceCents: 80000 } });
+    expect(second.status).toBe(201);
+    expect(second.body.version).toBe(2);
+    expect(second.body.isCurrent).toBe(true);
+
+    const list = await request(app.getHttpServer())
+      .get(`/api/v1/admin/opportunities/${opportunity.id}/proposals`)
+      .set("Cookie", admin.cookies);
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(2);
+
+    const v1 = list.body.find((p: { version: number }) => p.version === 1);
+    const v2 = list.body.find((p: { version: number }) => p.version === 2);
+    expect(v1.isCurrent).toBe(false);
+    expect(v1.content).toEqual({ benefit: "Plan básico", priceCents: 50000 });
+    expect(v2.isCurrent).toBe(true);
+    expect(v2.content).toEqual({ benefit: "Plan premium", priceCents: 80000 });
+  });
+
+  it("Negative case (AC): creating an Agreement while the opportunity is still in qualified returns 409 with a clear stage-requirement message", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    const company = await createCompany();
+
+    const stageChange = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "QUALIFIED" });
+    expect(stageChange.status).toBe(200);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/agreement`)
+      .set("Cookie", admin.cookies)
+      .send({ companyId: company.id });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toEqual(expect.stringContaining("contract_pending"));
+  });
+
+  it("creates an Agreement once the opportunity reaches contract_pending", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    const company = await createCompany();
+
+    const stageChange = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "CONTRACT_PENDING" });
+    expect(stageChange.status).toBe(200);
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/agreement`)
+      .set("Cookie", admin.cookies)
+      .send({ companyId: company.id, signedDate: "2026-08-05T00:00:00.000Z" });
+
+    expect(response.status).toBe(201);
+    expect(response.body.companyId).toBe(company.id);
+    expect(response.body.signedDate).not.toBeNull();
+
+    const list = await request(app.getHttpServer())
+      .get(`/api/v1/admin/opportunities/${opportunity.id}/agreements`)
+      .set("Cookie", admin.cookies);
+    expect(list.status).toBe(200);
+    expect(list.body.some((a: { id: string }) => a.id === response.body.id)).toBe(true);
   });
 });

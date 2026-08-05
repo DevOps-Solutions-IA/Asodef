@@ -1,20 +1,33 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { CommercialPipelineStage, ProspectType } from "@prisma/client";
+import { CommercialPipelineStage, Prisma, ProspectType } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { AuditService, AuditSource } from "../audit/audit.service";
 import type { PromoteLeadDto } from "./dto/promote-lead.dto";
 import type { CreateOpportunityDto } from "./dto/create-opportunity.dto";
 import type { ChangeOpportunityStageDto } from "./dto/change-opportunity-stage.dto";
 import type { ScheduleCommercialActivityDto } from "./dto/schedule-commercial-activity.dto";
+import type { CreateProposalDto } from "./dto/create-proposal.dto";
+import type { CreateAgreementDto } from "./dto/create-agreement.dto";
 import {
+  toAdminAgreementResponse,
   toAdminCommercialActivityResponse,
   toAdminOpportunityResponse,
+  toAdminProposalResponse,
   toAdminProspectResponse,
+  type AdminAgreementResponse,
   type AdminCommercialActivityResponse,
   type AdminOpportunityResponse,
   type AdminOpportunityStageChangeResponse,
+  type AdminProposalResponse,
   type AdminProspectResponse,
 } from "./crm.types";
+
+/** The AC's negative case only allows creating an Agreement once the
+ * opportunity has reached one of these two stages. */
+const AGREEMENT_ELIGIBLE_STAGES: readonly CommercialPipelineStage[] = [
+  CommercialPipelineStage.CONTRACT_PENDING,
+  CommercialPipelineStage.ACTIVE_PARTNER,
+];
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
 
@@ -222,5 +235,75 @@ export class CrmService {
 
     const updated = await this.prisma.commercialActivity.update({ where: { id }, data: { completedAt: new Date() } });
     return toAdminCommercialActivityResponse(updated);
+  }
+
+  /**
+   * Example (AC): "creating two Proposal versions for the same
+   * opportunity preserves both, with the latest flagged as current" -
+   * version is a per-opportunity auto-incrementing integer computed
+   * inside the transaction (max existing version + 1), never client-
+   * supplied, so concurrent creates can't collide on the same number.
+   */
+  async createProposal(opportunityId: string, dto: CreateProposalDto): Promise<AdminProposalResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      const opportunity = await tx.opportunity.findUnique({ where: { id: opportunityId } });
+      if (!opportunity) {
+        throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+      }
+
+      const latest = await tx.proposal.findFirst({ where: { opportunityId }, orderBy: { version: "desc" } });
+      const nextVersion = (latest?.version ?? 0) + 1;
+
+      const proposal = await tx.proposal.create({
+        data: {
+          opportunityId,
+          version: nextVersion,
+          content: dto.content as Prisma.InputJsonValue,
+          status: dto.status,
+          sentAt: dto.sentAt ? new Date(dto.sentAt) : undefined,
+        },
+      });
+
+      return toAdminProposalResponse(proposal, nextVersion);
+    });
+  }
+
+  async listProposals(opportunityId: string): Promise<AdminProposalResponse[]> {
+    const proposals = await this.prisma.proposal.findMany({ where: { opportunityId }, orderBy: { version: "desc" } });
+    const maxVersion = proposals.reduce((max, p) => Math.max(max, p.version), 0);
+    return proposals.map((proposal) => toAdminProposalResponse(proposal, maxVersion));
+  }
+
+  /**
+   * Negative case (AC): an opportunity still in qualified (before
+   * legal_review) is rejected with 409 and a clear stage-requirement
+   * message - only contract_pending/active_partner are eligible.
+   */
+  async createAgreement(opportunityId: string, dto: CreateAgreementDto): Promise<AdminAgreementResponse> {
+    const opportunity = await this.prisma.opportunity.findUnique({ where: { id: opportunityId } });
+    if (!opportunity) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+    if (!AGREEMENT_ELIGIBLE_STAGES.includes(opportunity.stage)) {
+      throw new ConflictException(
+        `No se puede crear un acuerdo mientras la oportunidad esté en la etapa "${opportunity.stage}". Debe estar en contract_pending o active_partner.`,
+      );
+    }
+
+    const agreement = await this.prisma.agreement.create({
+      data: {
+        opportunityId,
+        companyId: dto.companyId,
+        status: dto.status,
+        signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+      },
+    });
+
+    return toAdminAgreementResponse(agreement);
+  }
+
+  async listAgreements(opportunityId: string): Promise<AdminAgreementResponse[]> {
+    const agreements = await this.prisma.agreement.findMany({ where: { opportunityId }, orderBy: { createdAt: "desc" } });
+    return agreements.map(toAdminAgreementResponse);
   }
 }

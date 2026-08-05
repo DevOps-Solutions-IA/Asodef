@@ -8,6 +8,8 @@ import { PromoteLeadDto } from "./dto/promote-lead.dto";
 import { CreateOpportunityDto } from "./dto/create-opportunity.dto";
 import { ChangeOpportunityStageDto } from "./dto/change-opportunity-stage.dto";
 import { ScheduleCommercialActivityDto } from "./dto/schedule-commercial-activity.dto";
+import { CreateProposalDto } from "./dto/create-proposal.dto";
+import { CreateAgreementDto } from "./dto/create-agreement.dto";
 
 @ApiTags("crm")
 @ApiCookieAuth("asodef_at")
@@ -64,5 +66,27 @@ export class CrmController {
   @HttpCode(HttpStatus.OK)
   completeActivity(@Param("id", ParseUUIDPipe) id: string) {
     return this.crmService.completeActivity(id);
+  }
+
+  @Post("opportunities/:id/proposals")
+  @HttpCode(HttpStatus.CREATED)
+  createProposal(@Param("id", ParseUUIDPipe) id: string, @Body() dto: CreateProposalDto) {
+    return this.crmService.createProposal(id, dto);
+  }
+
+  @Get("opportunities/:id/proposals")
+  listProposals(@Param("id", ParseUUIDPipe) id: string) {
+    return this.crmService.listProposals(id);
+  }
+
+  @Post("opportunities/:id/agreement")
+  @HttpCode(HttpStatus.CREATED)
+  createAgreement(@Param("id", ParseUUIDPipe) id: string, @Body() dto: CreateAgreementDto) {
+    return this.crmService.createAgreement(id, dto);
+  }
+
+  @Get("opportunities/:id/agreements")
+  listAgreements(@Param("id", ParseUUIDPipe) id: string) {
+    return this.crmService.listAgreements(id);
   }
 }
