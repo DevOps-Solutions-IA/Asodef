@@ -7,6 +7,8 @@ import { AppErrorBoundary } from "./layouts/shared/AppErrorBoundary";
 import { RouteLoadingFallback } from "./layouts/shared/RouteLoadingFallback";
 import { ReactQueryDevtoolsLazy } from "./lib/ReactQueryDevtoolsLazy";
 import { AuthProvider } from "./lib/auth/AuthProvider";
+import { CookieConsentProvider } from "./lib/cookie-consent/CookieConsentContext";
+import { CookieConsentBanner } from "./components/cookie-consent/CookieConsentBanner";
 
 export function App() {
   const [queryClient] = useState(createQueryClient);
@@ -15,9 +17,12 @@ export function App() {
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Suspense fallback={<RouteLoadingFallback />}>
-            <RouterProvider router={router} future={{ v7_startTransition: true }} />
-          </Suspense>
+          <CookieConsentProvider>
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <RouterProvider router={router} future={{ v7_startTransition: true }} />
+            </Suspense>
+            <CookieConsentBanner />
+          </CookieConsentProvider>
         </AuthProvider>
         <ReactQueryDevtoolsLazy />
       </QueryClientProvider>

@@ -18,6 +18,7 @@ import { WebhooksModule } from "./modules/webhooks/webhooks.module";
 import { ReceiptsModule } from "./modules/receipts/receipts.module";
 import { LegalDocumentsModule } from "./modules/legal-documents/legal-documents.module";
 import { ConsentModule } from "./modules/consent/consent.module";
+import { CookieConsentModule } from "./modules/cookie-consent/cookie-consent.module";
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ConsentModule } from "./modules/consent/consent.module";
     ReceiptsModule,
     LegalDocumentsModule,
     ConsentModule,
+    CookieConsentModule,
   ],
   controllers: [AppController],
   providers: [],

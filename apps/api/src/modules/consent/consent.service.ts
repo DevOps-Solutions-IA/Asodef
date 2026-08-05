@@ -31,6 +31,7 @@ export class ConsentService {
     subject: RecordConsentSubject,
     policyVersionId: string | null,
     req: RecordConsentRequestMeta,
+    status: typeof ConsentStatus.GRANTED | typeof ConsentStatus.DENIED = ConsentStatus.GRANTED,
   ): Promise<ConsentRecordResponse> {
     const purpose = await tx.consentPurpose.findUnique({ where: { key: purposeKey } });
     if (!purpose) {
@@ -53,11 +54,12 @@ export class ConsentService {
         consentPurposeId: purpose.id,
         legalDocumentVersionId: policyVersionId,
         ...subjectToRecordFields(subject),
-        status: ConsentStatus.GRANTED,
+        status,
         ipAddress: req.ipAddress,
         userAgent: req.userAgent,
         source: req.source,
         acceptanceMethod: req.acceptanceMethod,
+        metadata: req.metadata as Prisma.InputJsonValue | undefined,
       },
     });
 

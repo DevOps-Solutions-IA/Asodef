@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "../lib/auth/AuthProvider";
 import type { CurrentUser } from "../lib/auth/auth-types";
+import { CookieConsentProvider } from "../lib/cookie-consent/CookieConsentContext";
 
 /** A believable, complete CurrentUser fixture - override only what a
  * given test actually cares about. */
@@ -83,7 +84,9 @@ export function renderWithAuth(ui: ReactElement) {
     return (
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Suspense fallback={<div role="status">Cargando…</div>}>{children}</Suspense>
+          <CookieConsentProvider>
+            <Suspense fallback={<div role="status">Cargando…</div>}>{children}</Suspense>
+          </CookieConsentProvider>
         </AuthProvider>
       </QueryClientProvider>
     );

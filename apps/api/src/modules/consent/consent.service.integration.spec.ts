@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { ConsentStatus, Prisma, PrismaClient } from "@prisma/client";
 import { createTestPrismaClient } from "../../database/test-db-client";
 import { ConsentService } from "./consent.service";
 import type { RecordConsentRequestMeta } from "./consent.types";
@@ -27,11 +27,17 @@ describe("ConsentService (integration, real Postgres)", () => {
   afterAll(async () => {
     // ConsentRecord rows must go first - they hold Restrict FKs into
     // both legal_document_versions and customers, so either parent
-    // delete below would otherwise fail.
+    // delete below would otherwise fail. Includes anonymous records
+    // (no customerId) tied to a created version, e.g. the US-047
+    // anonymous-subject test.
     if (createdCustomerIds.length > 0) {
       await prisma.consentRecord.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
     }
     if (createdDocumentIds.length > 0) {
+      const versionIds = (
+        await prisma.legalDocumentVersion.findMany({ where: { legalDocumentId: { in: createdDocumentIds } }, select: { id: true } })
+      ).map((v) => v.id);
+      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: { in: versionIds } } });
       await prisma.legalDocument.updateMany({ where: { id: { in: createdDocumentIds } }, data: { currentVersionId: null } });
       await prisma.legalDocumentVersion.deleteMany({ where: { legalDocumentId: { in: createdDocumentIds } } });
       await prisma.legalDocument.deleteMany({ where: { id: { in: createdDocumentIds } } });
@@ -92,6 +98,29 @@ describe("ConsentService (integration, real Postgres)", () => {
     expect(record.userAgent).toBe(REQ.userAgent);
     expect(record.source).toBe(REQ.source);
     expect(record.acceptanceMethod).toBe(REQ.acceptanceMethod);
+  });
+
+  it("US-047: records an explicit DENIED status for an anonymous subject (no userId/leadSubmissionId/customerId)", async () => {
+    const version = await createPublishedVersion();
+
+    const result = await prisma.$transaction((tx) =>
+      service.record(
+        tx,
+        "data_processing",
+        { anonymous: true },
+        version.id,
+        { ...REQ, metadata: { category: "test" } },
+        ConsentStatus.DENIED,
+      ),
+    );
+
+    expect(result.status).toBe("DENIED");
+
+    const record = await prisma.consentRecord.findUniqueOrThrow({ where: { id: result.id } });
+    expect(record.userId).toBeNull();
+    expect(record.leadSubmissionId).toBeNull();
+    expect(record.customerId).toBeNull();
+    expect(record.metadata).toEqual({ category: "test" });
   });
 
   it("a purpose that doesn't require a policy version can be recorded with null", async () => {

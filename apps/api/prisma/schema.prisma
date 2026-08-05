@@ -899,6 +899,11 @@ model ConsentRecord {
   userAgent              String?       @map("user_agent")
   source                 String
   acceptanceMethod       String        @map("acceptance_method")
+  // US-047: purpose-specific structured context (e.g. { category:
+  // "analytics" } for a cookie_preferences record) - never a substitute
+  // for the typed columns above, only supplementary. Mirrors
+  // AuditLog.metadata's own precedent for this kind of extensibility.
+  metadata               Json?
   revokedAt              DateTime?     @map("revoked_at") @db.Timestamptz(3)
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 

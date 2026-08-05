@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { Drawer, IconButton } from "@asodef/ui";
 import { Menu } from "lucide-react";
+import { useCookieConsent } from "../lib/cookie-consent/cookie-consent-context";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 import { useScrollToHash } from "./shared/useScrollToHash";
@@ -52,6 +53,7 @@ export function PublicLayout() {
   const mainRef = useRef<HTMLElement>(null);
   useFocusMainOnRouteChange(mainRef);
   useScrollToHash();
+  const { openPreferences: openCookiePreferences } = useCookieConsent();
 
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
@@ -186,6 +188,15 @@ export function PublicLayout() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={openCookiePreferences}
+                  className="text-white/60 hover:text-white hover:underline"
+                >
+                  Preferencias de cookies
+                </button>
+              </li>
             </ul>
           </div>
         </div>
