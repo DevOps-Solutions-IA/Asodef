@@ -50,10 +50,10 @@ const STAT_POSITION_CLASSES = [
 ] as const;
 
 const CTA_BASE_CLASS =
-  "inline-flex h-12 items-center justify-center rounded-full px-6 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark focus-visible:ring-offset-2";
+  "inline-flex h-12 items-center justify-center rounded-full px-6 text-sm font-medium transition-[background-color,box-shadow,transform,border-color] duration-150 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark focus-visible:ring-offset-2";
 const CTA_VARIANT_CLASS: Record<NonNullable<HeroCta["variant"]>, string> = {
-  primary: "bg-brand-dark text-white hover:bg-brand-orange",
-  outline: "border border-brand-dark/20 bg-white/70 text-brand-dark backdrop-blur hover:bg-white",
+  primary: "bg-brand-dark text-white shadow-e1 hover:bg-brand-dark-600 hover:shadow-e2",
+  outline: "border border-brand-dark/20 bg-white/70 text-brand-dark shadow-e1 backdrop-blur hover:bg-white hover:shadow-e2",
 };
 
 /**
@@ -83,7 +83,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
               initial={textInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration, ease: EASE }}
-              className="inline-flex rounded-full border border-brand-dark/15 bg-white/70 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-brand-dark backdrop-blur"
+              className="inline-flex rounded-full border border-brand-dark/15 bg-white/70 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-brand-dark shadow-e1 backdrop-blur"
             >
               {eyebrow}
             </motion.span>
@@ -145,7 +145,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
                 <div
                   key={stat.label}
                   className={cn(
-                    "absolute rounded-2xl border border-white/40 bg-white/80 px-5 py-3 text-center shadow-lg backdrop-blur-xl",
+                    "absolute rounded-2xl border border-white/40 bg-white/80 px-5 py-3 text-center shadow-e3 backdrop-blur-xl",
                     STAT_POSITION_CLASSES[index % STAT_POSITION_CLASSES.length],
                   )}
                 >

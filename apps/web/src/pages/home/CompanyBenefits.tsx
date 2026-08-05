@@ -45,7 +45,7 @@ export function CompanyBenefits({ eyebrow, heading, description, cards }: Compan
               viewport={{ once: true, amount: 0.3 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.08 }}
               className={
-                "rounded-2xl border border-border-soft bg-bg-soft p-6 shadow-sm transition-shadow hover:shadow-lg motion-safe:hover:-translate-y-1 motion-safe:transition-transform" +
+                "rounded-2xl border border-border-soft bg-white p-6 shadow-e1 transition-shadow hover:shadow-e2 motion-safe:hover:-translate-y-1 motion-safe:transition-transform" +
                 (index === 0 ? " sm:col-span-2 lg:col-span-2" : "")
               }
             >

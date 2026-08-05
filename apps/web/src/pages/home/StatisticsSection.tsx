@@ -85,9 +85,9 @@ export function StatisticsSection({ eyebrow, heading, description, numericStats,
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.4 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.1 }}
-              className="rounded-2xl border border-border-soft bg-bg-soft p-6 text-center"
+              className="rounded-2xl border border-border-soft bg-white p-6 text-center shadow-e1 transition-shadow duration-200 hover:shadow-e2"
             >
-              <p className="font-display text-3xl font-semibold text-brand-dark sm:text-4xl">
+              <p className="font-display text-3xl font-semibold tabular-nums text-brand-dark sm:text-4xl">
                 <CountUpValue target={stat.value} prefersReducedMotion={prefersReducedMotion} />
               </p>
               <p className="mt-2 text-sm text-text-muted">{stat.label}</p>
@@ -106,7 +106,7 @@ export function StatisticsSection({ eyebrow, heading, description, numericStats,
                 ease: EASE,
                 delay: prefersReducedMotion ? 0 : ((numericStats?.length ?? 0) + index) * 0.1,
               }}
-              className="rounded-2xl border border-border-soft bg-bg-soft p-6 text-center"
+              className="rounded-2xl border border-border-soft bg-white p-6 text-center shadow-e1 transition-shadow duration-200 hover:shadow-e2"
             >
               <p className="font-display text-xl font-semibold text-brand-dark sm:text-2xl">{stat.value}</p>
               <p className="mt-2 text-sm text-text-muted">{stat.label}</p>

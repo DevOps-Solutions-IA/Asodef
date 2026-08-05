@@ -55,7 +55,7 @@ export function BenefitPortfolio({ eyebrow, heading, description, categories }: 
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.3 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.06 }}
-                className="flex flex-col rounded-2xl border border-border-soft bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-lg motion-safe:hover:-translate-y-1 motion-safe:transition-transform"
+                className="flex flex-col rounded-2xl border border-border-soft bg-bg-elevated p-6 shadow-e1 transition-shadow hover:shadow-e2 motion-safe:hover:-translate-y-1 motion-safe:transition-transform"
               >
                 <Icon aria-hidden="true" className="h-8 w-8 text-brand-green" />
                 <h3 className="mt-4 font-display text-lg font-semibold text-text-main">{category.title}</h3>

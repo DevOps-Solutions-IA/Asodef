@@ -54,7 +54,7 @@ export function AboutSection({ eyebrow, heading, description, cards }: AboutSect
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.12 }}
-                className="rounded-2xl border border-border-soft bg-bg-soft p-6"
+                className="rounded-2xl border border-border-soft bg-white p-6 shadow-e1 transition-shadow duration-200 hover:shadow-e2"
               >
                 <h3 className="font-display text-lg font-semibold text-text-main">{card.title}</h3>
                 {card.body && <p className="mt-2 text-sm text-text-muted">{card.body}</p>}

@@ -110,7 +110,7 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
         {/* Institutional contact channels (Section 5, CONTACTO) - always
          * shown regardless of whether the form itself is available. */}
         <dl className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="flex items-start gap-3 rounded-2xl border border-border-soft p-4">
+          <div className="flex items-start gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-shadow duration-200 hover:shadow-e2">
             <MessageCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-dark" />
             <div>
               <dt className="text-sm font-medium text-text-main">{ASODEF_COMPANY.commercialContact.fullName}</dt>
@@ -130,7 +130,7 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-2xl border border-border-soft p-4">
+          <div className="flex items-start gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-shadow duration-200 hover:shadow-e2">
             <Mail aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-dark" />
             <div>
               <dt className="text-sm font-medium text-text-main">Correo electrónico</dt>
@@ -142,7 +142,7 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-2xl border border-border-soft p-4">
+          <div className="flex items-start gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-shadow duration-200 hover:shadow-e2">
             <MapPin aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-dark" />
             <div>
               <dt className="text-sm font-medium text-text-main">Oficina principal</dt>
