@@ -27,6 +27,7 @@ import { PartnersModule } from "./modules/partners/partners.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
 import { RefundsModule } from "./modules/refunds/refunds.module";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module";
+import { ApprovalGatesModule } from "./modules/approval-gates/approval-gates.module";
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ReconciliationModule } from "./modules/reconciliation/reconciliation.mo
     ContractsModule,
     RefundsModule,
     ReconciliationModule,
+    ApprovalGatesModule,
   ],
   controllers: [AppController],
   providers: [],

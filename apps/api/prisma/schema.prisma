@@ -71,6 +71,7 @@ model User {
   issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
   approvedRefunds               Refund[]                   @relation("RefundApprover")
   reconciliationRuns            Reconciliation[]
+  approvedApprovalGates         ApprovalGate[]
 
   @@map("users")
 }
@@ -1739,4 +1740,44 @@ model ReconciliationDifference {
   @@unique([paymentOrderId, kind])
   @@index([reconciliationId])
   @@map("reconciliation_differences")
+}
+
+enum ApprovalGateStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+
+  @@map("approval_gate_status")
+}
+
+// US-058: the AC's own prose lists 16 comma-separated gate names (NIT,
+// legal address, corporate email, legal representative, commercial
+// registration, privacy policy, data-processing policy, terms and
+// conditions, payment policy, refund/reversal procedure, PQR process,
+// plan/service conditions, Bold production credentials, HTTPS, webhook
+// validation, customer-service ownership) while the same AC line
+// states "15 required gates" - a PRD numbering inconsistency, same
+// category as US-044's "10 vs 11" and US-053's "6 vs 7 checks". Per
+// this session's established precedent, the literal enumerated list is
+// the testable instruction - all 16 are seeded (see
+// approval-gate-catalog.ts), and this discrepancy is flagged here
+// rather than silently resolved by dropping one.
+model ApprovalGate {
+  id                     String             @id @default(uuid()) @db.Uuid
+  key                    String             @unique
+  description            String
+  status                 ApprovalGateStatus @default(PENDING)
+  approvedByUserId       String?            @map("approved_by_user_id") @db.Uuid
+  approvalDate           DateTime?          @map("approval_date") @db.Timestamptz(3)
+  supportingDocumentPath String?            @map("supporting_document_path")
+  notes                  String?
+  expirationDate         DateTime?          @map("expiration_date") @db.Timestamptz(3)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  approvedByUser User? @relation(fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("approval_gates")
 }

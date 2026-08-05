@@ -1,5 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
+import type { PrismaService } from "../../database/prisma.service";
+import { APPROVAL_GATE_CATALOG } from "../../database/approval-gate-catalog";
 import { boldTransportProvider, BoldConfigurationError } from "./bold-transport.provider";
 import { MockBoldTransport } from "./mock-bold.transport";
 import { HttpBoldTransport } from "./http-bold.transport";
@@ -16,33 +18,44 @@ function buildConfigService(overrides: Overrides): ConfigService<EnvConfig, true
   return { get: (key: keyof Overrides) => values[key] } as unknown as ConfigService<EnvConfig, true>;
 }
 
+/** allApproved: true seeds all 16 catalog gates as APPROVED/unexpired
+ * (US-058) - false leaves the list empty, simulating "not every gate
+ * is approved yet". Only ever consulted when BOLD_MODE=production. */
+function buildPrismaStub(allApproved: boolean): PrismaService {
+  const gates = allApproved
+    ? APPROVAL_GATE_CATALOG.map((entry) => ({ key: entry.key, status: "APPROVED", expirationDate: null }))
+    : [];
+  return { approvalGate: { findMany: async () => gates } } as unknown as PrismaService;
+}
+
+async function callFactory(configService: ConfigService<EnvConfig, true>, prisma: PrismaService, mockTransport: MockBoldTransport) {
+  const factory = boldTransportProvider.useFactory as (...args: unknown[]) => Promise<unknown>;
+  return factory(configService, mockTransport, prisma);
+}
+
 describe("boldTransportProvider (US-022 Negative case: fails startup without mock mode or real credentials)", () => {
   const mockTransport = new MockBoldTransport();
 
-  it("BOLD_MODE=mock always resolves to MockBoldTransport, regardless of credentials", () => {
+  it("BOLD_MODE=mock always resolves to MockBoldTransport, regardless of credentials", async () => {
     const configService = buildConfigService({ BOLD_MODE: "mock", BOLD_IDENTITY_KEY: "" });
-    const transport = (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport);
+    const transport = await callFactory(configService, buildPrismaStub(false), mockTransport);
     expect(transport).toBe(mockTransport);
   });
 
-  it("BOLD_MODE=sandbox without BOLD_IDENTITY_KEY throws BoldConfigurationError - never silently attempts a live call", () => {
+  it("BOLD_MODE=sandbox without BOLD_IDENTITY_KEY throws BoldConfigurationError - never silently attempts a live call", async () => {
     const configService = buildConfigService({ BOLD_MODE: "sandbox", BOLD_IDENTITY_KEY: "" });
-    expect(() => (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport)).toThrow(
-      BoldConfigurationError,
-    );
+    await expect(callFactory(configService, buildPrismaStub(false), mockTransport)).rejects.toThrow(BoldConfigurationError);
   });
 
-  it("BOLD_MODE=production without BOLD_IDENTITY_KEY throws BoldConfigurationError", () => {
+  it("BOLD_MODE=production without BOLD_IDENTITY_KEY throws BoldConfigurationError", async () => {
     const configService = buildConfigService({ BOLD_MODE: "production", BOLD_IDENTITY_KEY: "" });
-    expect(() => (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport)).toThrow(
-      BoldConfigurationError,
-    );
+    await expect(callFactory(configService, buildPrismaStub(false), mockTransport)).rejects.toThrow(BoldConfigurationError);
   });
 
-  it("the configuration error message never echoes the (absent) credential value", () => {
+  it("the configuration error message never echoes the (absent) credential value", async () => {
     const configService = buildConfigService({ BOLD_MODE: "production", BOLD_IDENTITY_KEY: "" });
     try {
-      (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport);
+      await callFactory(configService, buildPrismaStub(false), mockTransport);
       throw new Error("expected boldTransportProvider to throw");
     } catch (error) {
       expect(error).toBeInstanceOf(BoldConfigurationError);
@@ -50,15 +63,20 @@ describe("boldTransportProvider (US-022 Negative case: fails startup without moc
     }
   });
 
-  it("BOLD_MODE=sandbox with BOLD_IDENTITY_KEY configured resolves to a real HttpBoldTransport", () => {
+  it("BOLD_MODE=sandbox with BOLD_IDENTITY_KEY configured resolves to a real HttpBoldTransport - no approval-gate check for sandbox", async () => {
     const configService = buildConfigService({ BOLD_MODE: "sandbox", BOLD_IDENTITY_KEY: "sandbox-test-key" });
-    const transport = (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport);
+    const transport = await callFactory(configService, buildPrismaStub(false), mockTransport);
     expect(transport).toBeInstanceOf(HttpBoldTransport);
   });
 
-  it("BOLD_MODE=production with BOLD_IDENTITY_KEY configured resolves to a real HttpBoldTransport", () => {
+  it("BOLD_MODE=production with credentials AND every ApprovalGate APPROVED resolves to a real HttpBoldTransport", async () => {
     const configService = buildConfigService({ BOLD_MODE: "production", BOLD_IDENTITY_KEY: "production-test-key" });
-    const transport = (boldTransportProvider.useFactory as (...args: unknown[]) => unknown)(configService, mockTransport);
+    const transport = await callFactory(configService, buildPrismaStub(true), mockTransport);
     expect(transport).toBeInstanceOf(HttpBoldTransport);
+  });
+
+  it("Negative case (US-058, verbatim): BOLD_MODE=production with real credentials but not every ApprovalGate APPROVED still throws BoldConfigurationError - never silently allows live payments", async () => {
+    const configService = buildConfigService({ BOLD_MODE: "production", BOLD_IDENTITY_KEY: "production-test-key" });
+    await expect(callFactory(configService, buildPrismaStub(false), mockTransport)).rejects.toThrow(BoldConfigurationError);
   });
 });
