@@ -26,8 +26,10 @@ export function CompanyLayout() {
       <SkipToContent targetId="main-content" />
       <aside className="border-b border-border-soft bg-brand-deep text-white sm:w-64 sm:shrink-0 sm:border-b-0">
         <div className="px-5 py-5">
-          <Link to="/" className="inline-block rounded-lg bg-white px-2.5 py-1.5" aria-label={ASODEF_COMPANY.legalName}>
-            <BrandLogo className="h-7 w-auto" />
+          {/* icon-only: the wordmark is low-contrast on this dark
+              sidebar - see BrandLogo's own doc comment. */}
+          <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
+            <BrandLogo variant="icon" className="h-9 w-auto" />
           </Link>
           <p className="mt-1 text-xs text-white/60">Portal de empresas</p>
         </div>

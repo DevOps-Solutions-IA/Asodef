@@ -170,15 +170,13 @@ export function PublicLayout() {
       <footer className="border-t border-border-soft bg-brand-deep text-white">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 text-sm sm:px-8 md:grid-cols-3 lg:px-12">
           <div>
-            {/* The interim logo asset has a flat white background (no
-                alpha - see BrandLogo's own doc comment), so it needs a
-                light backdrop of its own against this dark footer rather
-                than a color filter, which would misrender it. */}
-            <div className="inline-block rounded-lg bg-white px-3 py-2">
-              {/* "full" variant already includes the tagline baked into
-                  the image - no separate <p> needed alongside it. */}
-              <BrandLogo variant="full" className="h-14 w-auto" />
-            </div>
+            {/* icon-only: the wordmark is genuinely low-contrast against
+                this dark footer (see BrandLogo's own doc comment) - the
+                isotipo's own colors all read clearly here with no wrapper
+                needed, keeping the real transparent asset visibly
+                transparent instead of boxed in a white card. */}
+            <BrandLogo variant="icon" className="h-14 w-auto" />
+            <p className="mt-2 text-white/70">{ASODEF_COMPANY.tagline}</p>
           </div>
 
           <nav aria-label="Pie de página">
