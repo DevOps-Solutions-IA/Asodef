@@ -62,6 +62,7 @@ model User {
   auditLogActions               AuditLog[]             @relation("AuditLogActor")
   consentRecords                ConsentRecord[]
   assignedDataSubjectRequests   DataSubjectRequest[]   @relation("DataSubjectRequestAssignee")
+  anonymizationLogActions       AnonymizationLog[]
 
   @@map("users")
 }
@@ -993,4 +994,81 @@ model DataSubjectRequest {
   @@index([status, createdAt])
   @@index([assignedUserId])
   @@map("data_subject_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Data retention policies and anonymization evidence (US-049)
+//
+// retentionPeriodDays is deliberately nullable and unconfigured for
+// every seeded category (see seed-retention-policies.ts) - no real
+// retention period exists anywhere in the PRD or codebase, and
+// inventing one (e.g. a generic "2 years") would be exactly the kind
+// of unconfirmed legal/regulatory determination this project never
+// fabricates. A category with no configured period is never flagged by
+// the review job - the mechanism is real and tested, but inert by
+// default until compliance provides real numbers.
+//
+// legalHold is a per-category flag on the policy itself, not a
+// per-record flag on every one of the 11 underlying tables - the AC's
+// own first sentence describes both fields as belonging to
+// RetentionPolicy; the negative case's "a record flagged with
+// legalHold=true" is read as a RetentionPolicy row (a "record" in the
+// generic database sense), not a business record in some other table.
+// A category-wide hold is also a strictly safer default than a
+// granular one this story would otherwise have to fabricate a design
+// for across models it doesn't own the schema of.
+// ---------------------------------------------------------------------------
+
+enum RetentionRecordCategory {
+  LEADS
+  OPPORTUNITIES
+  CONTRACTS
+  PAYMENT_ORDERS
+  APPROVED_TRANSACTIONS
+  FAILED_TRANSACTIONS
+  RECEIPTS
+  PQR_CASES
+  AUDIT_LOGS
+  DOCUMENTS
+  CONSENT_RECORDS
+
+  @@map("retention_record_category")
+}
+
+model RetentionPolicy {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  recordCategory      RetentionRecordCategory @unique @map("record_category")
+  retentionPeriodDays Int?                    @map("retention_period_days")
+  legalHold           Boolean                 @default(false) @map("legal_hold")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("retention_policies")
+}
+
+enum AnonymizationAction {
+  ANONYMIZED
+  DELETED
+
+  @@map("anonymization_action")
+}
+
+// Evidence of an executed action - always the result of an explicit
+// admin approval (AC: "requires an explicit admin approval... before
+// anonymizing/deleting, writing an AnonymizationLog entry as
+// evidence"), never a side effect of the review job itself, which only
+// ever identifies candidates and writes nothing.
+model AnonymizationLog {
+  id             String                  @id @default(uuid()) @db.Uuid
+  recordCategory RetentionRecordCategory @map("record_category")
+  recordId       String                  @map("record_id") @db.Uuid
+  action         AnonymizationAction
+  reason         String
+  actorUserId    String?                 @map("actor_user_id") @db.Uuid
+  executedAt     DateTime                @default(now()) @map("executed_at") @db.Timestamptz(3)
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([recordCategory, recordId])
+  @@map("anonymization_logs")
 }

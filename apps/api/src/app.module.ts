@@ -20,6 +20,7 @@ import { LegalDocumentsModule } from "./modules/legal-documents/legal-documents.
 import { ConsentModule } from "./modules/consent/consent.module";
 import { CookieConsentModule } from "./modules/cookie-consent/cookie-consent.module";
 import { DataSubjectRequestsModule } from "./modules/data-subject-requests/data-subject-requests.module";
+import { RetentionReviewModule } from "./modules/retention/retention-review.module";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { DataSubjectRequestsModule } from "./modules/data-subject-requests/data-
     ConsentModule,
     CookieConsentModule,
     DataSubjectRequestsModule,
+    RetentionReviewModule,
   ],
   controllers: [AppController],
   providers: [],
