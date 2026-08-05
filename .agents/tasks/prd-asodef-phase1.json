@@ -2097,8 +2097,8 @@
         "Publicar cualquiera de los 10 documentos nuevos (permanecen DRAFT)",
         "Redactar el contenido legal completo de categoria C (requiere revision juridica externa) - solo se sienta la estructura + placeholders"
       ],
-      "completionStatus": "pending",
-      "commit": null,
+      "completionStatus": "complete",
+      "commit": "0ab9584",
       "notes": "Grounded in a real, verified gap: legal-document-catalog.ts today has exactly 11 entries; type is a Prisma String not an enum, so no migration is needed."
     },
     {
