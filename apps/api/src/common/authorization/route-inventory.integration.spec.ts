@@ -20,6 +20,8 @@ const DOCUMENTED_NO_PERMISSION_EXCEPTIONS = new Map<string, string>([
   ["AuthController.me", "Reads only the caller's own session/profile - no business resource involved."],
   ["AuthController.logoutAll", "Revokes only the caller's own sessions - no other user's data is touched."],
   ["AuthController.changePassword", "Changes only the caller's own password, after re-verifying it - self-service, not a business resource."],
+  ["MeConsentController.list", "Reads only the caller's own consent records - userId always comes from the session, never a parameter."],
+  ["MeConsentController.revoke", "Revokes only the caller's own consent - userId always comes from the session, never a parameter."],
 ]);
 
 describe("Route inventory: deny-by-default enforcement (US-008)", () => {
