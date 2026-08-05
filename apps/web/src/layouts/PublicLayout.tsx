@@ -11,17 +11,17 @@ import { WhatsAppFloatingButton } from "./shared/WhatsAppFloatingButton";
 
 /**
  * US-011's own AC also names "Cifras" (linking to the statistics
- * section) - deliberately omitted here since US-014 (that section) is
- * DEFERRED by product decision (no verified figures exist to show or
- * link to). Add it back only once US-014 ships real content - a nav
- * link to an empty/nonexistent section would itself be a broken UX,
- * not a faithful implementation of the AC's intent.
+ * section) - now restored: US-014 was reopened via a corporate-data
+ * update once real, sourced figures became available, so the section
+ * it points to (#cifras, StatisticsSection on the homepage) is real,
+ * not empty/nonexistent.
  */
 const NAV_LINKS = [
   { to: "/", label: "Inicio" },
   { to: "/quienes-somos", label: "Quiénes somos" },
   { to: "/beneficios", label: "Beneficios" },
   { to: "/portafolio", label: "Portafolio" },
+  { to: "/#cifras", label: "Cifras" },
   { to: "/cobertura", label: "Cobertura" },
   { to: "/pagos", label: "Pagos" },
   { to: "/contacto", label: "Contacto" },

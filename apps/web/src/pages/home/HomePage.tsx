@@ -3,6 +3,7 @@ import { useContent } from "../../lib/content/useContent";
 import { Hero } from "./Hero";
 import { TrustBar } from "./TrustBar";
 import { AboutSection } from "./AboutSection";
+import { StatisticsSection } from "./StatisticsSection";
 import { CompanyBenefits } from "./CompanyBenefits";
 import { BenefitPortfolio } from "./BenefitPortfolio";
 import { CoverageSection } from "./CoverageSection";
@@ -14,12 +15,26 @@ import { ContactSection } from "./ContactSection";
 // yet - the homepage must render identically either way.
 const HERO_EYEBROW_FALLBACK = "ASODEF · Asociación para el desarrollo familiar";
 
+// US-014 (reopened): same fallback contract as hero.eyebrow above -
+// these are the exact dossier-sourced values seeded into ContentEntry
+// (see content-catalog.ts), hardcoded here only as the fallback for
+// when GET /content is unreachable or hasn't published these keys yet.
+const STATISTICS_FALLBACK = {
+  affiliateHolders: 8405,
+  beneficiaries: 54692,
+  experienceYearsLabel: "Más de 20 años",
+  coverageLabel: "Cobertura nacional",
+  agreementsLabel: "Red de convenios",
+};
+
 /**
  * Institutional homepage. US-012 (Hero), US-013 (TrustBar + About),
  * US-015 (Company Benefits + Benefit Portfolio), US-016 (Coverage +
  * Alliance CTA), and US-018 (Contact form) are all content-complete.
- * US-014 (Statistics) is deferred by product decision - no verified
- * figures exist yet, so it isn't rendered here.
+ * US-014 (Statistics) was reopened via a corporate-data update once
+ * real, sourced figures became available (ASODEF institutional
+ * dossier) - see StatisticsSection's own doc comment for the counter
+ * implementation.
  *
  * Hero's/AllianceCta's "#contacto" anchors now resolve to a real,
  * working section (US-018) - previously a stable id with no target yet.
@@ -31,6 +46,8 @@ const HERO_EYEBROW_FALLBACK = "ASODEF · Asociación para el desarrollo familiar
  */
 export function HomePage() {
   const content = useContent();
+  const affiliateHolders = Number(content["institutional.statistics.affiliateHolders"] ?? STATISTICS_FALLBACK.affiliateHolders);
+  const beneficiaries = Number(content["institutional.statistics.beneficiaries"] ?? STATISTICS_FALLBACK.beneficiaries);
 
   return (
     <>
@@ -80,6 +97,21 @@ export function HomePage() {
             title: "Nuestra visión",
             body: "Ser una organización reconocida por su cercanía, confianza y capacidad de generar valor para las familias y las comunidades que acompaña.",
           },
+        ]}
+      />
+
+      <StatisticsSection
+        eyebrow="ASODEF en cifras"
+        heading="Más de 20 años acompañando a las familias"
+        description="Nuestra escala institucional respalda el acompañamiento que brindamos a personas, familias y organizaciones en todo el país."
+        numericStats={[
+          { value: affiliateHolders, label: "Titulares afiliados" },
+          { value: beneficiaries, label: "Beneficiarios" },
+        ]}
+        labeledStats={[
+          { value: content["institutional.statistics.experienceYearsLabel"] ?? STATISTICS_FALLBACK.experienceYearsLabel, label: "Experiencia" },
+          { value: content["institutional.statistics.coverageLabel"] ?? STATISTICS_FALLBACK.coverageLabel, label: "Cobertura" },
+          { value: content["institutional.statistics.agreementsLabel"] ?? STATISTICS_FALLBACK.agreementsLabel, label: "Alianzas" },
         ]}
       />
 
