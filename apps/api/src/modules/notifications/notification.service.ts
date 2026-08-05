@@ -1,9 +1,13 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { CommunicationLog } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { MAIL_TRANSPORT, type MailTransport, type OutboundEmailMessage } from "./mail-transport.interface";
+
+const OPTIONAL_MARKETING_PURPOSE_KEY = "optional_marketing";
+const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
 
 const TEMPLATE_VERSION = "v1";
 
@@ -159,6 +163,129 @@ export class NotificationService {
     });
 
     return job.id;
+  }
+
+  /**
+   * US-059 AC (verbatim method name/signature): a stub - persists a
+   * CommunicationLog row and logs the rendered content, no real SMTP/
+   * WhatsApp dispatch. kind=marketing checks SuppressionListEntry
+   * first (channel-scoped, cheaper/no join), then a GRANTED
+   * optional_marketing ConsentRecord for whichever subject (Customer/
+   * LeadSubmission/User) matches `recipient` by email or phone.
+   * kind=transactional always sends/logs, independent of marketing
+   * consent (Negative case, verbatim).
+   */
+  async send(templateKey: string, recipient: string, data: Record<string, unknown>): Promise<CommunicationLog> {
+    const template = await this.prisma.communicationTemplate.findUnique({ where: { key: templateKey } });
+    if (!template) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+
+    if (template.kind === "MARKETING") {
+      const suppressed = await this.prisma.suppressionListEntry.findUnique({
+        where: { channel_recipient: { channel: template.channel, recipient } },
+      });
+      if (suppressed) {
+        return this.prisma.communicationLog.create({
+          data: {
+            templateId: template.id,
+            recipient,
+            channel: template.channel,
+            status: "SUPPRESSED",
+            errorCategory: "suppression_list_entry",
+          },
+        });
+      }
+
+      const consentGranted = await this.hasGrantedMarketingConsent(recipient);
+      if (!consentGranted) {
+        return this.prisma.communicationLog.create({
+          data: {
+            templateId: template.id,
+            recipient,
+            channel: template.channel,
+            status: "SUPPRESSED",
+            errorCategory: "marketing_consent_not_granted",
+          },
+        });
+      }
+    }
+
+    this.logger.log(`[stub] would send template "${templateKey}" to ${recipient} via ${template.channel}: ${JSON.stringify(data)}`);
+
+    return this.prisma.communicationLog.create({
+      data: { templateId: template.id, recipient, channel: template.channel, status: "SENT", sentAt: new Date() },
+    });
+  }
+
+  /** US-059 AC: "adds a SuppressionListEntry and revokes the
+   * optional_marketing ConsentRecord". Upserts the suppression entry
+   * (idempotent - a repeat unsubscribe click is not an error) and
+   * revokes every currently-granted optional_marketing record found
+   * for the matching subject, if any. */
+  async unsubscribe(channel: string, recipient: string, reason: string): Promise<void> {
+    await this.prisma.suppressionListEntry.upsert({
+      where: { channel_recipient: { channel, recipient } },
+      update: {},
+      create: { channel, recipient, reason },
+    });
+
+    const purpose = await this.prisma.consentPurpose.findUnique({ where: { key: OPTIONAL_MARKETING_PURPOSE_KEY } });
+    if (!purpose) {
+      return;
+    }
+
+    const subjectWhere = await this.resolveConsentSubjectWhere(recipient);
+    if (!subjectWhere) {
+      return;
+    }
+
+    await this.prisma.consentRecord.updateMany({
+      where: { consentPurposeId: purpose.id, ...subjectWhere, status: "GRANTED", revokedAt: null },
+      data: { status: "DENIED", revokedAt: new Date() },
+    });
+  }
+
+  private async hasGrantedMarketingConsent(recipient: string): Promise<boolean> {
+    const purpose = await this.prisma.consentPurpose.findUnique({ where: { key: OPTIONAL_MARKETING_PURPOSE_KEY } });
+    if (!purpose) {
+      return false;
+    }
+
+    const subjectWhere = await this.resolveConsentSubjectWhere(recipient);
+    if (!subjectWhere) {
+      return false;
+    }
+
+    const record = await this.prisma.consentRecord.findFirst({
+      where: { consentPurposeId: purpose.id, ...subjectWhere, status: "GRANTED", revokedAt: null },
+    });
+    return record !== null;
+  }
+
+  /** Resolves `recipient` (an email or phone string) to whichever
+   * subject - Customer, LeadSubmission, or User, in that order - it
+   * matches, returning the discriminator ConsentRecord.where() needs.
+   * Null when no subject matches at all. */
+  private async resolveConsentSubjectWhere(
+    recipient: string,
+  ): Promise<{ customerId: string } | { leadSubmissionId: string } | { userId: string } | null> {
+    const customer = await this.prisma.customer.findFirst({ where: { OR: [{ email: recipient }, { phone: recipient }] } });
+    if (customer) {
+      return { customerId: customer.id };
+    }
+
+    const lead = await this.prisma.leadSubmission.findFirst({ where: { OR: [{ email: recipient }, { phone: recipient }] } });
+    if (lead) {
+      return { leadSubmissionId: lead.id };
+    }
+
+    const user = await this.prisma.user.findFirst({ where: { email: recipient } });
+    if (user) {
+      return { userId: user.id };
+    }
+
+    return null;
   }
 
   private async dispatch(jobId: string, userId: string, message: OutboundEmailMessage): Promise<void> {

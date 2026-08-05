@@ -1781,3 +1781,81 @@ model ApprovalGate {
 
   @@map("approval_gates")
 }
+
+enum CommunicationKind {
+  TRANSACTIONAL
+  MARKETING
+
+  @@map("communication_kind")
+}
+
+// US-059: the AC's own literal example text uses lowercase status
+// strings ('sent', 'suppressed', 'would-send') inconsistently (see
+// CommunicationLogStatus's own comment below) - values here still
+// follow this schema's own established SCREAMING_CASE convention for
+// every other status enum, matching every prior story's precedent.
+// channel has no PRD-given enum (e.g. "email"/"whatsapp"/"sms") - kept
+// a free-form string, same precedent as elsewhere in this schema.
+model CommunicationTemplate {
+  id        String            @id @default(uuid()) @db.Uuid
+  key       String            @unique
+  channel   String
+  kind      CommunicationKind
+  subject   String?
+  body      Json
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  logs CommunicationLog[]
+
+  @@map("communication_templates")
+}
+
+// US-059: the AC's own bullet 2 says the granted-consent success case
+// persists as 'would-send', but the AC's own Example (bullet 4) says
+// the exact same case "logs status='sent'" - an internal PRD
+// inconsistency (same category as US-044/US-053/US-058's own flagged
+// numbering conflicts). The Example is treated as the more literal,
+// testable instruction per this session's established precedent, so
+// the success state is named SENT (mapped from 'sent'), not
+// 'WOULD_SEND'. FAILED exists for a genuine internal dispatch error
+// (not exercised by either AC scenario, but the only state that would
+// ever populate the PRD-given errorCategory field for a reason other
+// than suppression).
+enum CommunicationLogStatus {
+  SENT
+  SUPPRESSED
+  FAILED
+
+  @@map("communication_log_status")
+}
+
+model CommunicationLog {
+  id            String                 @id @default(uuid()) @db.Uuid
+  templateId    String                 @map("template_id") @db.Uuid
+  recipient     String
+  channel       String
+  status        CommunicationLogStatus
+  attempts      Int                    @default(1)
+  errorCategory String?                @map("error_category")
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt        DateTime?              @map("sent_at") @db.Timestamptz(3)
+
+  template CommunicationTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@index([recipient, channel])
+  @@index([templateId, createdAt])
+  @@map("communication_logs")
+}
+
+model SuppressionListEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  channel   String
+  recipient String
+  reason    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // dataModel's own "(unique per channel)" annotation on recipient.
+  @@unique([channel, recipient])
+  @@map("suppression_list_entries")
+}

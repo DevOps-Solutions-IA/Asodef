@@ -28,6 +28,7 @@ import { ContractsModule } from "./modules/contracts/contracts.module";
 import { RefundsModule } from "./modules/refunds/refunds.module";
 import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module";
 import { ApprovalGatesModule } from "./modules/approval-gates/approval-gates.module";
+import { CommunicationsModule } from "./modules/communications/communications.module";
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ApprovalGatesModule } from "./modules/approval-gates/approval-gates.mod
     RefundsModule,
     ReconciliationModule,
     ApprovalGatesModule,
+    CommunicationsModule,
   ],
   controllers: [AppController],
   providers: [],

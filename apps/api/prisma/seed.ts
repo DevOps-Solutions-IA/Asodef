@@ -6,6 +6,7 @@ import { seedLegalDocuments } from "../src/database/seed-legal-documents";
 import { seedConsentPurposes } from "../src/database/seed-consent-purposes";
 import { seedRetentionPolicies } from "../src/database/seed-retention-policies";
 import { seedApprovalGates } from "../src/database/seed-approval-gates";
+import { seedCommunicationTemplates } from "../src/database/seed-communication-templates";
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,7 @@ async function main() {
   await seedConsentPurposes(prisma);
   await seedRetentionPolicies(prisma);
   await seedApprovalGates(prisma);
+  await seedCommunicationTemplates(prisma);
 }
 
 main()
