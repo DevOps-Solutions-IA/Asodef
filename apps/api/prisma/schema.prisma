@@ -67,6 +67,8 @@ model User {
   assignedOpportunities         Opportunity[]              @relation("OpportunityAssignee")
   opportunityStageChanges       OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
   assignedCommercialActivities  CommercialActivity[]       @relation("CommercialActivityAssignee")
+  uploadedContractVersions      ContractVersion[]          @relation("ContractVersionUploader")
+  issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
 
   @@map("users")
 }
@@ -547,6 +549,7 @@ model Customer {
   paymentOrders  PaymentOrder[]
   consentRecords ConsentRecord[]
   pqrCases       PqrCase[]
+  contracts      Contract[]
 
   // Natural business key: US-021's own Example queries "the seeded demo
   // customer's document number", implying (type, number) uniquely
@@ -582,6 +585,7 @@ model Company {
   commercialContacts CommercialContact[]
   opportunities      Opportunity[]
   agreements         Agreement[]
+  contracts          Contract[]
 
   @@map("companies")
 }
@@ -1502,4 +1506,125 @@ model BusinessPartner {
 
   @@index([publicationStatus])
   @@map("business_partners")
+}
+
+enum ContractStatus {
+  DRAFT
+  UNDER_REVIEW
+  PENDING_ACCEPTANCE
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  ARCHIVED
+
+  @@map("contract_status")
+}
+
+// US-055: "type" has no PRD-given enum, kept a free-form string (same
+// precedent as Agreement.status/BusinessPartner.status). Mirrors
+// Plan/PlanVersion's identity+version split exactly: Contract is the
+// stable identity, ContractVersion carries the actual document.
+model Contract {
+  id                String         @id @default(uuid()) @db.Uuid
+  type              String
+  relatedCompanyId  String?        @map("related_company_id") @db.Uuid
+  relatedCustomerId String?        @map("related_customer_id") @db.Uuid
+  internalReference String         @map("internal_reference")
+  currentVersionId  String?        @unique @map("current_version_id") @db.Uuid
+  status            ContractStatus @default(DRAFT)
+  effectiveDate     DateTime?      @map("effective_date") @db.Timestamptz(3)
+  expirationDate    DateTime?      @map("expiration_date") @db.Timestamptz(3)
+  notes             String?
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  relatedCompany  Company?          @relation(fields: [relatedCompanyId], references: [id], onDelete: SetNull)
+  relatedCustomer Customer?         @relation(fields: [relatedCustomerId], references: [id], onDelete: SetNull)
+  // Restrict, not SetNull/Cascade: same reasoning as
+  // LegalDocument/Plan's own currentVersion pointer.
+  currentVersion  ContractVersion?  @relation("CurrentContractVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  versions        ContractVersion[] @relation("ContractVersions")
+
+  @@index([status])
+  @@map("contracts")
+}
+
+// documentPath is a private filesystem path (CONTRACTS_STORAGE_DIR),
+// never served directly - only through a signed, time-limited,
+// permission-checked download token (ContractDownloadToken). checksum
+// is server-computed (SHA-256 of the uploaded bytes), never trusted
+// from the client.
+model ContractVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  contractId      String   @map("contract_id") @db.Uuid
+  version         Int
+  documentPath    String   @map("document_path")
+  checksum        String
+  changeSummary   String?  @map("change_summary")
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contract           Contract                @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Restrict)
+  currentForContract Contract?               @relation("CurrentContractVersion")
+  createdByUser      User?                   @relation("ContractVersionUploader", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  signers            ContractSigner[]
+  acceptances        ContractAcceptance[]
+  downloadTokens     ContractDownloadToken[]
+
+  @@unique([contractId, version])
+  @@map("contract_versions")
+}
+
+// role has no PRD-given enum (e.g. "legal representative", "witness")
+// - free-form string, same precedent as elsewhere in this schema.
+model ContractSigner {
+  id                String  @id @default(uuid()) @db.Uuid
+  contractVersionId String  @map("contract_version_id") @db.Uuid
+  fullName          String  @map("full_name")
+  role              String?
+  email             String
+
+  contractVersion ContractVersion      @relation(fields: [contractVersionId], references: [id], onDelete: Restrict)
+  acceptances     ContractAcceptance[]
+
+  @@index([contractVersionId])
+  @@map("contract_signers")
+}
+
+model ContractAcceptance {
+  id                String   @id @default(uuid()) @db.Uuid
+  contractVersionId String   @map("contract_version_id") @db.Uuid
+  signerId          String   @map("signer_id") @db.Uuid
+  acceptedAt        DateTime @default(now()) @map("accepted_at") @db.Timestamptz(3)
+  ipAddress         String?  @map("ip_address")
+  evidenceReference String?  @map("evidence_reference")
+
+  contractVersion ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Restrict)
+  signer          ContractSigner  @relation(fields: [signerId], references: [id], onDelete: Restrict)
+
+  // A given signer can accept a given version at most once - protects
+  // the "all required signers have accepted" count from being
+  // artificially inflated by an accidental duplicate submission.
+  @@unique([contractVersionId, signerId])
+  @@map("contract_acceptances")
+}
+
+// Mirrors PasswordResetToken's exact security pattern: only an
+// HMAC-SHA256 hash of the raw token is ever persisted (see
+// ContractDownloadTokenService). Reusable (not single-use) within its
+// TTL window, matching standard signed-URL semantics (e.g. S3
+// presigned URLs) - the AC only requires expiry (410), not
+// single-use consumption.
+model ContractDownloadToken {
+  id                String   @id @default(uuid()) @db.Uuid
+  contractVersionId String   @map("contract_version_id") @db.Uuid
+  tokenHash         String   @unique @map("token_hash")
+  issuedByUserId    String?  @map("issued_by_user_id") @db.Uuid
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contractVersion ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Restrict)
+  issuedByUser    User?           @relation("ContractDownloadTokenIssuer", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@map("contract_download_tokens")
 }

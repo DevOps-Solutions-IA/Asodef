@@ -7,6 +7,7 @@ const VALID_ENV: Record<string, string> = {
   JWT_REFRESH_SECRET: "a-refresh-secret-that-is-long-enough",
   ENCRYPTION_KEY: "an-encryption-key-that-is-at-least-32-characters",
   PASSWORD_RESET_TOKEN_SECRET: "a-reset-token-secret-that-is-long-enough",
+  CONTRACT_DOWNLOAD_TOKEN_SECRET: "a-contract-download-secret-that-is-long-enough",
 };
 
 describe("validateEnv", () => {

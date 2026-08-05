@@ -171,6 +171,21 @@ export const envSchema = z.object({
   // default. No cloud storage is documented/approved anywhere in this
   // project yet, so this stays a plain local path, gitignored.
   RECEIPTS_STORAGE_DIR: z.string().default("./storage/receipts"),
+
+  // contracts (US-055): outside any public web root, same rationale as
+  // RECEIPTS_STORAGE_DIR - a plain local path, gitignored, no cloud
+  // storage documented/approved yet.
+  CONTRACTS_STORAGE_DIR: z.string().default("./storage/contracts"),
+  // Dedicated pepper for signed contract-download tokens, distinct from
+  // every other token secret - same rationale as
+  // PASSWORD_RESET_TOKEN_SECRET.
+  CONTRACT_DOWNLOAD_TOKEN_SECRET: z
+    .string({ required_error: "CONTRACT_DOWNLOAD_TOKEN_SECRET is required" })
+    .min(16, "CONTRACT_DOWNLOAD_TOKEN_SECRET must be at least 16 characters"),
+  // How long a signed download URL stays valid after being issued - not
+  // specified by the PRD; a short-lived industry-standard default for a
+  // one-off authenticated download link.
+  CONTRACT_DOWNLOAD_URL_TTL_MINUTES: z.coerce.number().int().positive().default(15),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

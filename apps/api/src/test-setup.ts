@@ -11,5 +11,6 @@ process.env.JWT_SECRET ??= "test_jwt_secret_at_least_16_chars";
 process.env.JWT_REFRESH_SECRET ??= "test_refresh_secret_at_least_16_chars";
 process.env.ENCRYPTION_KEY ??= "test_encryption_key_needs_32_characters_min";
 process.env.PASSWORD_RESET_TOKEN_SECRET ??= "test_reset_token_secret_at_least_16_chars";
+process.env.CONTRACT_DOWNLOAD_TOKEN_SECRET ??= "test_contract_download_secret_at_least_16_chars";
 process.env.CORS_ORIGIN ??= "http://localhost:5173";
 process.env.NODE_ENV ??= "test";

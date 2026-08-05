@@ -205,6 +205,16 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: order.publicReference, status: "APPROVED" });
     expect(response.status).not.toBe(401);
+
+    // The controller ACKs before processDelivery() (fire-and-forget)
+    // finishes - without waiting for it to settle here, a straggling
+    // receipt-issuance write can still land after afterAll's own
+    // cleanup has already run, violating payment_receipts' FK into
+    // payment_orders.
+    await waitFor(
+      () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
+      (o) => o.status === "APPROVED",
+    );
   });
 
   it("never leaks internal database ids in the acknowledgement response", async () => {
@@ -213,5 +223,12 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: order.publicReference, status: "APPROVED" });
     expect(response.body).toEqual({ status: "received" });
+
+    // Same reasoning as the test above - wait for the fire-and-forget
+    // processDelivery() to fully settle before this test returns.
+    await waitFor(
+      () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
+      (o) => o.status === "APPROVED",
+    );
   });
 });

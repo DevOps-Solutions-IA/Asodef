@@ -24,6 +24,7 @@ import { RetentionReviewModule } from "./modules/retention/retention-review.modu
 import { PqrCasesModule } from "./modules/pqr-cases/pqr-cases.module";
 import { CrmModule } from "./modules/crm/crm.module";
 import { PartnersModule } from "./modules/partners/partners.module";
+import { ContractsModule } from "./modules/contracts/contracts.module";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { PartnersModule } from "./modules/partners/partners.module";
     PqrCasesModule,
     CrmModule,
     PartnersModule,
+    ContractsModule,
   ],
   controllers: [AppController],
   providers: [],
