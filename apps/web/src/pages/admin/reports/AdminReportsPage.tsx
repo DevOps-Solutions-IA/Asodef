@@ -73,8 +73,10 @@ export function AdminReportsPage() {
                   <button
                     type="button"
                     onClick={() => handleSelectReport(report.key)}
-                    className={`block w-full rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                      selectedKey === report.key ? "bg-brand-dark/10 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
+                    className={`relative block w-full rounded-lg py-2 pl-4 pr-3 text-left text-sm transition-colors duration-150 ${
+                      selectedKey === report.key
+                        ? "bg-brand-dark-50 font-semibold text-brand-dark before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-orange"
+                        : "text-text-main hover:bg-bg-soft"
                     }`}
                   >
                     {report.label}
