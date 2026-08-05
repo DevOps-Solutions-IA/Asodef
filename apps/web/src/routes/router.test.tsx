@@ -165,8 +165,28 @@ describe("router", () => {
     expect(screen.getByRole("link", { name: "Conciliación" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Planes" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "CRM" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Legal" })).not.toBeInTheDocument();
+    // FINANCE deliberately holds no crm.read (rbac-catalog.spec.ts locks
+    // it out of any CRM permission) - CRM stays hidden, same as any other
+    // permission-gated section this role lacks.
+    expect(screen.queryByRole("link", { name: "CRM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Empresas y aliados" })).not.toBeInTheDocument();
+  });
+
+  it("Example (AC): a COMMERCIAL user with crm.read but not crm.manage can open the CRM section, read-only", async () => {
+    renderAtPath("/admin/crm/prospectos", buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.read"] }), (url) => {
+      if (url.includes("/admin/prospects")) return jsonResponse(200, []);
+      if (url.includes("/admin/leads")) return jsonResponse(200, []);
+      return undefined;
+    });
+
+    expect(await screen.findByText("Modo de solo lectura: no tienes permiso para modificar registros de CRM.")).toBeInTheDocument();
+  });
+
+  it("Negative case (AC): a user without crm.read (e.g. FINANCE) is shown the unauthorized state for /admin/crm", async () => {
+    renderAtPath("/admin/crm", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
   });
 
   it("renders the real UserListPage for /admin/usuarios when the actor holds users.read", async () => {

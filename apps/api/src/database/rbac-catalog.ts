@@ -52,6 +52,13 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "companies.read", description: "Ver empresas" },
   { key: "companies.manage", description: "Administrar empresas" },
   { key: "crm.manage", description: "Administrar prospectos, oportunidades, propuestas y convenios" },
+  // US-061 AC5: "a user without crm.manage sees the CRM screens in
+  // read-only mode... not hidden" requires the read endpoints to accept
+  // a permission that isn't crm.manage itself - crm.manage previously
+  // gated CrmController's every route (reads included) at the class
+  // level, which made read-only access impossible for any role. Same
+  // split precedent as payments.refund/payments.refund.approve (US-056).
+  { key: "crm.read", description: "Ver prospectos, oportunidades, propuestas y convenios" },
   { key: "partners.manage", description: "Administrar aliados comerciales y su publicación" },
   { key: "contracts.read", description: "Ver contratos" },
   { key: "contracts.manage", description: "Administrar contratos" },
@@ -150,6 +157,11 @@ const PLATFORM_ONLY_KEYS = [
 export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   SUPER_ADMIN: ALL_PERMISSION_KEYS,
   ADMIN: ALL_PERMISSION_KEYS.filter((key) => !PLATFORM_ONLY_KEYS.includes(key)),
+  // crm.read is deliberately NOT granted here - rbac-catalog.spec.ts
+  // already locks FINANCE to financial/reporting/audit permissions only
+  // ("no CRM/company management"), a pre-existing governance boundary
+  // from an earlier story. FINANCE has no legitimate reason to view CRM
+  // data, so it doesn't see the CRM nav sections at all (US-061).
   FINANCE: [
     "payments.read",
     "payments.reconcile",
@@ -167,6 +179,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "affiliates.read",
     "companies.read",
     "companies.manage",
+    "crm.read",
     "crm.manage",
     "partners.manage",
     "contracts.read",
@@ -182,9 +195,19 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "documents.read",
     "contracts.read",
     "content.read",
+    "crm.read",
   ],
   COMPANY_PARTNER: ["companies.read", "contracts.read", "documents.read"],
   AFFILIATE: ["customers.read", "payments.read"],
   CUSTOMER: ["payments.read"],
-  AUDITOR: ["audit.read", "reports.read", "reports.export", "content.read", "payments.read", "contracts.read", "documents.read"],
+  AUDITOR: [
+    "audit.read",
+    "reports.read",
+    "reports.export",
+    "content.read",
+    "payments.read",
+    "contracts.read",
+    "documents.read",
+    "crm.read",
+  ],
 };

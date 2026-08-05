@@ -11,13 +11,17 @@ import type { CreateAgreementDto } from "./dto/create-agreement.dto";
 import {
   toAdminAgreementResponse,
   toAdminCommercialActivityResponse,
+  toAdminLeadSubmissionResponse,
   toAdminOpportunityResponse,
+  toAdminOpportunityStatusHistoryResponse,
   toAdminProposalResponse,
   toAdminProspectResponse,
   type AdminAgreementResponse,
   type AdminCommercialActivityResponse,
+  type AdminLeadSubmissionResponse,
   type AdminOpportunityResponse,
   type AdminOpportunityStageChangeResponse,
+  type AdminOpportunityStatusHistoryResponse,
   type AdminProposalResponse,
   type AdminProspectResponse,
 } from "./crm.types";
@@ -115,6 +119,13 @@ export class CrmService {
     return prospects.map(toAdminProspectResponse);
   }
 
+  /** US-061: /admin/crm/prospectos lists Prospects and LeadSubmissions
+   * side by side - this is the LeadSubmission half. */
+  async listLeads(): Promise<AdminLeadSubmissionResponse[]> {
+    const leads = await this.prisma.leadSubmission.findMany({ orderBy: { createdAt: "desc" } });
+    return leads.map(toAdminLeadSubmissionResponse);
+  }
+
   /**
    * No OpportunityStatusHistory or AuditLog entry is written here -
    * the AC's own Example counts exactly one history row for
@@ -203,6 +214,32 @@ export class CrmService {
 
       return { ...toAdminOpportunityResponse(updated), warning };
     });
+  }
+
+  /** US-061: opportunity detail's "full status history" requirement. */
+  async listStatusHistory(opportunityId: string): Promise<AdminOpportunityStatusHistoryResponse[]> {
+    const opportunity = await this.prisma.opportunity.findUnique({ where: { id: opportunityId } });
+    if (!opportunity) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+    const history = await this.prisma.opportunityStatusHistory.findMany({
+      where: { opportunityId },
+      orderBy: { createdAt: "desc" },
+    });
+    return history.map(toAdminOpportunityStatusHistoryResponse);
+  }
+
+  /** US-061: opportunity detail's "activities" requirement. */
+  async listActivities(opportunityId: string): Promise<AdminCommercialActivityResponse[]> {
+    const opportunity = await this.prisma.opportunity.findUnique({ where: { id: opportunityId } });
+    if (!opportunity) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+    const activities = await this.prisma.commercialActivity.findMany({
+      where: { opportunityId },
+      orderBy: { createdAt: "desc" },
+    });
+    return activities.map(toAdminCommercialActivityResponse);
   }
 
   async scheduleActivity(opportunityId: string, dto: ScheduleCommercialActivityDto): Promise<AdminCommercialActivityResponse> {

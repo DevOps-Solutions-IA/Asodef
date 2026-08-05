@@ -23,6 +23,7 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
+  let readOnlyActor: { user: User; cookies: string[] };
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
@@ -39,6 +40,9 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
     admin = await createActor("ADMIN");
     noPermActor = await createActor("CUSTOMER");
+    // AUDITOR holds crm.read but not crm.manage (rbac-catalog.ts) - the
+    // exact "read-only" role US-061 AC5 describes.
+    readOnlyActor = await createActor("AUDITOR");
   });
 
   afterAll(async () => {
@@ -157,6 +161,22 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
     return { lead, prospect: promote.body, opportunity: createOpp.body };
   }
+
+  it("US-061 AC5: an actor with crm.read but not crm.manage can read prospects/opportunities but gets 403 on mutating routes", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+
+    const readProspects = await request(app.getHttpServer()).get("/api/v1/admin/prospects").set("Cookie", readOnlyActor.cookies);
+    expect(readProspects.status).toBe(200);
+
+    const readOpportunities = await request(app.getHttpServer()).get("/api/v1/admin/opportunities").set("Cookie", readOnlyActor.cookies);
+    expect(readOpportunities.status).toBe(200);
+
+    const mutate = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", readOnlyActor.cookies)
+      .send({ stage: "QUALIFIED" });
+    expect(mutate.status).toBe(403);
+  });
 
   it("returns 403 for the promote endpoint without crm.manage", async () => {
     const lead = await createLead();
@@ -366,6 +386,58 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.message).toEqual(expect.stringContaining("contract_pending"));
+  });
+
+  it("US-061: lists LeadSubmissions, including their prospectId once promoted", async () => {
+    const unpromoted = await createLead();
+    const { lead: promoted, prospect } = await promoteLeadAndCreateOpportunity();
+
+    const response = await request(app.getHttpServer()).get("/api/v1/admin/leads").set("Cookie", admin.cookies);
+    expect(response.status).toBe(200);
+
+    const unpromotedEntry = response.body.find((l: { id: string }) => l.id === unpromoted.id);
+    const promotedEntry = response.body.find((l: { id: string }) => l.id === promoted.id);
+    expect(unpromotedEntry.prospectId).toBeNull();
+    expect(promotedEntry.prospectId).toBe(prospect.id);
+  });
+
+  it("US-061: lists an opportunity's full status history, most recent first", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "CONTACTED" });
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "QUALIFIED" });
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/admin/opportunities/${opportunity.id}/status-history`)
+      .set("Cookie", admin.cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(2);
+    expect(response.body[0].toStage).toBe("QUALIFIED");
+    expect(response.body[1].toStage).toBe("CONTACTED");
+  });
+
+  it("US-061: lists an opportunity's scheduled activities", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+
+    const schedule = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/activities`)
+      .set("Cookie", admin.cookies)
+      .send({ type: "EMAIL", note: "Enviar propuesta." });
+    expect(schedule.status).toBe(201);
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/admin/opportunities/${opportunity.id}/activities`)
+      .set("Cookie", admin.cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.some((a: { id: string }) => a.id === schedule.body.id)).toBe(true);
   });
 
   it("creates an Agreement once the opportunity reaches contract_pending", async () => {

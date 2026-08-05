@@ -1,4 +1,4 @@
-import type { Agreement, CommercialActivity, Opportunity, Proposal, Prospect } from "@prisma/client";
+import type { Agreement, CommercialActivity, LeadSubmission, Opportunity, OpportunityStatusHistory, Proposal, Prospect } from "@prisma/client";
 
 export interface AdminProspectResponse {
   id: string;
@@ -123,6 +123,65 @@ export function toAdminProposalResponse(proposal: Proposal, maxVersion: number):
     sentAt: proposal.sentAt,
     createdAt: proposal.createdAt,
     isCurrent: proposal.version === maxVersion,
+  };
+}
+
+/** US-061: /admin/crm/prospectos lists Prospects and LeadSubmissions
+ * side by side. `prospectId` tells the UI whether a given lead has
+ * already been promoted (disables the promote action instead of
+ * risking the service's own 409). */
+export interface AdminLeadSubmissionResponse {
+  id: string;
+  fullName: string;
+  company: string;
+  position: string;
+  city: string;
+  phone: string;
+  email: string;
+  sector: string;
+  message: string;
+  status: string;
+  prospectId: string | null;
+  createdAt: Date;
+}
+
+export function toAdminLeadSubmissionResponse(lead: LeadSubmission): AdminLeadSubmissionResponse {
+  return {
+    id: lead.id,
+    fullName: lead.fullName,
+    company: lead.company,
+    position: lead.position,
+    city: lead.city,
+    phone: lead.phone,
+    email: lead.email,
+    sector: lead.sector,
+    message: lead.message,
+    status: lead.status,
+    prospectId: lead.prospectId,
+    createdAt: lead.createdAt,
+  };
+}
+
+/** US-061: opportunity detail's "full status history" requirement. */
+export interface AdminOpportunityStatusHistoryResponse {
+  id: string;
+  opportunityId: string;
+  fromStage: string | null;
+  toStage: string;
+  changedByUserId: string | null;
+  note: string | null;
+  createdAt: Date;
+}
+
+export function toAdminOpportunityStatusHistoryResponse(entry: OpportunityStatusHistory): AdminOpportunityStatusHistoryResponse {
+  return {
+    id: entry.id,
+    opportunityId: entry.opportunityId,
+    fromStage: entry.fromStage,
+    toStage: entry.toStage,
+    changedByUserId: entry.changedByUserId,
+    note: entry.note,
+    createdAt: entry.createdAt,
   };
 }
 

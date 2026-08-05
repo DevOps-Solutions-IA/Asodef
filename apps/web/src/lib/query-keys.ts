@@ -51,5 +51,19 @@ export const queryKeys = {
        * what the list should show). */
       allLists: () => ["admin", "users", "list"] as const,
     },
+    crm: {
+      prospects: () => ["admin", "crm", "prospects"] as const,
+      leads: () => ["admin", "crm", "leads"] as const,
+      opportunities: () => ["admin", "crm", "opportunities"] as const,
+      opportunity: (opportunityId: string) => ["admin", "crm", "opportunities", opportunityId] as const,
+      statusHistory: (opportunityId: string) => ["admin", "crm", "opportunities", opportunityId, "status-history"] as const,
+      activities: (opportunityId: string) => ["admin", "crm", "opportunities", opportunityId, "activities"] as const,
+      proposals: (opportunityId: string) => ["admin", "crm", "opportunities", opportunityId, "proposals"] as const,
+      agreements: (opportunityId: string) => ["admin", "crm", "opportunities", opportunityId, "agreements"] as const,
+      companies: () => ["admin", "crm", "companies"] as const,
+      company: (companyId: string) => ["admin", "crm", "companies", companyId] as const,
+      partners: () => ["admin", "crm", "partners"] as const,
+      partner: (partnerId: string) => ["admin", "crm", "partners", partnerId] as const,
+    },
   },
 } as const;

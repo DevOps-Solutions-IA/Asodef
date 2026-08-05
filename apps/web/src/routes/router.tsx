@@ -21,6 +21,13 @@ import { EditUserPage } from "../pages/admin/EditUserPage";
 import { UserRolesPage } from "../pages/admin/UserRolesPage";
 import { UserSessionsPage } from "../pages/admin/UserSessionsPage";
 import { UserSecurityPage } from "../pages/admin/UserSecurityPage";
+import { CrmLayout } from "../pages/admin/crm/CrmLayout";
+import { ProspectsListPage } from "../pages/admin/crm/ProspectsListPage";
+import { OpportunitiesBoardPage } from "../pages/admin/crm/OpportunitiesBoardPage";
+import { OpportunityDetailPage } from "../pages/admin/crm/OpportunityDetailPage";
+import { CrmCompaniesPage } from "../pages/admin/crm/CrmCompaniesPage";
+import { CompanyDetailPage } from "../pages/admin/crm/CompanyDetailPage";
+import { BusinessPartnerDetailPage } from "../pages/admin/crm/BusinessPartnerDetailPage";
 import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
 import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
@@ -173,12 +180,34 @@ export const routeConfig: RouteObject[] = [
             children: [
               { index: true, element: <AdminDashboardPage /> },
               {
-                element: <PermissionRoute permissions={["crm.manage"]} />,
-                children: [{ path: "crm", element: <RoutePlaceholder title="CRM" /> }],
-              },
-              {
-                element: <PermissionRoute permissions={["companies.read"]} />,
-                children: [{ path: "empresas-y-aliados", element: <RoutePlaceholder title="Empresas y aliados" /> }],
+                // crm.read gates visibility (same pattern as every other
+                // section here, e.g. payments.read/Pagos); crm.manage
+                // gates mutation on top of that. AC5's "a user without
+                // crm.manage sees the CRM screens in read-only mode... not
+                // hidden" describes exactly this two-tier split, same as
+                // payments.read+payments.reconcile for Pagos/Conciliación
+                // - it does not mean CRM is visible to literally everyone.
+                // CrmLayout disables mutating actions per-page for anyone
+                // who reaches here without crm.manage. The "Empresas y
+                // aliados" nav item (AdminLayout.tsx) also points here, at
+                // its "empresas" sub-route - there is no separate
+                // standalone empresas-y-aliados page.
+                element: <PermissionRoute permissions={["crm.read"]} />,
+                children: [
+                  {
+                    path: "crm",
+                    element: <CrmLayout />,
+                    children: [
+                      { index: true, element: <Navigate to="prospectos" replace /> },
+                      { path: "prospectos", element: <ProspectsListPage /> },
+                      { path: "oportunidades", element: <OpportunitiesBoardPage /> },
+                      { path: "oportunidades/:opportunityId", element: <OpportunityDetailPage /> },
+                      { path: "empresas", element: <CrmCompaniesPage /> },
+                      { path: "empresas/:companyId", element: <CompanyDetailPage /> },
+                      { path: "aliados/:partnerId", element: <BusinessPartnerDetailPage /> },
+                    ],
+                  },
+                ],
               },
               { path: "planes", element: <RoutePlaceholder title="Planes" /> },
               {

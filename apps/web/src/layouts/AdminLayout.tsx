@@ -22,8 +22,12 @@ interface AdminNavItem {
 
 const NAV_ITEMS: AdminNavItem[] = [
   { to: "/admin", label: "Dashboard", end: true, permission: null },
-  { to: "/admin/crm", label: "CRM", permission: "crm.manage" },
-  { to: "/admin/empresas-y-aliados", label: "Empresas y aliados", permission: "companies.read" },
+  // crm.read gates visibility (crm.manage additionally gates mutation
+  // inside the section - see router.tsx). "Empresas y aliados" is a
+  // second entry point into that same CRM section's "empresas" tab, not a
+  // separate page, so it shares the same permission.
+  { to: "/admin/crm", label: "CRM", permission: "crm.read" },
+  { to: "/admin/crm/empresas", label: "Empresas y aliados", permission: "crm.read" },
   { to: "/admin/planes", label: "Planes", permission: null },
   { to: "/admin/contratos", label: "Contratos", permission: "contracts.read" },
   { to: "/admin/pagos", label: "Pagos", permission: "payments.read" },

@@ -23,6 +23,7 @@ import { DataSubjectRequestsModule } from "./modules/data-subject-requests/data-
 import { RetentionReviewModule } from "./modules/retention/retention-review.module";
 import { PqrCasesModule } from "./modules/pqr-cases/pqr-cases.module";
 import { CrmModule } from "./modules/crm/crm.module";
+import { CompaniesModule } from "./modules/companies/companies.module";
 import { PartnersModule } from "./modules/partners/partners.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
 import { RefundsModule } from "./modules/refunds/refunds.module";
@@ -62,6 +63,7 @@ import { CommunicationsModule } from "./modules/communications/communications.mo
     RetentionReviewModule,
     PqrCasesModule,
     CrmModule,
+    CompaniesModule,
     PartnersModule,
     ContractsModule,
     RefundsModule,
