@@ -26,6 +26,9 @@ import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
 import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
 import { PaymentResultPage } from "../pages/payments/PaymentResultPage";
 import { ReceiptViewPage } from "../pages/payments/ReceiptViewPage";
+import { LegalCenterPage } from "../pages/legal/LegalCenterPage";
+import { LegalDocumentPage } from "../pages/legal/LegalDocumentPage";
+import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
 
 // Payment/account/company/admin/legal are never needed on first paint of
 // the public marketing site, so they're code-split - satisfies "no
@@ -36,22 +39,6 @@ const AccountLayout = lazy(() => import("../layouts/AccountLayout").then((m) => 
 const CompanyLayout = lazy(() => import("../layouts/CompanyLayout").then((m) => ({ default: m.CompanyLayout })));
 const AdminLayout = lazy(() => import("../layouts/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LegalLayout = lazy(() => import("../layouts/LegalLayout").then((m) => ({ default: m.LegalLayout })));
-
-const LEGAL_ROUTE_TITLES: Record<string, string> = {
-  "": "Centro legal",
-  "informacion-empresarial": "Información empresarial",
-  "politica-de-privacidad": "Política de privacidad",
-  "tratamiento-de-datos": "Tratamiento de datos",
-  "aviso-de-privacidad": "Aviso de privacidad",
-  "terminos-y-condiciones": "Términos y condiciones",
-  "terminos-de-pago": "Términos de pago",
-  "reversiones-y-reembolsos": "Reversiones y reembolsos",
-  "politica-de-cookies": "Política de cookies",
-  pqr: "PQR",
-  seguridad: "Seguridad",
-  accesibilidad: "Accesibilidad",
-  "solicitudes-de-datos": "Solicitudes de datos",
-};
 
 /**
  * Exported separately (not just the built router) so tests can build a
@@ -226,11 +213,13 @@ export const routeConfig: RouteObject[] = [
     path: "legal",
     element: <LegalLayout />,
     errorElement: <RouteErrorBoundary />,
-    children: Object.entries(LEGAL_ROUTE_TITLES).map(([segment, title]) =>
-      segment === ""
-        ? { index: true, element: <RoutePlaceholder title={title} /> }
-        : { path: segment, element: <RoutePlaceholder title={title} /> },
-    ),
+    children: [
+      { index: true, element: <LegalCenterPage /> },
+      ...LEGAL_CATALOG.map((entry) => ({
+        path: entry.slug,
+        element: <LegalDocumentPage slug={entry.slug} title={entry.title} />,
+      })),
+    ],
   },
   // Alias: the master route map defines the canonical location as
   // /legal/pqr, but /pqr is also specified as a direct entry point.

@@ -115,14 +115,21 @@ describe("router", () => {
   });
 
   it("renders the lazily-loaded LegalLayout with its document list for /legal/politica-de-privacidad", async () => {
-    renderAtPath("/legal/politica-de-privacidad");
+    renderAtPath("/legal/politica-de-privacidad", null, (url) => {
+      if (url.includes("/legal-documents/")) return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." });
+      return undefined;
+    });
 
     expect(await screen.findByRole("heading", { name: "Política de privacidad" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Documentos legales" })).toBeInTheDocument();
+    expect(await screen.findByText("Aún no publicado")).toBeInTheDocument();
   });
 
   it("redirects /pqr to /legal/pqr", async () => {
-    renderAtPath("/pqr");
+    renderAtPath("/pqr", null, (url) => {
+      if (url.includes("/legal-documents/")) return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." });
+      return undefined;
+    });
     expect(await screen.findByRole("heading", { name: "PQR" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Documentos legales" })).toBeInTheDocument();
   });

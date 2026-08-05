@@ -38,6 +38,14 @@ export function PaymentLayout() {
       >
         <Outlet />
       </main>
+
+      <footer className="border-t border-border-soft bg-white">
+        <div className="mx-auto max-w-4xl px-5 py-4 text-sm sm:px-8">
+          <Link to="/legal" className="font-medium text-brand-dark hover:underline">
+            Centro legal
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 }

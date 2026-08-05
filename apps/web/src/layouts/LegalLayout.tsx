@@ -1,23 +1,9 @@
 import { useRef } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
+import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
-
-const LEGAL_DOCUMENTS = [
-  { to: "/legal/informacion-empresarial", label: "Información empresarial" },
-  { to: "/legal/politica-de-privacidad", label: "Política de privacidad" },
-  { to: "/legal/tratamiento-de-datos", label: "Tratamiento de datos" },
-  { to: "/legal/aviso-de-privacidad", label: "Aviso de privacidad" },
-  { to: "/legal/terminos-y-condiciones", label: "Términos y condiciones" },
-  { to: "/legal/terminos-de-pago", label: "Términos de pago" },
-  { to: "/legal/reversiones-y-reembolsos", label: "Reversiones y reembolsos" },
-  { to: "/legal/politica-de-cookies", label: "Política de cookies" },
-  { to: "/legal/pqr", label: "PQR" },
-  { to: "/legal/seguridad", label: "Seguridad" },
-  { to: "/legal/accesibilidad", label: "Accesibilidad" },
-  { to: "/legal/solicitudes-de-datos", label: "Solicitudes de datos" },
-];
 
 /** Public, content-focused legal center (/legal/*) - a table-of-contents
  * sidebar plus a reading-width main column, distinct from every other
@@ -47,17 +33,17 @@ export function LegalLayout() {
             Centro legal
           </h2>
           <ul className="mt-3 flex flex-col gap-1 text-sm">
-            {LEGAL_DOCUMENTS.map((doc) => (
-              <li key={doc.to}>
+            {LEGAL_CATALOG.map((entry) => (
+              <li key={entry.slug}>
                 <NavLink
-                  to={doc.to}
+                  to={`/legal/${entry.slug}`}
                   className={({ isActive }) =>
                     `block rounded-lg px-3 py-1.5 transition-colors ${
                       isActive ? "bg-brand-dark/10 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
                     }`
                   }
                 >
-                  {doc.label}
+                  {entry.title}
                 </NavLink>
               </li>
             ))}

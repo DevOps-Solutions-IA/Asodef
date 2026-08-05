@@ -144,7 +144,12 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
               label={
                 <>
                   Acepto el{" "}
-                  <Link to="/legal/tratamiento-de-datos" className="font-medium text-brand-dark hover:underline">
+                  <Link
+                    to="/legal/tratamiento-de-datos"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-brand-dark hover:underline"
+                  >
                     tratamiento de mis datos personales
                   </Link>
                   .

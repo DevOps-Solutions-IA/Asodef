@@ -75,10 +75,10 @@ describe("ContactSection", () => {
       expect(field(label)).toBeInTheDocument();
     }
     expect(screen.getByRole("checkbox")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /tratamiento de mis datos personales/ })).toHaveAttribute(
-      "href",
-      "/legal/tratamiento-de-datos",
-    );
+    const consentLink = screen.getByRole("link", { name: /tratamiento de mis datos personales/ });
+    expect(consentLink).toHaveAttribute("href", "/legal/tratamiento-de-datos");
+    // US-045 AC: opens in a new tab, so filling out the form isn't lost.
+    expect(consentLink).toHaveAttribute("target", "_blank");
   });
 
   it("shows inline validation errors when submitted empty, without calling the API", async () => {

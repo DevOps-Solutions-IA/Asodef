@@ -33,6 +33,10 @@ export const queryKeys = {
     /** GET /receipts/:reference (US-027/US-032). */
     detail: (publicReference: string) => ["receipts", "detail", publicReference] as const,
   },
+  legalDocuments: {
+    /** GET /legal-documents/:slug (US-043/US-045). */
+    detail: (slug: string) => ["legal-documents", "detail", slug] as const,
+  },
   admin: {
     users: {
       stats: () => ["admin", "users", "stats"] as const,
