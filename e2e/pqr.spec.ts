@@ -1,11 +1,28 @@
 import { test, expect } from "@playwright/test";
+import { disconnectLegalDocumentsClient, publishDraftForE2e, type PublishedForTestHandle } from "./support/legal-documents";
 
 /**
  * US-066: e2e coverage for submitting a real PQR case end to end
  * (PqrCasePage.test.tsx already covers this at the Vitest/RTL level with
  * a mocked API - this proves it against the real running backend).
+ *
+ * US-072: PQR submission now also records a data_processing
+ * ConsentRecord, which requires a resolvable PUBLISHED tratamiento-de-
+ * datos version - same temporarily-publish-then-restore discipline this
+ * file's own support/legal-documents.ts already exists for.
  */
 test.describe("PQR case submission (e2e)", () => {
+  let dataProcessingHandle: PublishedForTestHandle | null = null;
+
+  test.beforeAll(async () => {
+    dataProcessingHandle = await publishDraftForE2e("tratamiento-de-datos");
+  });
+
+  test.afterAll(async () => {
+    await dataProcessingHandle?.restore();
+    await disconnectLegalDocumentsClient();
+  });
+
   test("submitting a PQR case returns a visible case number", async ({ page }) => {
     await page.goto("/legal/pqr");
     try {
