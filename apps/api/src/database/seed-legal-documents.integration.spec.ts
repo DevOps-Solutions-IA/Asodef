@@ -28,12 +28,39 @@ describe("Legal documents seed (integration, real Postgres)", () => {
     expect(versionsAfterSecond).toBe(versionsAfterFirst);
   });
 
-  it("creates exactly the catalog's 11 documents, no more no fewer", async () => {
+  it("creates exactly the catalog's 21 documents, no more no fewer", async () => {
     await seedLegalDocuments(prisma);
 
     const documents = await prisma.legalDocument.findMany({ where: { slug: { in: LEGAL_DOCUMENT_CATALOG.map((e) => e.slug) } } });
     expect(documents).toHaveLength(LEGAL_DOCUMENT_CATALOG.length);
-    expect(documents).toHaveLength(11);
+    expect(documents).toHaveLength(21);
+  });
+
+  it("US-068: each of the 10 newly-added document types exists in the catalog, seeds a DRAFT version, and 404s on the public route (never auto-published)", async () => {
+    await seedLegalDocuments(prisma);
+
+    const newSlugs = [
+      "autorizacion-general-de-tratamiento",
+      "consentimiento-whatsapp",
+      "consentimiento-correo-electronico",
+      "consentimiento-comunicaciones-comerciales",
+      "tratamiento-datos-sensibles",
+      "tratamiento-menores-y-beneficiarios",
+      "procedimiento-consultas-y-reclamos",
+      "politica-comunicaciones-electronicas",
+      "condiciones-portal-empresarial",
+      "condiciones-portal-afiliado",
+    ];
+    expect(LEGAL_DOCUMENT_CATALOG.map((e) => e.slug)).toEqual(expect.arrayContaining(newSlugs));
+
+    for (const slug of newSlugs) {
+      const document = await prisma.legalDocument.findUniqueOrThrow({ where: { slug } });
+      const version = await prisma.legalDocumentVersion.findUniqueOrThrow({
+        where: { legalDocumentId_version: { legalDocumentId: document.id, version: 1 } },
+      });
+      expect(version.status).toBe("DRAFT");
+      expect(document.currentVersionId).toBeNull();
+    }
   });
 
   it("Example (AC): querying the seeded 'terminos-y-condiciones' document returns DRAFT status with all required sections present and non-empty", async () => {
@@ -73,7 +100,7 @@ describe("Legal documents seed (integration, real Postgres)", () => {
       where: { legalDocument: { slug: { in: LEGAL_DOCUMENT_CATALOG.map((e) => e.slug) } }, version: 1 },
     });
 
-    expect(versions).toHaveLength(11);
+    expect(versions).toHaveLength(21);
     for (const version of versions) {
       expect(version.status).toBe("DRAFT");
     }

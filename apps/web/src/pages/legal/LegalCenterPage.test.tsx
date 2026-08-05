@@ -27,12 +27,19 @@ describe("LegalCenterPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("Negative case (AC): before any document is published, all 12 categories render in 'Aún no publicado' state without erroring", async () => {
+  it("Negative case (AC): before any document is published, all catalog categories render in 'Aún no publicado' state without erroring", async () => {
     const fetchMock = vi.fn(() => jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." }));
     renderLegalCenterPage(fetchMock);
 
+    // Matched by href, not by accessible name: several titles now share
+    // a common prefix (e.g. "Tratamiento de datos" vs "Tratamiento de
+    // datos sensibles"), which a name-based text search would match
+    // ambiguously across more than one link.
+    const links = await screen.findAllByRole("link");
     for (const entry of LEGAL_CATALOG) {
-      expect(await screen.findByRole("link", { name: new RegExp(entry.title) })).toBeInTheDocument();
+      const link = links.find((candidate) => candidate.getAttribute("href") === `/legal/${entry.slug}`);
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveTextContent(entry.title);
     }
     expect(await screen.findAllByText("Aún no publicado")).toHaveLength(LEGAL_CATALOG.length);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
