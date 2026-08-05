@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { Card } from "@asodef/ui";
+import { BrandLogo } from "./shared/BrandLogo";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 
@@ -14,8 +15,8 @@ export function AuthLayout() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-bg-soft px-4 py-12">
       <SkipToContent targetId="main-content" />
-      <Link to="/" className="mb-8 font-display text-xl font-semibold text-brand-dark">
-        {ASODEF_COMPANY.legalName}
+      <Link to="/" className="mb-8" aria-label={ASODEF_COMPANY.legalName}>
+        <BrandLogo variant="full" className="h-14 w-auto" />
       </Link>
       <main id="main-content" ref={mainRef} tabIndex={-1} className="w-full max-w-md focus:outline-none">
         <Card>

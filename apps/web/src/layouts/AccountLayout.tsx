@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
+import { BrandLogo } from "./shared/BrandLogo";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 import { LogoutButton } from "./shared/LogoutButton";
@@ -26,10 +27,10 @@ export function AccountLayout() {
       <SkipToContent targetId="main-content" />
       <aside className="border-b border-border-soft bg-white sm:w-64 sm:shrink-0 sm:border-b-0 sm:border-r">
         <div className="px-5 py-5">
-          <Link to="/" className="font-display text-base font-semibold text-brand-dark">
-            {ASODEF_COMPANY.legalName}
+          <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
+            <BrandLogo className="h-8 w-auto" />
           </Link>
-          <p className="mt-0.5 text-xs text-text-muted">Mi cuenta</p>
+          <p className="mt-1 text-xs text-text-muted">Mi cuenta</p>
         </div>
         <nav aria-label="Cuenta">
           <ul className="flex flex-col gap-1 px-3 pb-5 text-sm">

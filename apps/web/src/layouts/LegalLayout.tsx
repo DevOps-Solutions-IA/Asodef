@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
+import { BrandLogo } from "./shared/BrandLogo";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
 
@@ -18,8 +19,8 @@ export function LegalLayout() {
       <SkipToContent targetId="main-content" />
       <header className="border-b border-border-soft bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link to="/" className="font-display text-base font-semibold text-brand-dark">
-            {ASODEF_COMPANY.legalName}
+          <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
+            <BrandLogo className="h-8 w-auto" />
           </Link>
           <Link to="/" className="text-sm text-text-muted hover:text-brand-dark hover:underline">
             Volver al sitio
