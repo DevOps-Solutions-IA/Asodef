@@ -40,12 +40,41 @@ export const ASODEF_COMPANY = {
   // for direct correspondence with the corporate-data field list.
   commercialWhatsApp: "573232733927",
   addressLine1: "Carrera 40 # 5A-116",
+
+  // --- Confirmed by Certificado de Existencia y Representación Legal,
+  // Cámara de Comercio de Cali, código de verificación 08264BJBC4,
+  // expedido 2026-08-05 (US-069). This resolves several fields that
+  // were previously only PUBLIC_REGISTRY_CORROBORATED (see
+  // ASODEF_CORPORATE_FIELD_PROVENANCE below, now upgraded to
+  // CHAMBER_CERTIFICATE_CONFIRMED) plus fields that were previously
+  // absent from ASODEF_PENDING_CORPORATE_FIELDS.
+  legalRepresentativeName: "Adolfo Reyes Gómez",
+  legalRepresentativeDocument: "C.C. 19435519",
+  alternateLegalRepresentative: "María Adelaida París Gómez (C.C. 52045033)",
+  judicialNotificationEmail: "juridica1@capillasdelafe.com",
+  registeredPhone: "3012288760",
+  lastRenewalYear: 2026,
+  fullCorporatePurpose: "Venta de planes de prevención exequial, y cualquier otra actividad económica lícita.",
+  certificateIssueDate: "2026-08-05",
+  certificateVerificationCode: "08264BJBC4",
+  companySize: "MICRO",
 } as const;
+
+// Deliberately NOT added above, even though the same certificate
+// discloses it: the Grupo Empresarial control situation (Ley 222 de
+// 1995) - ADOLFO REYES GÓMEZ exercises indirect control over ASODEF
+// via COORSERPARK S.A.S. (its sole shareholder), and the wider group
+// includes 7 other companies - and the certified annual revenue
+// figure. Both are genuine, confirmed facts, but they are corporate
+// control/financial disclosures, not identity/contact facts a public
+// institutional legal page should surface. See ASODEF_PENDING_CORPORATE_FIELDS.shareholders
+// and US-069's acceptance criteria for the explicit decision record.
 
 export type CorporateFieldVerificationStatus =
   | "INSTITUTIONAL_DOSSIER_CONFIRMED"
   | "PUBLIC_REGISTRY_CORROBORATED"
-  | "PENDING_CURRENT_CHAMBER_CERTIFICATE";
+  | "PENDING_CURRENT_CHAMBER_CERTIFICATE"
+  | "CHAMBER_CERTIFICATE_CONFIRMED";
 
 export interface CorporateFieldProvenance {
   sourceType: string;
@@ -75,53 +104,53 @@ export const ASODEF_CORPORATE_FIELD_PROVENANCE: Record<string, CorporateFieldPro
     notes: null,
   },
   taxId: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources (NIT 900552882-2)",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4 (NIT 900552882-2)",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   legalForm: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   chamberOfCommerce: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   commercialRegistrationNumber: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources (Matrícula Mercantil 854303)",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4 (Matrícula Mercantil 854303-16)",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   registrationDate: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   registrationStatus: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4 (sin recursos pendientes, no disuelta, duración indefinida)",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   economicActivityCode: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources (CIIU 9603)",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes: "Not yet verified against a current Certificate of Existence and Legal Representation.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4 (CIIU 9603)",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
   city: {
     sourceType: "INSTITUTIONAL_DOSSIER",
@@ -131,10 +160,10 @@ export const ASODEF_CORPORATE_FIELD_PROVENANCE: Record<string, CorporateFieldPro
     notes: null,
   },
   department: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Public business-registry sources",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
     notes: null,
   },
   country: {
@@ -188,18 +217,22 @@ export const ASODEF_CORPORATE_FIELD_PROVENANCE: Record<string, CorporateFieldPro
  * commercial contacts. Every entry here is deliberately absent from
  * ASODEF_COMPANY itself - this list exists so the *absence* is
  * documented and traceable, not just silent.
+ *
+ * US-069 update: legalRepresentativeName, legalRepresentativeDocument,
+ * alternateLegalRepresentative, judicialNotificationEmail,
+ * registeredPhone, lastRenewalYear, fullCorporatePurpose,
+ * certificateIssueDate and certificateVerificationCode are now resolved
+ * (see ASODEF_COMPANY above) by the Certificado de Existencia y
+ * Representación Legal, verificación 08264BJBC4. Only `shareholders`
+ * remains here - not because it is unknown (the same certificate
+ * discloses it), but by deliberate policy decision: it is part of the
+ * Grupo Empresarial control disclosure (Ley 222 de 1995), a corporate-
+ * control fact this config intentionally does not carry as a usable
+ * field, to avoid it being pulled into public legal content. See
+ * US-069's acceptance criteria for the explicit record of this decision.
  */
 export const ASODEF_PENDING_CORPORATE_FIELDS = {
-  legalRepresentativeName: null,
-  legalRepresentativeDocument: null,
-  alternateLegalRepresentative: null,
-  judicialNotificationEmail: null,
-  registeredPhone: null,
-  lastRenewalYear: null,
-  fullCorporatePurpose: null,
   shareholders: null,
-  certificateIssueDate: null,
-  certificateVerificationCode: null,
 } as const;
 
 export const PENDING_CORPORATE_FIELD_STATUS: CorporateFieldVerificationStatus = "PENDING_CURRENT_CHAMBER_CERTIFICATE";

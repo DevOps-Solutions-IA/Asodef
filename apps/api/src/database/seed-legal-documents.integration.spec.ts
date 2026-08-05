@@ -97,6 +97,13 @@ describe("Legal documents seed (integration, real Postgres)", () => {
       "NIT",
       "Carrera 40",
       "Nota de verificación interna",
+      // US-069: fields confirmed by the Certificado de Existencia y
+      // Representación Legal, verificación 08264BJBC4.
+      "Adolfo Reyes Gómez",
+      "María Adelaida París Gómez",
+      "854303",
+      "MICRO",
+      "08264BJBC4",
     ];
     for (const entry of LEGAL_DOCUMENT_CATALOG) {
       for (const section of entry.sections) {
@@ -111,7 +118,7 @@ describe("Legal documents seed (integration, real Postgres)", () => {
     }
   });
 
-  it("corporate-data update: informacion-empresarial carries the real NIT and a corroborated (never Certificate-verified) registered address, with the legal representative still a placeholder", async () => {
+  it("US-069: informacion-empresarial carries the real NIT and a Certificate-verified registered address and legal representative", async () => {
     await seedLegalDocuments(prisma);
 
     const document = await prisma.legalDocument.findUniqueOrThrow({ where: { slug: "informacion-empresarial" } });
@@ -126,13 +133,20 @@ describe("Legal documents seed (integration, real Postgres)", () => {
     const addressSection = content.sections.find((s) => s.heading === "Domicilio registrado");
     expect(addressSection?.body).toContain("Carrera 40");
     expect(addressSection?.body).toContain("Nota de verificación interna");
-    // Must never claim full certificate verification - only that it's
-    // been corroborated and remains unverified against one.
-    expect(addressSection?.body).not.toContain("CERTIFICATE_VERIFIED");
-    expect(addressSection?.body).toContain("aún no verificada contra un Certificado de Existencia y Representación Legal vigente");
+    expect(addressSection?.body).toContain("08264BJBC4");
 
     const legalRepSection = content.sections.find((s) => s.heading === "Representante legal");
-    expect(legalRepSection?.body).toBe(LEGAL_CONTENT_PLACEHOLDER);
+    expect(legalRepSection?.body).toContain("Adolfo Reyes Gómez");
+    expect(legalRepSection?.body).toContain("María Adelaida París Gómez");
+    expect(legalRepSection?.body).not.toBe(LEGAL_CONTENT_PLACEHOLDER);
+
+    // Deliberately excluded: Grupo Empresarial control-chain / revenue
+    // disclosures from the same certificate never reach public content.
+    for (const section of content.sections) {
+      expect(section.body).not.toContain("Grupo Empresarial");
+      expect(section.body).not.toContain("Coorserpark");
+      expect(section.body).not.toContain("1,318,079,569");
+    }
   });
 
   it("does not overwrite a version that has already moved past DRAFT on a subsequent seed run", async () => {

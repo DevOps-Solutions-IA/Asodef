@@ -45,7 +45,10 @@ const IDENTIFICATION_SECTION: LegalDocumentCatalogSection = {
 
 const REGISTERED_ADDRESS_SECTION: LegalDocumentCatalogSection = {
   heading: "Domicilio registrado",
-  body: `${ASODEF_COMPANY.addressLine1}, ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, ${ASODEF_COMPANY.country}. Nota de verificación interna: dirección corroborada mediante información pública de directorio empresarial reciente; aún no verificada contra un Certificado de Existencia y Representación Legal vigente.`,
+  // US-069: verified against the Certificado de Existencia y
+  // Representación Legal (Cámara de Comercio de Cali, verificación
+  // 08264BJBC4) - no longer only PUBLIC_REGISTRY_CORROBORATED.
+  body: `${ASODEF_COMPANY.addressLine1}, ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, ${ASODEF_COMPANY.country}. Nota de verificación interna: dirección verificada mediante Certificado de Existencia y Representación Legal, código de verificación ${ASODEF_COMPANY.certificateVerificationCode}, expedido el ${ASODEF_COMPANY.certificateIssueDate}.`,
 };
 
 const CONTACT_SECTION: LegalDocumentCatalogSection = {
@@ -73,13 +76,24 @@ export const LEGAL_DOCUMENT_CATALOG: readonly LegalDocumentCatalogEntry[] = [
         heading: "Contacto comercial",
         body: `${ASODEF_COMPANY.commercialContact.fullName}, ${ASODEF_COMPANY.commercialContact.role}. WhatsApp: ${ASODEF_COMPANY.commercialContact.whatsappUrl}`,
       },
-      // Corporate-data update: never inserted, even now that other
-      // corroborated facts have been added - no legal representative
-      // has been confirmed, and this is deliberately never inferred
-      // from staff/commercial-contact names.
-      { heading: "Representante legal", body: PLACEHOLDER },
+      // US-069: confirmed by the Certificado de Existencia y
+      // Representacion Legal (Camara de Comercio de Cali, verificacion
+      // 08264BJBC4) - no longer PLACEHOLDER.
+      {
+        heading: "Representante legal",
+        body: `Principal: ${ASODEF_COMPANY.legalRepresentativeName} (${ASODEF_COMPANY.legalRepresentativeDocument}). Suplente: ${ASODEF_COMPANY.alternateLegalRepresentative}.`,
+      },
+      {
+        heading: "Matrícula mercantil",
+        body: `${ASODEF_COMPANY.chamberOfCommerce}, matrícula ${ASODEF_COMPANY.commercialRegistrationNumber}, registrada el ${ASODEF_COMPANY.registrationDate}. Último año renovado: ${ASODEF_COMPANY.lastRenewalYear}.`,
+      },
+      { heading: "Tamaño empresarial", body: `${ASODEF_COMPANY.companySize} (clasificación DANE, Decreto 1074 de 2015 y Resolución 2225 de 2019).` },
       REGISTERED_ADDRESS_SECTION,
       { heading: "Identificación tributaria (NIT)", body: `NIT ${ASODEF_COMPANY.taxId}` },
+      {
+        heading: "Verificación del certificado",
+        body: `Datos verificados mediante Certificado de Existencia y Representación Legal, código de verificación ${ASODEF_COMPANY.certificateVerificationCode}, expedido el ${ASODEF_COMPANY.certificateIssueDate}.`,
+      },
     ],
   },
   {
