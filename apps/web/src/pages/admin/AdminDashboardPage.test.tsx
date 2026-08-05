@@ -90,7 +90,12 @@ describe("AdminDashboardPage", () => {
       return undefined;
     });
 
+    // MetricCard wraps the label together with its optional attention
+    // icon in an inner flex row, so the value "12" is a sibling of that
+    // wrapper (not of the label itself) - assert on the shared card
+    // container rather than raw DOM adjacency.
     const label = await screen.findByText("Usuarios totales");
-    expect(label.nextElementSibling).toHaveTextContent("12");
+    const card = label.parentElement?.parentElement;
+    expect(card).toHaveTextContent("12");
   });
 });
