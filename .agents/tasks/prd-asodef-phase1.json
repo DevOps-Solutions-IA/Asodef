@@ -3589,6 +3589,480 @@
         "completionStatus": "complete",
         "commit": "b5e7ebe",
         "notes": "Suites, 33 migraciones, dos seeds, build Docker sin caché, health y Chromium 30/30 verificados; 29 rutas en seis resoluciones, ocho beneficios, 404 semántico y CRM/consentimientos reales cubiertos."
+      },
+      {
+        "id": "US-126",
+        "title": "Public copy decontamination and terminology cleanup",
+        "domain": "W - Claridad pública funcional",
+        "status": "open",
+        "description": "Depurar copy no legal genérico, repetido o abstracto y sustituirlo por capacidades, hechos, límites y acciones concretas.",
+        "businessValue": "Reduce carga cognitiva y hace que cada bloque público ayude a decidir o actuar.",
+        "dependsOn": [
+          "US-125"
+        ],
+        "acceptanceCriteria": [
+          "Frases prohibidas ausentes fuera de /legal",
+          "Bloques principales responden una necesidad concreta",
+          "Terminología compartida y CTAs consistentes",
+          "Contenido legal intacto"
+        ],
+        "accessibilityRequirements": [
+          "Lenguaje directo, labels descriptivos y jerarquía de encabezados estable"
+        ],
+        "performanceRequirements": [
+          "Copy centralizado sin payload ni dependencias adicionales"
+        ],
+        "securityRequirements": [
+          "Sin claims, garantías ni cifras no soportadas; exclusión absoluta de /legal"
+        ],
+        "auditRequirements": [
+          "Búsqueda determinística antes/después y registro de sustituciones"
+        ],
+        "testingRequirements": [
+          "Pruebas de frases prohibidas y copy crítica por ruta"
+        ],
+        "outOfScope": [
+          "Contenido, presentación, metadata y workflows del Centro Legal"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-127",
+        "title": "Mobile-first public experience foundation",
+        "domain": "W - Claridad pública funcional",
+        "status": "open",
+        "description": "Crear patrones reutilizables para interacción pública mobile-first, disclosure progresivo, acciones táctiles y recuperación.",
+        "businessValue": "Permite completar tareas desde 320–430 px sin comprimir layouts de escritorio.",
+        "dependsOn": [
+          "US-126"
+        ],
+        "acceptanceCriteria": [
+          "Componentes móviles tipados y reutilizados",
+          "Una tarea dominante por viewport",
+          "Touch targets y acciones contextuales",
+          "Funcionalidad completa sin animación"
+        ],
+        "accessibilityRequirements": [
+          "Teclado, foco, áreas táctiles, semántica y lectura estable"
+        ],
+        "performanceRequirements": [
+          "CSS y estado acotados; sin librería visual adicional"
+        ],
+        "securityRequirements": [
+          "Sin persistir información sensible fuera del estado necesario"
+        ],
+        "auditRequirements": [
+          "Mapa de uso de patrones por ruta"
+        ],
+        "testingRequirements": [
+          "Componentes, sticky actions, recovery y viewports 430/390/375/360/320"
+        ],
+        "outOfScope": [
+          "Rediseñar Centro Legal o módulos internos"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-128",
+        "title": "Functional motion and interaction system",
+        "domain": "X - Movimiento funcional",
+        "status": "open",
+        "description": "Implementar primitivas de movimiento con propósito, feedback de selección, progreso, reveal seguro y reduced motion.",
+        "businessValue": "Mejora comprensión y percepción de calidad sin ocultar contenido ni bloquear interacción.",
+        "dependsOn": [
+          "US-127"
+        ],
+        "acceptanceCriteria": [
+          "Primitivas reutilizables",
+          "Sin estado permanentemente oculto",
+          "Reduced motion muestra estado final",
+          "Movimiento usa transform/opacity y no causa CLS"
+        ],
+        "accessibilityRequirements": [
+          "Semántica estable y prefers-reduced-motion respetado"
+        ],
+        "performanceRequirements": [
+          "Sin loops de blur ni animaciones continuas costosas"
+        ],
+        "securityRequirements": [
+          "Movimiento no altera decisiones, consentimientos ni estados autoritativos"
+        ],
+        "auditRequirements": [
+          "Inventario de primitivas y rutas consumidoras"
+        ],
+        "testingRequirements": [
+          "Reduced motion, final state, selección, progreso y motion-disabled"
+        ],
+        "outOfScope": [
+          "Animación en /legal o estética game-like"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-129",
+        "title": "Verified animated metrics and counters",
+        "domain": "X - Movimiento funcional",
+        "status": "open",
+        "description": "Publicar y animar una vez únicamente métricas con fuente institucional, configurada o derivada verificable.",
+        "businessValue": "Comunica escala y capacidad con evidencia sin falsa precisión.",
+        "dependsOn": [
+          "US-128"
+        ],
+        "acceptanceCriteria": [
+          "Cada métrica tiene fuente exacta",
+          "Valor final accesible",
+          "Animación única y disabled con reduced motion",
+          "Métricas no verificables excluidas"
+        ],
+        "accessibilityRequirements": [
+          "Valor final disponible a lectores y sin anuncios repetitivos"
+        ],
+        "performanceRequirements": [
+          "IntersectionObserver acotado y cero reinicios por scroll ordinario"
+        ],
+        "securityRequirements": [
+          "Sin totales sensibles, transaccionales o no autorizados"
+        ],
+        "auditRequirements": [
+          "Documento verified-public-metrics.md con origen de cada valor"
+        ],
+        "testingRequirements": [
+          "Source mapping, count-up final y reduced motion"
+        ],
+        "outOfScope": [
+          "Usuarios, familias, transacciones, satisfacción o cobertura no verificados"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-130",
+        "title": "Premium mobile and desktop PQR experience",
+        "domain": "Y - Experiencias transaccionales públicas",
+        "status": "open",
+        "description": "Evolucionar /pqr a un flujo progresivo de radicación y consulta conservando endpoints, validación y seguridad existentes.",
+        "businessValue": "Reduce fricción y facilita registrar, conservar y consultar un caso real.",
+        "dependsOn": [
+          "US-127",
+          "US-128"
+        ],
+        "acceptanceCriteria": [
+          "Switcher radicar/consultar",
+          "Cinco pasos móviles progresivos",
+          "Mutación y lookup reales",
+          "Confirmación con copia y tracking",
+          "Timeline público seguro"
+        ],
+        "accessibilityRequirements": [
+          "Foco por paso, anuncios, errores asociados y copy action accesible"
+        ],
+        "performanceRequirements": [
+          "Carga diferida y formulario no montado antes de elegir tarea"
+        ],
+        "securityRequirements": [
+          "Sin datos personales en lookup; consentimiento obligatorio preservado"
+        ],
+        "auditRequirements": [
+          "Evidencia de referencia real y salida pública permitida"
+        ],
+        "testingRequirements": [
+          "Pasos, validación, envío, confirmación, copia, tracking y recovery"
+        ],
+        "outOfScope": [
+          "Cambiar endpoints, política PQR o páginas /legal/*"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-131",
+        "title": "Premium mobile and desktop data-subject-request experience",
+        "domain": "Y - Experiencias transaccionales públicas",
+        "status": "open",
+        "description": "Evolucionar /solicitudes-de-datos a un flujo progresivo de ejercicio y consulta de derechos.",
+        "businessValue": "Hace comprensible y recuperable el ejercicio de derechos sin debilitar su significado legal.",
+        "dependsOn": [
+          "US-127",
+          "US-128"
+        ],
+        "acceptanceCriteria": [
+          "Switcher crear/consultar",
+          "Cinco pasos progresivos",
+          "Envío y lookup reales",
+          "Confirmación, copia y timeline",
+          "Referencias legales existentes preservadas"
+        ],
+        "accessibilityRequirements": [
+          "Foco por paso, live regions, errores asociados y teclado"
+        ],
+        "performanceRequirements": [
+          "Carga diferida y estado local minimizado"
+        ],
+        "securityRequirements": [
+          "Lookup no expone identidad; aceptación obligatoria intacta"
+        ],
+        "auditRequirements": [
+          "Evidencia de referencia real y output público seguro"
+        ],
+        "testingRequirements": [
+          "Pasos, validación, envío, tracking, copia, recovery y privacidad"
+        ],
+        "outOfScope": [
+          "Alterar request types, procedimiento o Centro Legal"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-132",
+        "title": "Premium contact routing and guided communication experience",
+        "domain": "Y - Experiencias transaccionales públicas",
+        "status": "open",
+        "description": "Convertir /contacto en un router de intención que deriva a flujos especializados y usa formulario general solo cuando corresponde.",
+        "businessValue": "Evita formularios duplicados y lleva al visitante al resultado real más corto.",
+        "dependsOn": [
+          "US-126",
+          "US-127"
+        ],
+        "acceptanceCriteria": [
+          "Ocho intenciones funcionales",
+          "Handoffs a beneficios, pagos, PQR, DSR, empresa, portal y orientación",
+          "Otro asunto usa flujo real",
+          "Mobile prioriza lista táctil"
+        ],
+        "accessibilityRequirements": [
+          "Selector semántico, foco visible y destinos descriptivos"
+        ],
+        "performanceRequirements": [
+          "Sin montar formularios especializados duplicados"
+        ],
+        "securityRequirements": [
+          "No captura datos cuando existe una ruta especializada"
+        ],
+        "auditRequirements": [
+          "Matriz intención-destino verificada"
+        ],
+        "testingRequirements": [
+          "Routing completo, mobile actions y teclado"
+        ],
+        "outOfScope": [
+          "Duplicar pagos, PQR, DSR o login"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-133",
+        "title": "Homepage clarity and functionality refinement",
+        "domain": "Z - Refinamiento público conectado",
+        "status": "open",
+        "description": "Refinar Inicio preservando composición aprobada, reduciendo abstracción y convirtiendo nodos/quick actions en rutas útiles.",
+        "businessValue": "Explica inmediatamente a quién sirve ASODEF y qué puede hacerse.",
+        "dependsOn": [
+          "US-126",
+          "US-127",
+          "US-128",
+          "US-129"
+        ],
+        "acceptanceCriteria": [
+          "Hero conciso con dos CTAs",
+          "Nodos funcionales",
+          "Quick-action rail móvil",
+          "Métricas verificadas bajo hero",
+          "Composición asimétrica preservada"
+        ],
+        "accessibilityRequirements": [
+          "Orden de lectura, foco, targets y motion reduction"
+        ],
+        "performanceRequirements": [
+          "Sin CLS ni activos pesados nuevos"
+        ],
+        "securityRequirements": [
+          "Cero métricas o promesas inventadas"
+        ],
+        "auditRequirements": [
+          "Copy final y destinos registrados"
+        ],
+        "testingRequirements": [
+          "Hero, acciones, quick rail, métricas, mobile y Chromium"
+        ],
+        "outOfScope": [
+          "Rediseño desde cero o cambios a /legal"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-134",
+        "title": "Who-we-are institutional clarity refinement",
+        "domain": "Z - Refinamiento público conectado",
+        "status": "open",
+        "description": "Refinar /quienes-somos con hero breve y reemplazar el aside genérico por identidad, hechos y acciones verificadas.",
+        "businessValue": "Explica identidad y modelo operativo con menos texto y más evidencia.",
+        "dependsOn": [
+          "US-126",
+          "US-127",
+          "US-129"
+        ],
+        "acceptanceCriteria": [
+          "Bloque genérico eliminado",
+          "Componente sustituto verificable y funcional",
+          "Hero reducido",
+          "Relación de audiencias y acciones claras"
+        ],
+        "accessibilityRequirements": [
+          "Datos semánticos, diagrama legible y enlaces descriptivos"
+        ],
+        "performanceRequirements": [
+          "Sin activos pesados ni animación necesaria"
+        ],
+        "securityRequirements": [
+          "Sin hitos, cobertura, premios o totales inventados"
+        ],
+        "auditRequirements": [
+          "Datos y formulaciones trazados"
+        ],
+        "testingRequirements": [
+          "Copy, facts, acciones, mobile y Chromium"
+        ],
+        "outOfScope": [
+          "Modificar información empresarial publicada en /legal"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-135",
+        "title": "Cross-route public consistency and functional connection",
+        "domain": "Z - Refinamiento público conectado",
+        "status": "open",
+        "description": "Alinear densidad, CTAs, handoffs, spacing, estados y motion en rutas públicas no legales sin rediseño innecesario.",
+        "businessValue": "Entrega una experiencia coherente y reduce rutas muertas o decisiones ambiguas.",
+        "dependsOn": [
+          "US-130",
+          "US-131",
+          "US-132",
+          "US-133",
+          "US-134"
+        ],
+        "acceptanceCriteria": [
+          "Terminología y jerarquía consistentes",
+          "Handoffs y breadcrumbs correctos",
+          "Estados claros",
+          "Footer/nav coherentes",
+          "Legal excluido"
+        ],
+        "accessibilityRequirements": [
+          "Focus behavior y mensajes consistentes entre rutas"
+        ],
+        "performanceRequirements": [
+          "Reuso de componentes; sin duplicar registries"
+        ],
+        "securityRequirements": [
+          "Auth, pagos, CRM y consentimientos preservados"
+        ],
+        "auditRequirements": [
+          "Revisión cruzada por ruta"
+        ],
+        "testingRequirements": [
+          "Rutas, redirects, loading/error/success y regresiones"
+        ],
+        "outOfScope": [
+          "Rediseñar Benefits, Solutions o Companies sin necesidad; /legal congelado"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-136",
+        "title": "Performance, accessibility and multiresolution QA",
+        "domain": "AA - Calidad y rendimiento público",
+        "status": "open",
+        "description": "Aplicar code splitting, cerrar hallazgos de accesibilidad y verificar rutas en nueve resoluciones con regresión legal.",
+        "businessValue": "Reduce el costo inicial y demuestra funcionalidad accesible desde 320 hasta 1440 px.",
+        "dependsOn": [
+          "US-135"
+        ],
+        "acceptanceCriteria": [
+          "Main chunk reducido y documentado",
+          "Lazy chunks útiles",
+          "Nueve resoluciones verificadas",
+          "Suites y Docker verdes",
+          "Centro Legal idéntico"
+        ],
+        "accessibilityRequirements": [
+          "Teclado, foco, ARIA, contraste, touch, reduced motion y errores"
+        ],
+        "performanceRequirements": [
+          "Medición before/after y tradeoffs; sin churn inseguro"
+        ],
+        "securityRequirements": [
+          "Regresión de auth/RBAC/pagos/CRM/consentimientos y legal"
+        ],
+        "auditRequirements": [
+          "Comparación de hashes, DB y evidencia renderizada legal"
+        ],
+        "testingRequirements": [
+          "Frontend, backend, UI, E2E, lint, typecheck, build, migrations, seeds, Docker y health"
+        ],
+        "outOfScope": [
+          "Cambiar contenido o presentación de /legal y despliegue"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
+      },
+      {
+        "id": "US-137",
+        "title": "Final PRD closure and GitHub synchronization",
+        "domain": "AA - Calidad y rendimiento público",
+        "status": "open",
+        "description": "Cerrar historias solo tras tres loops globales y sincronizar main con origin/main sin fuerza.",
+        "businessValue": "Deja evidencia reproducible y código verificado disponible en el repositorio privado.",
+        "dependsOn": [
+          "US-136"
+        ],
+        "acceptanceCriteria": [
+          "12 historias COMPLETE",
+          "Tres loops globales aprobados",
+          "Commits y evidencia registrados",
+          "Push normal",
+          "SHA local/remoto idéntico"
+        ],
+        "accessibilityRequirements": [
+          "Sin hallazgos materiales abiertos"
+        ],
+        "performanceRequirements": [
+          "Resultados finales documentados"
+        ],
+        "securityRequirements": [
+          "Sin privados, secretos, deploy, DNS o producción"
+        ],
+        "auditRequirements": [
+          "Checkpoint, Git status, remote tree y SHA"
+        ],
+        "testingRequirements": [
+          "Gate final completo y verificación remota"
+        ],
+        "outOfScope": [
+          "Deploy, force push, history rewrite y producción"
+        ],
+        "completionStatus": "open",
+        "commit": null,
+        "notes": null
       }
   ]
 }
