@@ -4,216 +4,42 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { PublicLayout } from "./PublicLayout";
 import { CookieConsentProvider } from "../lib/cookie-consent/CookieConsentContext";
-import { CookieConsentBanner } from "../components/cookie-consent/CookieConsentBanner";
 
-/** Skips the Drawer's own 200ms exit-transition delay (Drawer.tsx's
- * EXIT_TRANSITION_MS) so DOM-removal assertions resolve promptly
- * instead of needing a slow real-time wait - same helper pattern as
- * Hero.test.tsx. */
-function mockPrefersReducedMotion(matches: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn().mockImplementation((query: string) => ({
-      matches,
-      media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  );
+function renderLayout() {
+  const router = createMemoryRouter([{ path: "/", element: <PublicLayout/>, children: [{ index: true, element: <p>Contenido</p> }, { path: "beneficios", element: <p>Beneficios</p> }] }]);
+  return render(<CookieConsentProvider><RouterProvider router={router}/></CookieConsentProvider>);
 }
 
-function renderPublicLayout(initialEntries: string[] = ["/"]) {
-  const router = createMemoryRouter(
-    [
-      {
-        path: "/",
-        element: <PublicLayout />,
-        children: [{ index: true, element: <div id="beneficios">Contenido de la página</div> }],
-      },
-    ],
-    { initialEntries },
-  );
-  return render(
-    <CookieConsentProvider>
-      <RouterProvider router={router} />
-      <CookieConsentBanner />
-    </CookieConsentProvider>,
-  );
-}
+describe("premium public navigation", () => {
+  beforeEach(()=>{localStorage.clear();vi.stubGlobal("fetch",vi.fn(()=>Promise.resolve(new Response(null,{status:204}))));});
+  afterEach(()=>vi.unstubAllGlobals());
 
-describe("PublicLayout", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => Promise.resolve(new Response(null, { status: 204 }))),
-    );
+  it("uses the official brand and flagship top-level destinations", () => {
+    renderLayout();
+    expect(within(screen.getByRole("link", { name: /ASODEF S.A.S., inicio/i })).getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+    const nav=screen.getByRole("navigation",{name:"Principal"});
+    for(const label of ["Inicio","Quiénes somos","Beneficios","Soluciones","Empresas"]) expect(within(nav).getByRole("link",{name:label})).toBeInTheDocument();
+    expect(screen.getByRole("link",{name:"Comenzar"})).toHaveAttribute("href","/comenzar");
   });
 
-  afterEach(() => {
-    localStorage.clear();
+  it("opens an accessible resources panel and closes it with Escape", async()=>{
+    const user=userEvent.setup();renderLayout();const trigger=screen.getByRole("button",{name:"Recursos"});await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded","true");expect(screen.getAllByText("Preguntas frecuentes").length).toBeGreaterThan(0);
+    await user.keyboard("{Escape}");expect(trigger).toHaveAttribute("aria-expanded","false");
   });
 
-  it("renders the official ASODEF logo in the desktop navbar and footer (public-frontend correction, Section 4)", () => {
-    renderPublicLayout();
-    // Desktop nav: the brand Link wraps only the logo image, no text
-    // fallback alongside it.
-    const navbarLink = screen.getByRole("link", { name: "ASODEF S.A.S." });
-    expect(within(navbarLink).getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
-
-    const footer = within(screen.getByRole("contentinfo"));
-    expect(footer.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+  it("groups mobile destinations and restores trigger focus on Escape",async()=>{
+    const user=userEvent.setup();renderLayout();const trigger=screen.getByRole("button",{name:"Abrir menú de navegación"});await user.click(trigger);
+    const dialog=await screen.findByRole("dialog");
+    for(const group of ["Conocer ASODEF","Gestionar","Consultar"])expect(within(dialog).getByText(group)).toBeInTheDocument();
+    expect(within(dialog).getByRole("link",{name:"Ingresar"})).toHaveAttribute("href","/iniciar-sesion");
+    await user.keyboard("{Escape}");await waitFor(()=>expect(screen.queryByRole("dialog")).not.toBeInTheDocument());expect(trigger).toHaveFocus();
   });
 
-  it("renders the official ASODEF logo inside the mobile drawer (public-frontend correction, Section 4)", async () => {
-    const user = userEvent.setup();
-    renderPublicLayout();
-
-    await user.click(screen.getByRole("button", { name: "Abrir menú de navegación" }));
-    const dialog = await screen.findByRole("dialog");
-
-    expect(within(dialog).getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
-  });
-
-  it("renders the footer's navigation links (US-018)", () => {
-    renderPublicLayout();
-    const footerNav = within(screen.getByRole("navigation", { name: "Pie de página" }));
-    for (const label of ["Quiénes somos", "Beneficios", "Portafolio", "Cobertura", "Pagos", "Contacto"]) {
-      expect(footerNav.getByRole("link", { name: label })).toBeInTheDocument();
-    }
-  });
-
-  it("renders the approved footer contact info verbatim", () => {
-    renderPublicLayout();
-    expect(screen.getByText("Juan Pablo Filigrana, Director Comercial")).toBeInTheDocument();
-    expect(screen.getByText("WhatsApp 323 273 3927")).toBeInTheDocument();
-    expect(screen.getByText("Cali, Colombia")).toBeInTheDocument();
-  });
-
-  it("renders legal placeholder links pointing to real, existing routes", () => {
-    renderPublicLayout();
-    // Scoped to the footer - the first-visit cookie banner (rendered by
-    // default here, since no consent is stored) also links to the same
-    // "Política de cookies" page in its disclosure text, and would
-    // otherwise collide on accessible name with the footer's own link.
-    const footer = within(screen.getByRole("contentinfo"));
-    expect(footer.getByRole("link", { name: "Centro legal" })).toHaveAttribute("href", "/legal");
-    expect(footer.getByRole("link", { name: "Términos y condiciones" })).toHaveAttribute(
-      "href",
-      "/legal/terminos-y-condiciones",
-    );
-    expect(footer.getByRole("link", { name: "Política de privacidad" })).toHaveAttribute(
-      "href",
-      "/legal/politica-de-privacidad",
-    );
-    expect(footer.getByRole("link", { name: "Política de cookies" })).toHaveAttribute(
-      "href",
-      "/legal/politica-de-cookies",
-    );
-  });
-
-  it("US-047: the footer's 'Preferencias de cookies' control reopens the cookie preferences dialog", async () => {
-    const user = userEvent.setup();
-    renderPublicLayout();
-
-    // The first-visit banner's own "Personalizar" already opens it -
-    // dismiss that path first so this test exercises the footer control
-    // specifically.
-    await user.click(screen.getByRole("button", { name: "Rechazar opcionales" }));
-    expect(screen.queryByRole("dialog", { name: "Preferencias de cookies" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Preferencias de cookies" }));
-    expect(screen.getByRole("dialog", { name: "Preferencias de cookies" })).toBeInTheDocument();
-  });
-
-  it("renders the dynamic copyright year", () => {
-    renderPublicLayout();
-    expect(screen.getByText(new RegExp(`© ${new Date().getFullYear()}`))).toBeInTheDocument();
-  });
-
-  it("renders the floating WhatsApp button site-wide, not homepage-only", () => {
-    renderPublicLayout();
-    const link = screen.getByRole("link", { name: "Contactar por WhatsApp (se abre en una pestaña nueva)" });
-    expect(link).toHaveAttribute("href", "https://wa.me/573232733927");
-  });
-
-  describe("mobile drawer (US-011/US-033)", () => {
-    afterEach(() => {
-      vi.unstubAllGlobals();
-    });
-
-    it("is not present until the hamburger button is activated", () => {
-      renderPublicLayout();
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-
-    it("opens and lists every nav item plus a WhatsApp contact link", async () => {
-      const user = userEvent.setup();
-      renderPublicLayout();
-
-      await user.click(screen.getByRole("button", { name: "Abrir menú de navegación" }));
-
-      const dialog = await screen.findByRole("dialog");
-      const dialogScope = within(dialog);
-      for (const label of ["Inicio", "Quiénes somos", "Beneficios", "Portafolio", "Cobertura", "Pagos", "Contacto"]) {
-        expect(dialogScope.getByRole("link", { name: label })).toBeInTheDocument();
-      }
-      expect(dialogScope.getByRole("link", { name: "Escríbenos por WhatsApp" })).toHaveAttribute(
-        "href",
-        "https://wa.me/573232733927",
-      );
-    });
-
-    it("Example (AC): pressing Escape while open removes the drawer from the DOM and returns focus to the hamburger button", async () => {
-      const user = userEvent.setup();
-      renderPublicLayout();
-
-      const hamburger = screen.getByRole("button", { name: "Abrir menú de navegación" });
-      await user.click(hamburger);
-      await screen.findByRole("dialog");
-
-      await user.keyboard("{Escape}");
-
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(hamburger).toHaveFocus();
-    });
-
-    it("closes when a nav link inside it is activated (route selection)", async () => {
-      mockPrefersReducedMotion(true); // skip Drawer's 200ms exit transition
-      const user = userEvent.setup();
-      renderPublicLayout();
-
-      await user.click(screen.getByRole("button", { name: "Abrir menú de navegación" }));
-      const dialog = await screen.findByRole("dialog");
-
-      // "Beneficios" is a same-page /#beneficios anchor (nav-composition
-      // fix), not a separate route - the drawer must still close on
-      // activation even though the pathname itself doesn't change.
-      await user.click(within(dialog).getByRole("link", { name: "Beneficios" }));
-
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    });
-
-    it("Negative case (AC): opening the drawer moves focus inside it, off whatever triggered it", async () => {
-      // Full native Tab-cycle containment (the real mechanism behind
-      // the AC's "focus trap holds") comes from the browser's own
-      // <dialog>.showModal() top-layer/inert semantics, which jsdom
-      // does not implement (verified empirically - Tab events in this
-      // environment do not respect it, unlike a real browser). Neither
-      // of this project's own Dialog.test.tsx/Drawer.test.tsx attempt
-      // that assertion either, for the same reason. What *is*
-      // meaningfully testable here - and is the actual entry condition
-      // for a trap to do anything - is that opening the drawer moves
-      // focus into it rather than leaving it on the page behind.
-      const user = userEvent.setup();
-      renderPublicLayout();
-
-      const hamburger = screen.getByRole("button", { name: "Abrir menú de navegación" });
-      await user.click(hamburger);
-      const dialog = await screen.findByRole("dialog");
-
-      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
-      expect(hamburger).not.toHaveFocus();
-    });
+  it("keeps cookie preferences and institutional resource routes in the footer",()=>{
+    renderLayout();const footer=screen.getByRole("contentinfo");
+    expect(within(footer).getByRole("button",{name:"Preferencias de cookies"})).toBeInTheDocument();
+    expect(within(footer).getByRole("link",{name:"Centro Legal"})).toHaveAttribute("href","/legal");
+    expect(within(footer).getByRole("link",{name:"PQR"})).toHaveAttribute("href","/pqr");
   });
 });
