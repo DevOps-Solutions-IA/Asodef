@@ -1,24 +1,106 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, SlidersHorizontal } from "lucide-react";
-import { EditorialSection, PageCta, PublicHero, SectionIntro } from "../../components/public/PublicPage";
+import { CompactPublicHero } from "../../components/public/mobile";
+import { PageCta } from "../../components/public/PublicPage";
 import { BENEFITS, type BenefitAudience, type BenefitNeed } from "../../lib/public-content/benefits";
 import { Seo } from "../../lib/seo/Seo";
 
-const audiences: { value: "todas" | BenefitAudience; label: string }[] = [{ value: "todas", label: "Todas las audiencias" }, { value: "personas", label: "Personas" }, { value: "afiliados", label: "Afiliados" }, { value: "empresas", label: "Empresas" }, { value: "aliados", label: "Aliados" }];
-const needs: { value: "todas" | BenefitNeed; label: string }[] = [{ value: "todas", label: "Todas las necesidades" }, { value: "proteccion", label: "Protección" }, { value: "salud", label: "Salud" }, { value: "orientacion", label: "Orientación" }, { value: "movilidad", label: "Movilidad" }, { value: "educacion", label: "Educación" }, { value: "ahorro", label: "Ahorro" }];
+const audiences: { value: "todas" | BenefitAudience; label: string }[] = [
+  { value: "todas", label: "Todos los perfiles" },
+  { value: "personas", label: "Personas" },
+  { value: "afiliados", label: "Afiliados" },
+  { value: "empresas", label: "Empresas" },
+  { value: "aliados", label: "Aliados" },
+];
+
+const needs: { value: "todas" | BenefitNeed; label: string }[] = [
+  { value: "todas", label: "Todas las necesidades" },
+  { value: "proteccion", label: "Protección" },
+  { value: "salud", label: "Salud" },
+  { value: "orientacion", label: "Orientación" },
+  { value: "movilidad", label: "Movilidad" },
+  { value: "educacion", label: "Educación" },
+  { value: "ahorro", label: "Ahorro" },
+];
 
 export function BenefitsPage() {
   const [params, setParams] = useSearchParams();
   const audience = (params.get("audiencia") ?? "todas") as "todas" | BenefitAudience;
   const need = (params.get("necesidad") ?? "todas") as "todas" | BenefitNeed;
-  const filtered = useMemo(() => BENEFITS.filter(item => (audience === "todas" || (item.audience as readonly BenefitAudience[]).includes(audience)) && (need === "todas" || (item.needs as readonly BenefitNeed[]).includes(need))), [audience, need]);
-  function update(key: string, value: string) { const next = new URLSearchParams(params); if (value === "todas") next.delete(key); else next.set(key, value); setParams(next, { replace: true }); }
-  return <><Seo routeKey="benefits" breadcrumbs={[{ name: "Inicio", path: "/" }, { name: "Beneficios", path: "/beneficios" }]} />
-    <PublicHero eyebrow="Beneficios" title={<>Encuentra opciones para tu <span className="text-brand-orange">necesidad</span></>} description="Filtra las ocho categorías documentadas y consulta quién puede acceder, qué información se necesita y cómo continuar." actions={[{ label: "Filtrar por mi perfil", to: "/comenzar", primary: true }, { label: "Ver soluciones", to: "/soluciones" }]} />
-    <EditorialSection><SectionIntro eyebrow="Explorar" title="Filtra por perfil y necesidad" description="Los filtros quedan guardados en la dirección de esta página."/><div className="mt-9 grid gap-4 rounded-3xl border border-brand-dark/10 bg-white p-5 shadow-e1 sm:grid-cols-2"><label className="text-sm font-semibold"><span className="mb-2 flex items-center gap-2"><SlidersHorizontal className="h-4 w-4"/>Perfil</span><select className="min-h-12 w-full rounded-xl border border-brand-dark/15 bg-white px-4" value={audience} onChange={e=>update("audiencia", e.target.value)}>{audiences.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label><label className="text-sm font-semibold"><span className="mb-2 block">Necesidad</span><select className="min-h-12 w-full rounded-xl border border-brand-dark/15 bg-white px-4" value={need} onChange={e=>update("necesidad", e.target.value)}>{needs.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label></div>
-    <p className="mt-8 text-sm font-medium text-text-muted" aria-live="polite">{filtered.length} {filtered.length === 1 ? "categoría encontrada" : "categorías encontradas"}</p>
-    {filtered.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{filtered.map((item,index)=><article key={item.slug} className="group flex flex-col rounded-[1.75rem] border border-brand-dark/10 bg-white p-7 shadow-e1 transition hover:-translate-y-1 hover:shadow-e3 motion-reduce:transform-none md:min-h-80"><span className="text-xs font-bold tracking-[.18em] text-brand-orange">{String(index+1).padStart(2,"0")}</span><h2 className="mt-7 font-display text-2xl font-semibold tracking-tight">{item.title}</h2><p className="mt-4 flex-1 leading-7 text-text-muted">{item.summary}</p><p className="mt-5 text-xs font-semibold uppercase tracking-wider text-brand-dark">{item.needs.join(" · ")}</p><Link className="mt-6 inline-flex items-center gap-2 font-semibold text-brand-dark" to={`/beneficios/${item.slug}`}>Ver condiciones y proceso<ArrowRight className="h-4 w-4 transition group-hover:translate-x-1 motion-reduce:transform-none"/></Link></article>)}</div> : <div className="mt-5 rounded-3xl border border-dashed border-brand-dark/20 p-10 text-center"><h2 className="font-display text-2xl font-semibold">No hay resultados con estos filtros</h2><p className="mt-3 text-text-muted">Cambia una selección o limpia los filtros para ver todo el portafolio.</p><button className="public-button-secondary mt-6" onClick={()=>setParams({}, { replace: true })}>Limpiar filtros</button></div>}</EditorialSection>
+  const filtered = useMemo(
+    () => BENEFITS.filter((item) => (audience === "todas" || (item.audience as readonly BenefitAudience[]).includes(audience)) && (need === "todas" || (item.needs as readonly BenefitNeed[]).includes(need))),
+    [audience, need],
+  );
+
+  function update(key: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value === "todas") next.delete(key);
+    else next.set(key, value);
+    setParams(next, { replace: true });
+  }
+
+  return <>
+    <Seo routeKey="benefits" breadcrumbs={[{ name: "Inicio", path: "/" }, { name: "Beneficios", path: "/beneficios" }]} />
+    <CompactPublicHero
+      eyebrow="Beneficios"
+      title="Encuentra una opción para tu necesidad"
+      description="Filtra ocho categorías y consulta quién puede acceder, qué información se necesita y cómo continuar."
+      actions={[{ label: "Encontrar por mi perfil", to: "/comenzar", primary: true }, { label: "Ver soluciones", to: "/soluciones" }]}
+    />
+
+    <section className="py-10 sm:py-16 lg:py-20" aria-labelledby="benefit-filter-heading">
+      <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-12">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-brand-dark">Explorar</p>
+            <h2 id="benefit-filter-heading" className="mt-2 font-display text-2xl font-semibold tracking-[-.03em] text-text-main sm:text-4xl">Filtra por perfil y necesidad</h2>
+          </div>
+          <p className="max-w-md text-sm leading-6 text-text-muted">La selección queda guardada en la dirección de esta página.</p>
+        </div>
+
+        <div className="mt-6 grid gap-3 rounded-2xl border border-brand-dark/10 bg-white p-4 shadow-e1 sm:grid-cols-2 sm:p-5" aria-label="Filtros de beneficios">
+          <label className="text-sm font-semibold">
+            <span className="mb-2 flex items-center gap-2"><SlidersHorizontal aria-hidden className="h-4 w-4" />Perfil</span>
+            <select className="min-h-12 w-full rounded-xl border border-brand-dark/15 bg-white px-4 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2" value={audience} onChange={(event) => update("audiencia", event.target.value)}>
+              {audiences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold">
+            <span className="mb-2 block">Necesidad</span>
+            <select className="min-h-12 w-full rounded-xl border border-brand-dark/15 bg-white px-4 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2" value={need} onChange={(event) => update("necesidad", event.target.value)}>
+              {needs.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <p className="mt-5 inline-flex min-h-8 items-center rounded-full bg-brand-dark/8 px-3 text-xs font-semibold text-brand-dark" aria-live="polite">
+          {filtered.length} {filtered.length === 1 ? "categoría encontrada" : "categorías encontradas"}
+        </p>
+
+        {filtered.length ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((item, index) => <article key={item.slug} className="group flex flex-col rounded-2xl border border-brand-dark/10 bg-white p-5 shadow-e1 transition hover:-translate-y-1 hover:shadow-e3 motion-reduce:transform-none motion-reduce:transition-none sm:p-6 md:min-h-[19rem]">
+              <span className="text-xs font-bold tracking-[.18em] text-brand-orange">{String(index + 1).padStart(2, "0")}</span>
+              <h2 className="mt-4 font-display text-xl font-semibold tracking-tight sm:text-2xl">{item.title}</h2>
+              <p className="mt-3 flex-1 text-sm leading-6 text-text-muted sm:text-base sm:leading-7">{item.summary}</p>
+              <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-brand-dark">{item.needs.join(" · ")}</p>
+              <Link className="mt-5 inline-flex min-h-12 items-center gap-2 font-semibold text-brand-dark" to={`/beneficios/${item.slug}`}>
+                Ver condiciones y proceso
+                <ArrowRight aria-hidden className="h-4 w-4 transition group-hover:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
+              </Link>
+            </article>)}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-brand-dark/20 p-6 text-center sm:p-8">
+            <h2 className="font-display text-xl font-semibold sm:text-2xl">No hay resultados con estos filtros</h2>
+            <p className="mt-2 text-sm leading-6 text-text-muted">Cambia una selección o limpia los filtros para ver todo el portafolio.</p>
+            <button className="public-button-secondary mt-5" onClick={() => setParams({}, { replace: true })}>Limpiar filtros</button>
+          </div>
+        )}
+      </div>
+    </section>
+
     <PageCta title="¿No sabes cuál elegir?" description="Indica tu perfil y necesidad para abrir el beneficio, trámite o portal aplicable." label="Recibir orientación" />
   </>;
 }

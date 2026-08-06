@@ -10,4 +10,30 @@ describe("BenefitDetailPage", () => {
     expect(screen.getByRole("heading", { name: "Cómo avanzar" })).toBeInTheDocument();
     expect(screen.getByText(/cada alternativa puede tener condiciones propias/i)).toBeInTheDocument();
   });
+
+  it("places the guided primary action before the portfolio action", () => {
+    render(<MemoryRouter initialEntries={["/beneficios/movilidad"]}><Routes><Route path="/beneficios/:slug" element={<BenefitDetailPage/>}/></Routes></MemoryRouter>);
+    const primary = screen.getAllByRole("link", { name: "Encontrar mi ruta" })[0]!;
+    const secondary = screen.getByRole("link", { name: "Volver al portafolio" });
+    expect(primary).toHaveAttribute("href", "/comenzar?beneficio=movilidad");
+    expect(secondary).toHaveAttribute("href", "/beneficios");
+    expect(primary.compareDocumentPosition(secondary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("stacks at the base viewport and balances content from 390px", () => {
+    render(<MemoryRouter initialEntries={["/beneficios/movilidad"]}><Routes><Route path="/beneficios/:slug" element={<BenefitDetailPage/>}/></Routes></MemoryRouter>);
+    const needCard = screen.getByRole("heading", { name: "El problema que aborda" }).closest("article");
+    expect(needCard?.parentElement).toHaveClass("grid", "min-[390px]:grid-cols-2");
+    const process = screen.getByRole("heading", { name: "Cómo avanzar" }).parentElement?.querySelector("ol");
+    expect(process).toHaveClass("grid", "min-[390px]:grid-cols-2", "lg:grid-cols-3");
+    expect(process?.lastElementChild).toHaveClass("min-[390px]:last:col-span-2", "lg:last:col-span-1");
+  });
+
+  it("uses specific legal-link labels and uniform touch targets", () => {
+    render(<MemoryRouter initialEntries={["/beneficios/movilidad"]}><Routes><Route path="/beneficios/:slug" element={<BenefitDetailPage/>}/></Routes></MemoryRouter>);
+    const terms = screen.getByRole("link", { name: "Términos y condiciones" });
+    expect(terms).toHaveAttribute("href", "/legal/terminos-y-condiciones");
+    expect(terms).toHaveClass("min-h-12");
+    expect(screen.queryByRole("link", { name: "Documento legal relacionado" })).not.toBeInTheDocument();
+  });
 });
