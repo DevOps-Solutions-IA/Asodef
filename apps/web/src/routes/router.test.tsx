@@ -62,45 +62,35 @@ describe("router", () => {
 
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
-    // The homepage's Hero section (US-012) renders here - assert on its
-    // one confirmed piece of real copy (the company tagline) and its
-    // real-route CTA, rather than an invented page heading.
-    expect(screen.getByRole("link", { name: "Centro de pagos" })).toHaveAttribute("href", "/pagos");
+    expect(screen.getAllByRole("link", { name: "Encontrar mi ruta" })[0]).toHaveAttribute("href", "/comenzar");
   });
 
   it("renders each top-level public marketing route inside PublicLayout", () => {
     renderAtPath("/quienes-somos");
-    expect(screen.getByRole("heading", { name: "Quiénes somos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/organización con historia/i);
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
-  // Public-frontend correction: these 5 bare paths were reported blank -
-  // they were never missing content, they were long-orphaned
-  // RoutePlaceholder stubs left registered after the real sections moved
-  // onto the homepage as /#anchor targets (US-012 through US-018). Each
-  // now redirects to its real anchor; a direct visit/bookmark/refresh
-  // must land on substantive content, not a blank placeholder, and must
-  // not trip RouteErrorBoundary (a real regression this correction found
-  // and fixed - see useScrollToHash's own jsdom scrollIntoView note).
+  // Canonical public pages and preserved legacy redirects all land on
+  // substantive editorial experiences inside the public shell.
   it.each([
-    ["/quienes-somos", "Quiénes somos"],
-    ["/beneficios", "¿Por qué hacer una alianza con ASODEF?"],
-    ["/portafolio", "Nuestro portafolio de beneficios"],
-    ["/cobertura", "Cobertura nacional"],
-    ["/contacto", "Contáctanos"],
-  ])("redirects the bare path %s to its real /#anchor content, with no runtime exception", (path, expectedHeading) => {
+    ["/quienes-somos", /organización con historia/i],
+    ["/beneficios", /valor disponible/i],
+    ["/portafolio?utm_source=legacy", /valor disponible/i],
+    ["/cobertura", /organización con historia/i],
+    ["/contacto", /solicitud registrada/i],
+  ])("renders or safely redirects %s to substantive content", (path, expectedHeading) => {
     renderAtPath(path);
-    expect(screen.getByRole("heading", { name: expectedHeading })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(expectedHeading);
     expect(screen.queryByText("Servicio no disponible")).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("still renders /empresas as an honest, deliberate placeholder (no PRD story requires a public empresas page)", () => {
+  it("renders the complete public company journey at /empresas", () => {
     renderAtPath("/empresas");
-    expect(screen.getByRole("heading", { name: "Empresas" })).toBeInTheDocument();
-    expect(screen.getByText("Esta sección se implementará en una historia posterior.")).toBeInTheDocument();
-    expect(screen.queryByText("Servicio no disponible")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Empresas" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /portal empresarial/i })).toHaveAttribute("href", "/empresa");
   });
 
   it("renders AuthLayout (no marketing nav/footer) for /iniciar-sesion when unauthenticated", async () => {
@@ -289,13 +279,13 @@ describe("router", () => {
     expect(await screen.findByText("Documento no disponible")).toBeInTheDocument();
   });
 
-  it("redirects /pqr to /legal/pqr", async () => {
+  it("renders /pqr as the canonical specialized workflow", async () => {
     renderAtPath("/pqr", null, (url) => {
       if (url.includes("/legal-documents/")) return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." });
       return undefined;
     });
     expect(await screen.findByRole("heading", { name: "PQR" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Documentos legales" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar caso" })).toBeInTheDocument();
   });
 
   it("renders the 404 page (inside PublicLayout) for any unmatched path", async () => {
