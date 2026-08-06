@@ -7,6 +7,7 @@ export function NotFoundPage() {
     <EmptyState
       icon={<Compass className="h-10 w-10" />}
       title="Página no encontrada"
+      titleAs="h1"
       description="La dirección a la que intentaste acceder no existe o fue movida."
       action={
         <Link

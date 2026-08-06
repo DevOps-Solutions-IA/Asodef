@@ -5,7 +5,14 @@ const routes = [
   "/",
   "/quienes-somos",
   "/beneficios",
+  "/beneficios/plan-exequial-familiar",
+  "/beneficios/seguro-de-vida",
+  "/beneficios/asesoria-juridica",
   "/beneficios/movilidad",
+  "/beneficios/salud-y-bienestar",
+  "/beneficios/educacion",
+  "/beneficios/convenios-comerciales",
+  "/beneficios/categorias-complementarias",
   "/soluciones",
   "/soluciones/personas",
   "/soluciones/afiliados",
@@ -17,9 +24,13 @@ const routes = [
   "/contacto",
   "/comenzar",
   "/pagos",
+  "/pqr",
+  "/solicitudes-de-datos",
   "/legal",
   "/legal/politica-de-privacidad",
+  "/login",
   "/iniciar-sesion",
+  "/ruta-publica-no-existente",
 ];
 
 const viewports = [

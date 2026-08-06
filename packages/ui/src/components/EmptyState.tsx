@@ -6,10 +6,13 @@ export interface EmptyStateProps {
   title: string;
   description?: string;
   action?: ReactNode;
+  titleAs?: "h1" | "h2" | "p";
   className?: string;
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action, titleAs = "p", className }: EmptyStateProps) {
+  const Title = titleAs;
+
   return (
     <div className={cn("flex flex-col items-center gap-3 rounded-xl3 border border-dashed border-brand-dark/15 bg-white/45 px-6 py-12 text-center", className)}>
       {icon && (
@@ -17,7 +20,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
           {icon}
         </div>
       )}
-      <p className="font-display text-lg font-semibold text-text-main">{title}</p>
+      <Title className="font-display text-lg font-semibold text-text-main">{title}</Title>
       {description && <p className="max-w-sm text-sm text-text-muted">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>

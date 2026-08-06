@@ -44,8 +44,8 @@ La verificación cubrió lectura semántica, encabezado principal, controles eti
 
 - Backend: 83 suites y 773 pruebas aprobadas.
 - Frontend: 69 archivos y 380 pruebas aprobadas.
-- E2E integral existente: 22 de 22 aprobadas en Chromium.
-- E2E flagship: 8 de 8 aprobadas; 18 rutas por cada una de 6 resoluciones, ramas directas y persistencia CRM/consentimientos.
+- E2E integral: 30 de 30 aprobadas en Chromium.
+- E2E flagship: 8 de 8 aprobadas; 29 rutas por cada una de 6 resoluciones, las ocho páginas de beneficio, ramas directas, 404 semántico y persistencia CRM/consentimientos.
 - Lint, TypeScript estricto y build de producción: aprobados.
 - Migración `20260806070000_guided_public_funnel`: aplicada y estado al día.
 - Seed: dos ejecuciones consecutivas aprobadas.
@@ -87,6 +87,7 @@ La verificación cubrió lectura semántica, encabezado principal, controles eti
 | `/iniciar-sesion` | Usuarios autorizados | Autenticarse | Ingresar | API auth/RBAC | No crea marketing | noindex | Verificado | auth suite, E2E | `be8c74d` |
 | `/mi-cuenta` | Afiliados autenticados | Acceder al portal personal | Ingresar | Auth/portal | Mis consentimientos | noindex | Handoff verificado | auth/portal/E2E existente | `8fcbf4f` |
 | `/empresa` | Representantes autorizados | Acceder al portal empresarial | Ingresar | Auth/RBAC/portal | Términos versionados | noindex | Handoff verificado | auth/company/E2E existente | `8fcbf4f` |
+| `*` (404) | Todas | Recuperarse de una ruta inexistente | Volver al inicio | Sin llamada de negocio | No recolecta datos | Fallback controlado | `h1` y RWD verificados | router, E2E | cierre QA |
 
 ## Redirecciones compatibles
 
