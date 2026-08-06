@@ -2453,7 +2453,7 @@
       "id": "US-079",
       "title": "Inventario factual y trazabilidad de fuentes legales",
       "domain": "G - Corrección legal integral",
-      "status": "open",
+      "status": "complete",
       "description": "Auditar exhaustivamente las únicas fuentes disponibles y registrar procedencia, sensibilidad, conflictos y aptitud de uso sin modificar los originales.",
       "businessValue": "Permite demostrar que cada afirmación institucional publicada proviene de evidencia disponible o del comportamiento real.",
       "dependsOn": ["US-078"],
@@ -2462,15 +2462,15 @@
       "auditRequirements": ["Inventario fechado y respaldado por archivos físicos y consultas verificadas"],
       "testingRequirements": ["Verificar que los originales conservan sus hashes y permanecen sin cambios"],
       "outOfScope": ["Buscar o asumir documentos externos ausentes"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": "Debe ejecutarse antes de redactar contenido."
+      "completionStatus": "complete",
+      "commit": "c4a806f",
+      "notes": "Inventario factual completo de todos los archivos físicos, fuentes internas y límites de uso; originales preservados sin modificación."
     },
     {
       "id": "US-080",
       "title": "Matriz completa de cobertura documental",
       "domain": "G - Corrección legal integral",
-      "status": "open",
+      "status": "complete",
       "description": "Reconciliar una fila por cada documento del catálogo y de PostgreSQL, incluidos los fixtures sintéticos, con clasificación A/B/C y destino verificable.",
       "businessValue": "Evita omisiones y convierte el saneamiento legal en un conjunto comprobable de cierres por documento.",
       "dependsOn": ["US-079"],
@@ -2479,15 +2479,15 @@
       "auditRequirements": ["Conteos y estado inicial se registran con fecha"],
       "testingRequirements": ["Prueba de unicidad de type/slug institucional y reconciliación de conteo"],
       "outOfScope": ["Tratar fixtures como documentos institucionales"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": "Clasificación inicial: 20 A, 1 B, 0 C; fixtures con divulgación restringida y archivo."
+      "completionStatus": "complete",
+      "commit": "c4a806f",
+      "notes": "Matriz reconciliada: 21 institucionales (20 A, 1 B, 0 C) y 2 fixtures sintéticos separados."
     },
     {
       "id": "US-081",
       "title": "Contenido empresarial verificable y divulgación limitada",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Completar información empresarial desde certificado, dossier y configuración, omitiendo PII, finanzas y control no necesarios.",
       "businessValue": "Presenta una identidad corporativa precisa y profesional sin sobreexposición.",
       "dependsOn": ["US-080"],
@@ -2496,15 +2496,15 @@
       "auditRequirements": ["Fuentes CEC/DOS/CFG persistidas en v2"],
       "testingRequirements": ["Test de contenido, publicación y ruta pública"],
       "outOfScope": ["Publicar ingresos, capital o control societario"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Contenido empresarial v2 publicado con divulgación limitada y trazabilidad CEC/DOS/CFG."
     },
     {
       "id": "US-082",
       "title": "Privacidad, tratamiento y aviso de privacidad completos",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Redactar privacy_policy, data_processing_policy y privacy_notice según datos, finalidades, derechos y flujos reales.",
       "businessValue": "Habilita formularios y derechos de titulares con información coherente y vigente.",
       "dependsOn": ["US-080"],
@@ -2513,15 +2513,15 @@
       "auditRequirements": ["Trazabilidad CEC/CON/APP/CFG y workflow completo"],
       "testingRequirements": ["Tests parametrizados para los tres slugs"],
       "outOfScope": ["Crear un calendario de retención inventado"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Privacidad, tratamiento y aviso publicados en v2; endpoints e integraciones verificadas."
     },
     {
       "id": "US-083",
       "title": "Autorizaciones, consentimientos y tratamientos especiales",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Completar autorización general, WhatsApp, correo, comerciales, sensibles y menores/beneficiarios sin agrupar consentimientos opcionales con tratamientos necesarios.",
       "businessValue": "Alinea evidencia de consentimiento, revocación y supresión con seis documentos vigentes.",
       "dependsOn": ["US-082"],
@@ -2530,15 +2530,15 @@
       "auditRequirements": ["Registro de versión aceptada, canal, IP/user-agent y fecha según el flujo existente"],
       "testingRequirements": ["Tests de contenido y ConsentRecord por finalidad"],
       "outOfScope": ["Inferir categorías sensibles no capturadas"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Seis textos diferenciados publicados en v2 con evidencia de versión, revocación y no-bundling."
     },
     {
       "id": "US-084",
       "title": "Términos de uso y condiciones de portales",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Completar términos generales y condiciones diferenciadas de portal empresarial y afiliado según autenticación, RBAC, cuenta, contratos, pagos y consentimientos reales.",
       "businessValue": "Define usos permitidos y responsabilidades sin inventar condiciones comerciales particulares.",
       "dependsOn": ["US-080"],
@@ -2547,15 +2547,15 @@
       "auditRequirements": ["Aceptación de términos vinculada a versión exacta"],
       "testingRequirements": ["Tests de portal, vínculo y contenido"],
       "outOfScope": ["Inventar precios, cobertura, renovación o cancelación"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Términos generales y de ambos portales publicados y enlazados conservando RBAC."
     },
     {
       "id": "US-085",
       "title": "Términos de pago, reversiones y reembolsos",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Corregir términos de pago publicados con placeholders y completar la política de reversiones/reembolsos según órdenes, intentos, recibos, refunds y conciliación reales.",
       "businessValue": "Da información transaccional útil sin atribuir al entorno mock condiciones de un proveedor final.",
       "dependsOn": ["US-080"],
@@ -2564,15 +2564,15 @@
       "auditRequirements": ["Workflow legal y evidencia de aceptación de pago"],
       "testingRequirements": ["Tests de publicación y creación de orden con versión vigente"],
       "outOfScope": ["Precios, impuestos, plazos voluntarios o garantías no soportados"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Términos de pago y reembolsos publicados en v2 con redacción limitada a procesos implementados."
     },
     {
       "id": "US-086",
       "title": "PQR y procedimiento de titulares",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Completar política PQR y procedimiento de consultas/reclamos con radicación, referencias, verificación, estados y canales reales.",
       "businessValue": "Explica y conecta dos workflows públicos de atención ya implementados.",
       "dependsOn": ["US-082"],
@@ -2581,15 +2581,15 @@
       "auditRequirements": ["Radicaciones y transiciones conservan audit log"],
       "testingRequirements": ["Integración y E2E de PQR/DSR con políticas vigentes"],
       "outOfScope": ["Prometer un plazo uniforme ajeno al tipo de solicitud"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "PQR y procedimiento de titulares publicados, enlazados y verificados con integración real."
     },
     {
       "id": "US-087",
       "title": "Cookies, seguridad y accesibilidad",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Documentar solo cookies y controles implementados, y sustituir la declaración de accesibilidad publicada incompleta por una versión verificable.",
       "businessValue": "Evita describir trackers inexistentes y corrige una publicación históricamente defectuosa.",
       "dependsOn": ["US-080"],
@@ -2598,15 +2598,15 @@
       "auditRequirements": ["Cambio correctivo de accesibilidad y fuentes APP/CFG"],
       "testingRequirements": ["Tests de banner, sesión y componentes accesibles"],
       "outOfScope": ["Declarar certificación WCAG no obtenida"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Cookies, seguridad y accesibilidad v2 publicadas según controles reales; accesibilidad histórica preservada."
     },
     {
       "id": "US-088",
       "title": "Política de comunicaciones electrónicas",
       "domain": "H - Contenido legal ASODEF",
-      "status": "open",
+      "status": "complete",
       "description": "Completar canales transaccionales, comerciales y de notificación, preferencias, evidencia, supresión y revocación.",
       "businessValue": "Unifica la explicación del módulo de comunicaciones sin confundir mensajes necesarios y marketing.",
       "dependsOn": ["US-083"],
@@ -2615,15 +2615,15 @@
       "auditRequirements": ["Intentos, omisiones y canal quedan registrados por el comportamiento existente"],
       "testingRequirements": ["Test de separación transaccional/comercial"],
       "outOfScope": ["Activar transporte SMTP o WhatsApp externo"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Política electrónica v2 vigente, separando comunicaciones operativas y comerciales."
     },
     {
       "id": "US-089",
       "title": "Guarda autoritativa de aprobación y publicación",
       "domain": "I - Workflow y publicación legal",
-      "status": "open",
+      "status": "complete",
       "description": "Bloquear transiciones a LEGAL_REVIEW, PENDING_APPROVAL, APPROVED o PUBLISHED cuando el contenido sea nulo, malformado, vacío, incompleto o contenga marcadores conocidos.",
       "businessValue": "Impide que el defecto histórico vuelva a ocurrir aun si la UI es omitida.",
       "dependsOn": ["US-080"],
@@ -2632,15 +2632,15 @@
       "auditRequirements": ["Todo intento bloqueado deja auditoría durable"],
       "testingRequirements": ["Unitarias e integración para cada marcador y transición"],
       "outOfScope": ["Confiar solo en validación frontend"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Validador backend autoritativo, errores estructurados, auditoría de rechazo y feedback admin probados."
     },
     {
       "id": "US-090",
       "title": "Trazabilidad estructurada por versión legal",
       "domain": "I - Workflow y publicación legal",
-      "status": "open",
+      "status": "complete",
       "description": "Persistir fuentes y resumen de cambios por versión y exponerlos de forma segura en administración.",
       "businessValue": "Permite relacionar texto aprobado con evidencia concreta y comportamiento verificado.",
       "dependsOn": ["US-079", "US-089"],
@@ -2649,15 +2649,15 @@
       "auditRequirements": ["Trazabilidad queda congelada al aprobar junto al contenido"],
       "testingRequirements": ["Tests de persistencia y serialización"],
       "outOfScope": ["Copiar documentos fuente a la base"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "Migración source_traceability aplicada; las 21 v2 conservan fuentes estructuradas visibles solo en administración."
     },
     {
       "id": "US-091",
       "title": "Versiones correctivas para los 21 documentos institucionales",
       "domain": "I - Workflow y publicación legal",
-      "status": "open",
+      "status": "complete",
       "description": "Crear v2 completas para los 21 documentos sin mutar versiones históricas, con resumen y trazabilidad.",
       "businessValue": "Corrige tanto borradores como versiones aprobadas/publicadas preservando historia.",
       "dependsOn": ["US-081", "US-082", "US-083", "US-084", "US-085", "US-086", "US-087", "US-088", "US-090"],
@@ -2666,15 +2666,15 @@
       "auditRequirements": ["Creación y cada transición quedan auditadas"],
       "testingRequirements": ["Idempotencia y preservación histórica"],
       "outOfScope": ["Editar v1 aprobadas o publicadas"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "21 versiones correctivas v2 creadas por servicio, con resumen, fuentes y v1 intactas."
     },
     {
       "id": "US-092",
       "title": "Aprobación y publicación local de versiones corregidas",
       "domain": "I - Workflow y publicación legal",
-      "status": "open",
+      "status": "complete",
       "description": "Transitar las 21 v2 por revisión, aprobación y publicación usando el workflow auditado y asignar currentVersionId.",
       "businessValue": "Elimina 'Aún no publicado' y sustituye versiones incompletas vigentes.",
       "dependsOn": ["US-091"],
@@ -2683,15 +2683,15 @@
       "auditRequirements": ["Actor, timestamps y acciones por cada v2"],
       "testingRequirements": ["Prueba parametrizada de 21 publicaciones"],
       "outOfScope": ["Publicación remota"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "7579796",
+      "notes": "21/21 v2 transitaron el workflow auditado y están PUBLISHED como currentVersionId local."
     },
     {
       "id": "US-093",
       "title": "Integración legal de formularios públicos y cuenta",
       "domain": "J - Consentimiento e integración",
-      "status": "open",
+      "status": "complete",
       "description": "Vincular contacto, pagos, PQR, DSR y cuenta con documentos vigentes y registrar versión exacta aceptada.",
       "businessValue": "Convierte documentos publicados en controles funcionales, no simples páginas informativas.",
       "dependsOn": ["US-092"],
@@ -2700,15 +2700,15 @@
       "auditRequirements": ["Fuente de formulario, versión, IP y user-agent preservados"],
       "testingRequirements": ["Contacto, pagos, PQR, DSR y cuenta"],
       "outOfScope": ["Consentimiento implícito"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Contacto, pagos, PQR, DSR y cuenta consumen documentos vigentes y preservan la versión aceptada."
     },
     {
       "id": "US-094",
       "title": "Integración legal de portales, CRM, comunicaciones y contratos",
       "domain": "J - Consentimiento e integración",
-      "status": "open",
+      "status": "complete",
       "description": "Conectar portales empresarial/afiliado, CRM, comunicaciones y contratos con términos, tratamiento, canales, supresión, revocación y evidencia exacta.",
       "businessValue": "Cierra las integraciones institucionales y comerciales de extremo a extremo.",
       "dependsOn": ["US-092", "US-093"],
@@ -2717,15 +2717,15 @@
       "auditRequirements": ["Evidencia electrónica y actor en acciones administrativas"],
       "testingRequirements": ["Tests enfocados por dominio y regresión"],
       "outOfScope": ["Activar proveedores externos"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Portales, CRM, contratos y comunicaciones muestran condiciones aplicables sin alterar permisos ni supresión."
     },
     {
       "id": "US-095",
       "title": "Archivo seguro de documentos sintéticos",
       "domain": "I - Workflow y publicación legal",
-      "status": "open",
+      "status": "complete",
       "description": "Confirmar los dos consent-test-doc como fixtures, archivarlos sin borrar referencias y corregir helpers para no dejar publicaciones sintéticas.",
       "businessValue": "Limpia descubrimiento público sin perder evidencia de consentimiento ni auditoría.",
       "dependsOn": ["US-089"],
@@ -2734,15 +2734,15 @@
       "auditRequirements": ["Archivo deja acción aplicada con actor"],
       "testingRequirements": ["Integración con referencia de consentimiento existente"],
       "outOfScope": ["Eliminar físicamente fixtures"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "02d545d",
+      "notes": "Dos fixtures confirmados y ARCHIVED sin DELETE; una referencia de consentimiento preservada; helpers ya no publican sintéticos."
     },
     {
       "id": "US-096",
       "title": "Refinamiento premium del Centro Legal",
       "domain": "K - Experiencia legal",
-      "status": "open",
+      "status": "complete",
       "description": "Elevar /legal y la lectura documental usando BrandLogo, hero institucional, búsqueda, categorías, metadatos, índice, impresión y relacionados dentro del sistema visual vigente.",
       "businessValue": "Ofrece un centro institucional completo, prestigioso y accesible sin introducir otra identidad.",
       "dependsOn": ["US-092"],
@@ -2751,15 +2751,15 @@
       "auditRequirements": ["No aplica a acciones de solo lectura"],
       "testingRequirements": ["Vitest y Chromium multirresolución"],
       "outOfScope": ["Nueva paleta, fuente o librería de componentes"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Centro Legal y lectura editorial refinados dentro del sistema ASODEF; verificados a 1440, 768 y 390 px."
     },
     {
       "id": "US-097",
       "title": "Validación y trazabilidad en administración legal",
       "domain": "K - Experiencia legal",
-      "status": "open",
+      "status": "complete",
       "description": "Mejorar solo el área legal admin con alertas, fuentes, historial, comparación, actores/fechas, current version y errores estructurados.",
       "businessValue": "Hace operable y auditable el workflow corregido para personal autorizado.",
       "dependsOn": ["US-089", "US-090", "US-091"],
@@ -2768,15 +2768,15 @@
       "auditRequirements": ["Actor, fecha y resultado de cada transición visibles"],
       "testingRequirements": ["Integración backend y frontend admin"],
       "outOfScope": ["Rediseñar el panel administrativo completo"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "68628d2",
+      "notes": "Administración legal muestra validación, trazabilidad, comparación, historia, actores, fechas y versión vigente bajo RBAC."
     },
     {
       "id": "US-098",
       "title": "Rebuild, suites y verificación final en Chromium",
       "domain": "L - Cierre verificable",
-      "status": "open",
+      "status": "complete",
       "description": "Ejecutar migraciones, dos seeds, suites completas, lint, typecheck, build, rebuild Docker sin caché, health, API y revisión real de rutas en tres anchos.",
       "businessValue": "Demuestra que el saneamiento legal es visible y no regresiona módulos existentes.",
       "dependsOn": ["US-092", "US-093", "US-094", "US-095", "US-096", "US-097"],
@@ -2785,9 +2785,9 @@
       "auditRequirements": ["Reporte final relaciona documento, pruebas y commit"],
       "testingRequirements": ["Todas las verificaciones de Phase 13 ejecutadas sobre el SHA final"],
       "outOfScope": ["US-038 a US-042, que permanecen DEFERRED — DEPLOYMENT NOT AUTHORIZED"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "050466f",
+      "notes": "Backend 770/770, frontend 409/409, E2E Chromium 19/19; lint, typecheck, build forzado, migraciones, seeds, Docker y health verificados."
     }
   ]
 }
