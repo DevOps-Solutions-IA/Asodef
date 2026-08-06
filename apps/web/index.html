@@ -4,15 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- US-019: title/description are the confirmed legalName+tagline and
-         the already-approved Hero supporting copy verbatim (US-012) -
-         no new claims invented here. %VITE_APP_URL% is Vite's built-in
-         HTML env-replacement syntax: the production domain is supplied
-         entirely via the environment, never hardcoded in source. -->
-    <title>ASODEF S.A.S. | Trabajamos pensando en su bienestar.</title>
+    <!-- Static SPA fallback for crawlers before route JavaScript runs.
+         Route-specific metadata is supplied from the typed public registry.
+         %VITE_APP_URL% remains environment-controlled. -->
+    <title>ASODEF | Beneficios y gestión para familias y organizaciones</title>
     <meta
       name="description"
-      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+      content="Conoce los beneficios, canales digitales y rutas de atención que ASODEF conecta para personas, afiliados, empresas y aliados."
     />
     <link rel="canonical" href="%VITE_APP_URL%/" />
 
@@ -28,18 +26,18 @@
     <meta property="og:site_name" content="ASODEF S.A.S." />
     <meta property="og:locale" content="es_CO" />
     <meta property="og:url" content="%VITE_APP_URL%/" />
-    <meta property="og:title" content="ASODEF S.A.S. | Trabajamos pensando en su bienestar." />
+    <meta property="og:title" content="ASODEF | Beneficios y gestión para familias y organizaciones" />
     <meta
       property="og:description"
-      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+      content="Conoce los beneficios, canales digitales y rutas de atención que ASODEF conecta para personas, afiliados, empresas y aliados."
     />
     <meta property="og:image" content="%VITE_APP_URL%/og-image.webp" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ASODEF S.A.S. | Trabajamos pensando en su bienestar." />
+    <meta name="twitter:title" content="ASODEF | Beneficios y gestión para familias y organizaciones" />
     <meta
       name="twitter:description"
-      content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."
+      content="Conoce los beneficios, canales digitales y rutas de atención que ASODEF conecta para personas, afiliados, empresas y aliados."
     />
     <meta name="twitter:image" content="%VITE_APP_URL%/og-image.webp" />
 
@@ -62,6 +60,15 @@
           "addressLocality": "Cali",
           "addressCountry": "CO"
         }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "ASODEF",
+        "url": "%VITE_APP_URL%/",
+        "inLanguage": "es-CO"
       }
     </script>
 

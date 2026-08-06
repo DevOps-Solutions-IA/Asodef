@@ -11,18 +11,18 @@ const html = readFileSync(htmlPath, "utf-8");
 
 describe("index.html SEO metadata (US-019)", () => {
   it("sets the exact specified <title>", () => {
-    expect(html).toContain("<title>ASODEF S.A.S. | Trabajamos pensando en su bienestar.</title>");
+    expect(html).toContain("<title>ASODEF | Beneficios y gestión para familias y organizaciones</title>");
   });
 
   it("sets the exact specified meta description", () => {
     expect(html).toContain(
-      'content="Acompañamos a personas, familias y organizaciones con una atención cercana, responsable y orientada a construir bienestar."',
+      'content="Conoce los beneficios, canales digitales y rutas de atención que ASODEF conecta para personas, afiliados, empresas y aliados."',
     );
   });
 
   it("sets Open Graph metadata", () => {
     expect(html).toMatch(/<meta property="og:type" content="website"/);
-    expect(html).toMatch(/<meta property="og:title" content="ASODEF S\.A\.S\. \| Trabajamos pensando en su bienestar\."/);
+    expect(html).toMatch(/<meta property="og:title" content="ASODEF \| Beneficios y gestión para familias y organizaciones"/);
     expect(html).toMatch(/<meta property="og:image" content="%VITE_APP_URL%\/og-image\.webp"/);
     expect(html).toMatch(/<meta property="og:url" content="%VITE_APP_URL%\/"/);
   });

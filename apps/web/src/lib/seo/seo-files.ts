@@ -5,18 +5,19 @@
  * this route list elsewhere.
  */
 
-/** Only real, public marketing/institutional pages - never a
- * transactional payment step, an authenticated portal, or a utility
- * auth page (login/password recovery has no SEO value). */
+import { LEGAL_DOCUMENT_CATALOG } from "../legal/legal-catalog";
+import { BENEFITS } from "../public-content/benefits";
+import { AUDIENCES } from "../public-content/audiences";
+import { PUBLIC_ROUTE_LIST } from "../public-content/public-routes";
+
+/** Generated from the same canonical registries that render navigation
+ * and pages. Guided intake is intentionally excluded: it is a conversion
+ * workflow, not an indexable editorial destination. */
 export const PUBLIC_MARKETING_ROUTES = [
-  "/",
-  "/quienes-somos",
-  "/beneficios",
-  "/portafolio",
-  "/cobertura",
-  "/empresas",
-  "/contacto",
-  "/pagos",
+  ...PUBLIC_ROUTE_LIST.filter(route => route.path !== "/comenzar").map(route => route.path),
+  ...BENEFITS.map(benefit => `/beneficios/${benefit.slug}`),
+  ...AUDIENCES.map(audience => `/soluciones/${audience.slug}`),
+  ...LEGAL_DOCUMENT_CATALOG.map(document => `/legal/${document.slug}`),
 ] as const;
 
 /** Explicitly required by the PRD's acceptance criteria, plus the
