@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { disconnectLegalDocumentsClient, publishDraftForE2e, type PublishedForTestHandle } from "./support/legal-documents";
 
 /**
  * US-035: golden-path browser smoke test. Uses the seeded demo
@@ -17,24 +16,6 @@ test.describe("ASODEF golden-path smoke test", () => {
   });
 
   test.describe("payment lookup", () => {
-    // US-046: order creation records payment_terms consent, which requires
-    // a resolvable, currently PUBLISHED terminos-de-pago version -
-    // deliberately DRAFT-only in every environment until real legal review
-    // happens (seed-legal-documents.ts). Same temporarily-publish-then-
-    // restore contract apps/api's own integration tests already use for
-    // this exact document (publish-legal-document-for-test.ts) - never
-    // left published once this test finishes.
-    let handle: PublishedForTestHandle | null = null;
-
-    test.beforeAll(async () => {
-      handle = await publishDraftForE2e("terminos-de-pago");
-    });
-
-    test.afterAll(async () => {
-      await handle?.restore();
-      await disconnectLegalDocumentsClient();
-    });
-
     test("completing a payment lookup for the seeded demo customer reaches the order summary screen", async ({ page }) => {
       await page.goto("/pagos");
       await page.getByLabel("Número de documento", { exact: false }).fill(SEEDED_DEMO_DOCUMENT_NUMBER);

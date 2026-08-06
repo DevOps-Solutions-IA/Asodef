@@ -30,6 +30,7 @@ const NAV_ITEMS: AdminNavItem[] = [
   { to: "/admin/crm/empresas", label: "Empresas y aliados", permission: "crm.read" },
   { to: "/admin/planes", label: "Planes", permission: null },
   { to: "/admin/contratos", label: "Contratos", permission: "contracts.read" },
+  { to: "/admin/comunicaciones", label: "Comunicaciones", permission: null },
   { to: "/admin/pagos", label: "Pagos", permission: "payments.read" },
   { to: "/admin/conciliacion", label: "Conciliación", permission: "payments.reconcile" },
   // content.manage gates visibility (legal.approve additionally gates

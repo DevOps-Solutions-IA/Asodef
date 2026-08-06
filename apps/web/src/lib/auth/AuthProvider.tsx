@@ -33,9 +33,9 @@ async function fetchSessionOrNull(signal?: AbortSignal): Promise<CurrentUser | n
 }
 
 /**
- * Purges every cached query except the auth session itself, then writes
- * the given session value directly. US-010 requires that no stale
- * protected data survive a logout or a failed session refresh - but
+ * Purges cached protected query domains, then writes the given session
+ * value directly. US-010 requires that no stale protected data survive
+ * a logout or a failed session refresh - but
  * `queryClient.clear()` would remove *every* cache entry, including
  * meQuery's own, and the session-invalidated handler in particular runs
  * synchronously from inside meQuery's own in-flight queryFn call (GET
@@ -44,15 +44,16 @@ async function fetchSessionOrNull(signal?: AbortSignal): Promise<CurrentUser | n
  * fetch corrupts its lifecycle in TanStack Query: the observer never
  * receives the eventually-settled result, so isLoading gets stuck at
  * `true` forever (reproduced and confirmed - see AuthProvider.test.tsx).
- * Excluding the auth key from the purge avoids the self-interference
- * entirely, regardless of call-stack timing, with no defer/setTimeout
- * needed.
+ * Excluding the auth key from the purge avoids the self-interference.
+ * Restricting the purge to authenticated domains also prevents a normal
+ * anonymous 401 from deleting in-flight public legal/content queries and
+ * leaving their observers stuck in a loading state.
  */
 function purgeProtectedDataAndSetSession(
   queryClient: ReturnType<typeof useQueryClient>,
   session: CurrentUser | null,
 ): void {
-  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] === "admin" || query.queryKey[0] === "me" });
   queryClient.setQueryData(queryKeys.auth.me(), session);
 }
 

@@ -249,6 +249,7 @@ export const routeConfig: RouteObject[] = [
                 element: <PermissionRoute permissions={["contracts.read"]} />,
                 children: [{ path: "contratos", element: <RoutePlaceholder title="Contratos" /> }],
               },
+              { path: "comunicaciones", element: <RoutePlaceholder title="Comunicaciones" /> },
               {
                 // content.manage gates visibility (edit/submit/reject);
                 // legal.approve additionally gates approve/publish inside
