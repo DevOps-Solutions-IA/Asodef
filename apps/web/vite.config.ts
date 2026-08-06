@@ -48,6 +48,24 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep stable framework capabilities out of the application entry.
+        // Route components are already loaded on demand in router.tsx; these
+        // named vendor groups make that split effective without coupling the
+        // public shell to admin, forms or animation implementation details.
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-routing": ["react-router-dom"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-forms": ["react-hook-form", "@hookform/resolvers", "zod"],
+          "vendor-motion": ["motion"],
+          "vendor-icons": ["lucide-react"],
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
