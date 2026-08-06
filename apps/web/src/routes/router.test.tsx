@@ -91,8 +91,8 @@ describe("router", () => {
   // substantive editorial experiences inside the public shell.
   it.each([
     ["/quienes-somos", /ASODEF conecta personas/i],
-    ["/beneficios", /Encuentra opciones/i],
-    ["/portafolio?utm_source=legacy", /Encuentra opciones/i],
+    ["/beneficios", /Encuentra una opción para tu necesidad/i],
+    ["/portafolio?utm_source=legacy", /Encuentra una opción para tu necesidad/i],
     ["/cobertura", /ASODEF conecta personas/i],
     ["/contacto", /Qué necesitas hacer/i],
   ])("renders or safely redirects %s to substantive content", async (path, expectedHeading) => {
