@@ -13,4 +13,9 @@ describe("public solutions", () => {
     expect(screen.getByRole("link", { name: /portal empresarial/i })).toHaveAttribute("href", "/empresa");
     expect(screen.getByRole("link", { name: /iniciar recorrido/i })).toHaveAttribute("href", "/comenzar?perfil=empresa");
   });
+  it("describes allies as an evaluated interest, never as an automatic program", () => {
+    render(<MemoryRouter initialEntries={["/soluciones/aliados"]}><Routes><Route path="/soluciones/:audience" element={<AudiencePage/>}/></Routes></MemoryRouter>);
+    expect(screen.getByText(/no se afirma la existencia de un programa automático/i)).toBeInTheDocument();
+    expect(screen.getByText(/postulación no constituye contrato/i)).toBeInTheDocument();
+  });
 });
