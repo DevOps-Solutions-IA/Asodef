@@ -109,15 +109,24 @@ describe("router", () => {
     expect(screen.getByRole("link", { name: /portal empresarial/i })).toHaveAttribute("href", "/empresa");
   });
 
-  it("renders AuthLayout (no marketing nav/footer) for /iniciar-sesion when unauthenticated", async () => {
+  it("renders AuthLayout with the common public menu for /iniciar-sesion", async () => {
     renderAtPath("/iniciar-sesion");
 
     expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
-    // Public-frontend correction, Section 4: the official logo above the
-    // login card, not the old plain-text company name.
     expect(screen.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
+  });
+
+  it.each(["/", "/iniciar-sesion", "/pagos", "/legal"])("uses the same principal menu on public route %s", async (path) => {
+    renderAtPath(path);
+
+    const nav = await screen.findByRole("navigation", { name: "Principal" });
+    for (const label of ["Inicio", "Quiénes somos", "Beneficios", "Soluciones", "Empresas"]) {
+      expect(nav).toHaveTextContent(label);
+    }
+    const actions = screen.getByLabelText("Acciones de navegación");
+    expect(actions).toHaveTextContent(/Pagar.*Ingresar.*Recibir orientación/);
   });
 
   it("redirects an already-authenticated visitor away from /iniciar-sesion (GuestOnlyRoute)", async () => {

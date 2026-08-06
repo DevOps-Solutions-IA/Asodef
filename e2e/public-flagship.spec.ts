@@ -129,6 +129,11 @@ test.describe("flagship public experience", () => {
       for (const route of routes) {
         await page.goto(route);
         await expect(page.locator("h1").first()).toBeVisible();
+        if (viewport.width >= 1024) {
+          await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
+        } else {
+          await expect(page.getByRole("button", { name: "Abrir menú de navegación" })).toBeVisible();
+        }
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
