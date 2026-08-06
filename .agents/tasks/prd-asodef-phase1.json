@@ -2793,7 +2793,7 @@
       "id": "US-099",
       "title": "Auditoría visual empresarial del producto servido",
       "domain": "M - Evolución visual premium",
-      "status": "open",
+      "status": "complete",
       "description": "Auditar tokens, componentes, shells, sitio público, Centro Legal, pagos, dashboards, CRM, administración y portales mediante código y navegador real.",
       "businessValue": "Define una evolución basada en evidencia y preserva la identidad ASODEF mientras identifica las brechas de prestigio, densidad y coherencia.",
       "dependsOn": ["US-098"],
@@ -2802,15 +2802,15 @@
       "auditRequirements": ["Baseline, fecha, runtime y rutas auditadas registrados"],
       "testingRequirements": ["Inspección visual real y validación de overflow inicial"],
       "outOfScope": ["Cambiar identidad, desplegar o modificar infraestructura productiva"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "fb77558",
+      "notes": "Auditoría factual documentada con baseline Chromium 1440/768/390, brechas globales/locales y decisiones sistémicas antes de modificar la interfaz."
     },
     {
       "id": "US-100",
       "title": "Fundamentos premium de tokens y superficies",
       "domain": "M - Evolución visual premium",
-      "status": "open",
+      "status": "complete",
       "description": "Extender los fundamentos vigentes con tokens semánticos de superficie, división, control, profundidad, workspace y movimiento derivados de la paleta ASODEF.",
       "businessValue": "Permite que toda la plataforma comparta una jerarquía visual empresarial consistente sin crear un segundo sistema.",
       "dependsOn": ["US-099"],
@@ -2819,15 +2819,15 @@
       "auditRequirements": ["Cambios limitados a fundamentos de marca existentes"],
       "testingRequirements": ["Tests de CSS/Tailwind, lint, typecheck y build"],
       "outOfScope": ["Nueva paleta, tipografía o librería visual"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Tokens semánticos de superficies, bordes, workspace, profundidad y movimiento derivados de la paleta ASODEF; foco y reduced motion preservados."
     },
     {
       "id": "US-101",
       "title": "Componentes compartidos de nivel empresarial",
       "domain": "M - Evolución visual premium",
-      "status": "open",
+      "status": "complete",
       "description": "Refinar tarjetas, botones, encabezados, formularios, estados, diálogos, drawers y contenedores de datos para comunicar jerarquía, precisión y calidad.",
       "businessValue": "Multiplica la mejora en todos los módulos y evita hacks visuales por pantalla.",
       "dependsOn": ["US-100"],
@@ -2836,15 +2836,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Pruebas unitarias compartidas, frontend completo, lint y typecheck"],
       "outOfScope": ["Segundo component library"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Card, Button, PageHeader, campos, badges, estados, diálogos y superficies de datos refinados con API compatible y 46/46 pruebas UI."
     },
     {
       "id": "US-102",
       "title": "Shells, navegación y workspace premium",
       "domain": "M - Evolución visual premium",
-      "status": "open",
+      "status": "complete",
       "description": "Unificar admin, cuenta y empresa en un shell configurable con sidebar desktop, topbar, contexto, iconografía y drawer móvil accesible.",
       "businessValue": "Elimina la navegación móvil bloqueante y comunica una plataforma empresarial cohesionada.",
       "dependsOn": ["US-101"],
@@ -2853,15 +2853,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Tests de shells, navegación, permisos y Chromium 1440/768/390"],
       "outOfScope": ["Cambiar arquitectura de rutas"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "WorkspaceShell compartido para admin, cuenta y empresa; sidebar desktop, topbar y drawer móvil accesible. Se corrigió la navegación móvil que desplazaba el contenido."
     },
     {
       "id": "US-103",
       "title": "Sitio público premium y tecnológico",
       "domain": "N - Experiencias premium",
-      "status": "open",
+      "status": "complete",
       "description": "Elevar hero, navegación, indicadores, secciones institucionales, cifras, beneficios, portafolio, cobertura, contacto y footer con composición y ritmo de alta confianza.",
       "businessValue": "Convierte la presencia pública en una experiencia institucional memorable y creíble.",
       "dependsOn": ["US-101"],
@@ -2870,15 +2870,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Tests de homepage y Chromium 1440/768/390"],
       "outOfScope": ["Inventar cifras, beneficios o promesas"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Hero, navegación, confianza, secciones institucionales, métricas, beneficios, cobertura, CTA y contacto elevados sin alterar hechos ni marca."
     },
     {
       "id": "US-104",
       "title": "Centro Legal editorial de alta confianza",
       "domain": "N - Experiencias premium",
-      "status": "open",
+      "status": "complete",
       "description": "Profundizar la biblioteca, navegación temática, tarjetas, lectura editorial, índice y relaciones documentales dentro del Centro Legal publicado.",
       "businessValue": "Refuerza transparencia, autoridad institucional y facilidad de consulta sin tocar el contenido aprobado.",
       "dependsOn": ["US-101", "US-103"],
@@ -2887,15 +2887,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Tests legales existentes y Chromium multirresolución"],
       "outOfScope": ["Modificar versiones legales publicadas"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Biblioteca y lector editorial refinados; búsqueda, 21 documentos vigentes, índice responsive, impresión y navegación relacionada preservados."
     },
     {
       "id": "US-105",
       "title": "Centro de Pagos seguro y transaccional premium",
       "domain": "N - Experiencias premium",
-      "status": "open",
+      "status": "complete",
       "description": "Rediseñar visualmente lookup, resumen, proceso, resultado y recibo con señales de seguridad, progreso y confianza, preservando Bold y la evidencia legal.",
       "businessValue": "Reduce incertidumbre en el momento de mayor sensibilidad del usuario y aumenta la credibilidad transaccional.",
       "dependsOn": ["US-101"],
@@ -2904,15 +2904,15 @@
       "auditRequirements": ["Versión legal aceptada continúa registrada"],
       "testingRequirements": ["Suites de pagos, smoke E2E y Chromium multirresolución"],
       "outOfScope": ["Activar cobros reales o inventar medios de pago"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Lookup, orden, proceso Bold mock, resultado y comprobante elevados con señales transaccionales. Corregido enlace real de política de reversiones."
     },
     {
       "id": "US-106",
       "title": "Dashboard ejecutivo premium",
       "domain": "O - Producto interno premium",
-      "status": "open",
+      "status": "complete",
       "description": "Elevar el dashboard con jerarquía ejecutiva, iconografía, agrupaciones, señales de atención y presentación de datos consistente.",
       "businessValue": "Permite entender salud comercial, financiera y operativa con mayor rapidez y confianza.",
       "dependsOn": ["US-102"],
@@ -2921,15 +2921,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Test del dashboard, RBAC y Chromium responsive"],
       "outOfScope": ["Cambiar consultas o definiciones de KPI"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Dashboard reorganizado visualmente con encabezado ejecutivo, tarjetas densas, iconografía y señales accesibles de atención, sin cambiar KPIs."
     },
     {
       "id": "US-107",
       "title": "CRM y módulos administrativos premium",
       "domain": "O - Producto interno premium",
-      "status": "open",
+      "status": "complete",
       "description": "Refinar tablas, filtros, kanban, formularios, detalle, pagos, legal, PQR, DSR y reportes mediante patrones de workspace compartidos.",
       "businessValue": "Transforma el back-office funcional en una herramienta empresarial seria y eficiente.",
       "dependsOn": ["US-102", "US-106"],
@@ -2938,15 +2938,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Suites admin/CRM/legal/pagos/reportes y Chromium"],
       "outOfScope": ["Reescribir módulos funcionales"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "CRM, tablas/filtros globales y maestro-detalle legal adoptan patrones premium; RBAC, solo lectura, auditoría y workflows siguen cubiertos."
     },
     {
       "id": "US-108",
       "title": "Portales internos premium",
       "domain": "O - Producto interno premium",
-      "status": "open",
+      "status": "complete",
       "description": "Elevar cuenta y portal empresarial con el workspace compartido, encabezados, superficies de resumen y navegación legal coherente.",
       "businessValue": "Extiende la misma calidad y confianza a afiliados y empresas sin fragmentar el producto.",
       "dependsOn": ["US-102"],
@@ -2955,15 +2955,15 @@
       "auditRequirements": [],
       "testingRequirements": ["Tests de cuenta, rutas y Chromium"],
       "outOfScope": ["Implementar nuevas funciones en rutas placeholder"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Cuenta y empresa comparten el nuevo workspace manteniendo tonos, roles, consentimientos y enlaces legales propios."
     },
     {
       "id": "US-109",
       "title": "Pulido global y verificación final premium",
       "domain": "P - Cierre visual premium",
-      "status": "open",
+      "status": "complete",
       "description": "Cerrar interacciones, movimiento, contraste, foco y responsive; ejecutar suites, build, Docker y revisión Chromium sobre el runtime final.",
       "businessValue": "Demuestra una evolución premium completa, cohesiva y segura en vez de una colección de mockups.",
       "dependsOn": ["US-103", "US-104", "US-105", "US-106", "US-107", "US-108"],
@@ -2972,9 +2972,9 @@
       "auditRequirements": ["Checkpoint final relaciona historias, commits, bugs y resultados"],
       "testingRequirements": ["Frontend y backend completos, E2E, lint, typecheck, build y revisión visual real"],
       "outOfScope": ["US-038 a US-042 y cualquier despliegue"],
-      "completionStatus": "open",
-      "commit": null,
-      "notes": null
+      "completionStatus": "complete",
+      "commit": "e93b379",
+      "notes": "Lint/typecheck/build globales, frontend 409/409, UI 46/46, backend completo, migraciones, dos seeds, Docker sin caché, health y E2E Chromium 22/22 (incluye auditoría visual 1440/768/390) verificados."
     }
   ]
 }
