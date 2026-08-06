@@ -3624,9 +3624,9 @@
         "outOfScope": [
           "Contenido, presentación, metadata y workflows del Centro Legal"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "717ccba",
+        "notes": "Tres apariciones productivas de filler prohibido eliminadas; registros tipados, Home, About, beneficios y soluciones usan capacidad, dato o acción concreta. Frontend 407/407 y Chromium aprobados."
       },
       {
         "id": "US-127",
@@ -3662,9 +3662,9 @@
         "outOfScope": [
           "Rediseñar Centro Legal o módulos internos"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "43f4d7b",
+        "notes": "Diez patrones móviles compartidos, navegación agrupada, acciones de 48 px, formularios recuperables y matriz sin overflow desde 430 hasta 320 px."
       },
       {
         "id": "US-128",
@@ -3700,9 +3700,9 @@
         "outOfScope": [
           "Animación en /legal o estética game-like"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "119acc3",
+        "notes": "Primitivas de reveal, stagger, superficie, selección, conexiones y transición de ruta implementadas con contenido estable y reduced motion."
       },
       {
         "id": "US-129",
@@ -3738,9 +3738,9 @@
         "outOfScope": [
           "Usuarios, familias, transacciones, satisfacción o cobertura no verificados"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "c07aed1",
+        "notes": "Tres métricas verificadas y documentadas; contador accesible de una sola ejecución con estado final inmediato bajo movimiento reducido."
       },
       {
         "id": "US-130",
@@ -3778,9 +3778,9 @@
         "outOfScope": [
           "Cambiar endpoints, política PQR o páginas /legal/*"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "0b2f0d1",
+        "notes": "PQR progresiva de cinco pasos, recuperación, consentimiento, API real, confirmación, copia, impresión y tracking público sin datos personales; E2E real aprobado."
       },
       {
         "id": "US-131",
@@ -3818,9 +3818,9 @@
         "outOfScope": [
           "Alterar request types, procedimiento o Centro Legal"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "0b2f0d1",
+        "notes": "Solicitud de titular de cinco pasos, once tipos preservados, consentimiento, API real, referencia y tracking seguro; E2E real aprobado."
       },
       {
         "id": "US-132",
@@ -3857,9 +3857,9 @@
         "outOfScope": [
           "Duplicar pagos, PQR, DSR o login"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "e02a203",
+        "notes": "Ocho necesidades dirigen a servicios reales; solo Otro asunto revela formulario minimizado con CRM, idempotencia, UTM y consentimientos versionados."
       },
       {
         "id": "US-133",
@@ -3899,9 +3899,9 @@
         "outOfScope": [
           "Rediseño desde cero o cambios a /legal"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "1339750",
+        "notes": "Hero aprobado preservado con mensaje concreto, seis nodos enlazados, rail móvil, dos CTA y métricas verificadas; nueve resoluciones aprobadas."
       },
       {
         "id": "US-134",
@@ -3939,9 +3939,9 @@
         "outOfScope": [
           "Modificar información empresarial publicada en /legal"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "73a7f8d",
+        "notes": "Bloque genérico reemplazado por identidad corporativa verificada; se redujo densidad sin inventar hitos, cobertura, premios ni cifras."
       },
       {
         "id": "US-135",
@@ -3982,9 +3982,9 @@
         "outOfScope": [
           "Rediseñar Benefits, Solutions o Companies sin necesidad; /legal congelado"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "568c402",
+        "notes": "Shell, CTA, footer, beneficios, soluciones, recursos y handoffs alineados sin rediseño innecesario; rutas legales quedaron aisladas."
       },
       {
         "id": "US-136",
@@ -4021,9 +4021,9 @@
         "outOfScope": [
           "Cambiar contenido o presentación de /legal y despliegue"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "6b10625",
+        "notes": "Entry reducido de ~703,49 a 194,08 kB; sin advertencia >500 kB. Lint, TypeScript, build, 1226 pruebas unitarias/integración y 35 E2E aprobados."
       },
       {
         "id": "US-137",
@@ -4060,9 +4060,9 @@
         "outOfScope": [
           "Deploy, force push, history rewrite y producción"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "0c0cd5a",
+        "notes": "Tres rondas globales cerradas; 33 migraciones, dos seeds, Docker sin caché, health, Chromium y prueba legal 21/21 documentados. Sin deploy ni cambios productivos."
       }
   ]
 }
