@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { DataSubjectRequestPage } from "./DataSubjectRequestPage";
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
@@ -17,7 +18,7 @@ function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <DataSubjectRequestPage />
+      <MemoryRouter><DataSubjectRequestPage /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -28,6 +29,7 @@ async function fillAndSubmitValidForm(user: ReturnType<typeof userEvent.setup>) 
   await user.type(field("Número de documento"), "1000000099");
   await user.type(field("Correo electrónico"), "titular@example.com");
   await user.type(field("Describe tu solicitud"), "Quiero eliminar mis datos.");
+  await user.click(screen.getByRole("checkbox", { name: /Acepto el tratamiento de mis datos/ }));
   await user.click(screen.getByRole("button", { name: "Enviar solicitud" }));
 }
 

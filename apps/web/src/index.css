@@ -142,3 +142,10 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+@media print {
+  body { background: #ffffff !important; }
+  header, footer, .print-hide { display: none !important; }
+  .legal-document-print { color: #111111; }
+  .legal-document-print section { break-inside: avoid; }
+}

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { PqrCasePage } from "./PqrCasePage";
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
@@ -13,7 +14,7 @@ function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <PqrCasePage />
+      <MemoryRouter><PqrCasePage /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -27,6 +28,7 @@ async function fillAndSubmitValidForm(user: ReturnType<typeof userEvent.setup>) 
   await user.type(field("Nombre completo"), "Titular de Prueba");
   await user.type(field("Correo o teléfono de contacto"), "titular@example.com");
   await user.type(field("Describe tu caso"), "No estoy de acuerdo con el cobro.");
+  await user.click(screen.getByRole("checkbox", { name: /Acepto el tratamiento necesario/ }));
   await user.click(screen.getByRole("button", { name: "Enviar caso" }));
 }
 
@@ -74,7 +76,7 @@ describe("PqrCasePage", () => {
     await user.click(screen.getByRole("button", { name: "Enviar caso" }));
 
     expect(await screen.findByText("Selecciona una categoría.")).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 
   it("never renders a raw API error body for a server error", async () => {

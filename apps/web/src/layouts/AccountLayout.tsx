@@ -54,6 +54,10 @@ export function AccountLayout() {
           </ul>
         </nav>
         <div className="border-t border-border-soft px-3 py-3">
+          <div className="mb-3 flex flex-col gap-1 px-2 text-xs text-text-muted">
+            <Link to="/legal/condiciones-portal-afiliado" className="hover:text-brand-dark hover:underline">Condiciones del portal</Link>
+            <Link to="/legal/politica-de-privacidad" className="hover:text-brand-dark hover:underline">Privacidad</Link>
+          </div>
           <LogoutButton className="w-full justify-center" />
         </div>
       </aside>

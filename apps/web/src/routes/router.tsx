@@ -117,6 +117,7 @@ export const routeConfig: RouteObject[] = [
         element: <GuestOnlyRoute />,
         children: [
           { path: "iniciar-sesion", element: <LoginPage /> },
+          { path: "login", element: <Navigate to="/iniciar-sesion" replace /> },
           { path: "recuperar-clave", element: <ForgotPasswordPage /> },
           { path: "restablecer-clave", element: <ResetPasswordPage /> },
         ],

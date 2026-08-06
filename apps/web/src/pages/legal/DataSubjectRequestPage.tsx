@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Alert, Button, Card, FormField, Input, Select, StatusBadge, Textarea } from "@asodef/ui";
+import { Alert, Button, Card, Checkbox, FormField, Input, Select, StatusBadge, Textarea } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
 import { lookupDataSubjectRequest, submitDataSubjectRequest } from "../../lib/data-subject-requests/data-subject-requests-api";
 import {
@@ -18,6 +19,7 @@ const requestSchema = z.object({
   requesterEmail: z.string().min(1, "El correo electrónico es requerido.").email("Ingresa un correo electrónico válido."),
   requesterDocument: z.string().min(1, "El número de documento es requerido."),
   description: z.string().min(1, "La descripción de la solicitud es requerida."),
+  dataProcessingAccepted: z.literal(true, { errorMap: () => ({ message: "Debes aceptar el tratamiento necesario para tramitar tu solicitud." }) }),
 });
 
 type RequestFormValues = z.infer<typeof requestSchema>;
@@ -56,7 +58,7 @@ export function DataSubjectRequestPage() {
     },
   });
 
-  const onSubmit = handleSubmit((values) => {
+  const onSubmit = handleSubmit(({ dataProcessingAccepted: _accepted, ...values }) => {
     if (submitMutation.isPending) return;
     submitMutation.mutate(values);
   });
@@ -77,6 +79,7 @@ export function DataSubjectRequestPage() {
         Ejerce tus derechos sobre tus datos personales (acceso, corrección, eliminación, revocatoria y más). Recibirás
         una referencia de seguimiento al enviar tu solicitud.
       </p>
+      <p className="mt-3 text-sm text-text-muted">Consulta el <Link to="/legal/procedimiento-consultas-y-reclamos" className="font-medium text-brand-dark hover:underline">procedimiento vigente de consultas y reclamos</Link> antes de radicar.</p>
 
       <Card className="mt-6">
         <h2 className="font-display text-lg font-semibold text-text-main">Nueva solicitud</h2>
@@ -123,6 +126,11 @@ export function DataSubjectRequestPage() {
           <FormField label="Describe tu solicitud" error={errors.description?.message} required className="sm:col-span-2">
             {(controlProps) => <Textarea {...controlProps} rows={4} {...register("description")} />}
           </FormField>
+
+          <div className="sm:col-span-2">
+            <Checkbox {...register("dataProcessingAccepted")} label={<>Acepto el tratamiento de mis datos exclusivamente para verificar, gestionar y responder esta solicitud conforme a la <Link to="/legal/tratamiento-de-datos" target="_blank" className="font-medium text-brand-dark hover:underline">Política de tratamiento</Link>.</>} />
+            {errors.dataProcessingAccepted && <p className="mt-1 text-sm text-danger">{errors.dataProcessingAccepted.message}</p>}
+          </div>
 
           <Button type="submit" loading={isBusy} disabled={isBusy} className="sm:col-span-2">
             Enviar solicitud

@@ -15,12 +15,33 @@ import { getAdminErrorMessage } from "../../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../../lib/query-keys";
 import { useAuth } from "../../../lib/auth/auth-context";
 import { LEGAL_VERSION_STATUS_LABELS } from "../../../lib/admin/admin-legal-types";
+import { ApiError } from "../../../lib/api-error";
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
 }
 
 type ConfirmAction = "approve" | "publish" | null;
+
+function contentWarnings(content: unknown): string[] {
+  if (!content || typeof content !== "object" || !("sections" in content) || !Array.isArray((content as { sections?: unknown }).sections)) return ["El contenido no contiene una lista válida de secciones."];
+  const warnings: string[] = [];
+  ((content as { sections: unknown[] }).sections).forEach((section, index) => {
+    if (!section || typeof section !== "object") warnings.push(`La sección ${index + 1} no tiene un formato válido.`);
+    else {
+      const value = section as { heading?: unknown; body?: unknown };
+      if (typeof value.heading !== "string" || !value.heading.trim()) warnings.push(`La sección ${index + 1} no tiene título.`);
+      if (typeof value.body !== "string" || !value.body.trim()) warnings.push(`La sección ${index + 1} no tiene contenido.`);
+      else if (/LEGAL_CONTENT_PLACEHOLDER|Pendiente de confirmación legal|\bPor definir\b|Lorem ipsum|\bTODO\b/i.test(value.body)) warnings.push(`La sección “${String(value.heading || index + 1)}” contiene un marcador no publicable.`);
+    }
+  });
+  return warnings;
+}
+
+function validationMessages(error: unknown): string[] {
+  if (!(error instanceof ApiError) || !Array.isArray(error.envelope?.errors)) return [];
+  return error.envelope.errors.flatMap((item) => item && typeof item === "object" && "message" in item && typeof item.message === "string" ? [item.message] : []);
+}
 
 /**
  * US-062 AC1: draft editing + review/approval workflow + publishing, with
@@ -102,6 +123,10 @@ export function AdminLegalPage() {
   // guarded block below, where latestVersion (the fallback) is defined.
   const viewedVersion = (document?.versions.find((v) => v.id === viewedVersionId) ?? latestVersion)!;
   const isViewingLatest = !viewedVersionId || viewedVersionId === latestVersion?.id;
+  const warnings = latestVersion ? contentWarnings(latestVersion.draftContent) : [];
+  const workflowError = submitForReviewMutation.error ?? submitForApprovalMutation.error ?? approveMutation.error ?? publishMutation.error;
+  const workflowValidationMessages = validationMessages(workflowError);
+  const auditTrail = viewedVersion?.auditTrail ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -154,7 +179,7 @@ export function AdminLegalPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-display text-xl font-semibold text-text-main">{document.title}</h3>
-                  <p className="text-sm text-text-muted">Versión {viewedVersion.version}</p>
+                  <p className="text-sm text-text-muted">Versión {viewedVersion.version}{viewedVersion.id === document.currentVersionId ? " · vigente" : ""}</p>
                 </div>
                 <Badge variant="neutral">{LEGAL_VERSION_STATUS_LABELS[viewedVersion.status] ?? viewedVersion.status}</Badge>
               </div>
@@ -174,7 +199,7 @@ export function AdminLegalPage() {
                         >
                           <span>
                             Versión {v.version}
-                            {v.id === latestVersion.id ? " (actual)" : ""}
+                            {v.id === document.currentVersionId ? " (vigente)" : v.id === latestVersion.id ? " (más reciente)" : ""}
                           </span>
                           <span className="flex items-center gap-2 text-xs text-text-muted">
                             {v.publicationDate ? `Publicada ${formatDate(v.publicationDate)}` : v.approvalDate ? `Aprobada ${formatDate(v.approvalDate)}` : formatDate(v.createdAt)}
@@ -191,7 +216,7 @@ export function AdminLegalPage() {
                 <div className="flex flex-col gap-3">
                   <Alert variant="info">Estás viendo una versión anterior en modo de solo lectura. Solo la versión actual puede editarse.</Alert>
                   {viewedVersion.approvedByUserId && (
-                    <p className="text-sm text-text-muted">Aprobada por: {viewedVersion.approvedByUserId}</p>
+                    <p className="text-sm text-text-muted">Aprobada por: {viewedVersion.approvedByName ?? viewedVersion.approvedByUserId} {viewedVersion.approvalDate ? `· ${formatDate(viewedVersion.approvalDate)}` : ""}</p>
                   )}
                   <pre className="overflow-x-auto rounded-xl border border-border-soft bg-bg-soft p-4 text-xs text-text-main">
                     {JSON.stringify(viewedVersion.approvedContent ?? viewedVersion.draftContent, null, 2)}
@@ -200,6 +225,47 @@ export function AdminLegalPage() {
                     Volver a la versión actual
                   </Button>
                 </div>
+              )}
+
+              {warnings.length > 0 && isViewingLatest && (
+                <Alert variant="warning">
+                  <p className="font-medium">Esta versión no puede avanzar todavía.</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                </Alert>
+              )}
+
+              {workflowValidationMessages.length > 0 && (
+                <Alert variant="danger">
+                  <p className="font-medium">La validación de publicación encontró:</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">{workflowValidationMessages.map((message) => <li key={message}>{message}</li>)}</ul>
+                </Alert>
+              )}
+
+              {Array.isArray(viewedVersion.sourceTraceability) && viewedVersion.sourceTraceability.length > 0 && (
+                <div className="rounded-xl border border-border-soft bg-white p-4">
+                  <h4 className="text-sm font-semibold text-text-main">Trazabilidad de fuentes</h4>
+                  <ul className="mt-2 space-y-2 text-xs text-text-muted">{viewedVersion.sourceTraceability.map((raw, sourceIndex) => {
+                    const item = raw as { source?: string; basis?: string };
+                    return <li key={`${item.source ?? "source"}-${sourceIndex}`}><span className="font-medium text-text-main">{item.source ?? "Fuente registrada"}</span>{item.basis ? ` — ${item.basis}` : ""}</li>;
+                  })}</ul>
+                </div>
+              )}
+
+              {document.versions.length > 1 && document.versions[1] && isViewingLatest && (
+                <details className="rounded-xl border border-border-soft bg-white p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-brand-dark">Comparar con la versión anterior</summary>
+                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                    <div><p className="mb-2 text-xs font-semibold text-text-muted">Versión {latestVersion.version}</p><pre className="max-h-80 overflow-auto rounded-lg bg-bg-soft p-3 text-xs">{JSON.stringify(latestVersion.approvedContent ?? latestVersion.draftContent, null, 2)}</pre></div>
+                    <div><p className="mb-2 text-xs font-semibold text-text-muted">Versión {document.versions[1]?.version}</p><pre className="max-h-80 overflow-auto rounded-lg bg-bg-soft p-3 text-xs">{JSON.stringify(document.versions[1]?.approvedContent ?? document.versions[1]?.draftContent, null, 2)}</pre></div>
+                  </div>
+                </details>
+              )}
+
+              {auditTrail.length > 0 && (
+                <details className="rounded-xl border border-border-soft bg-white p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-brand-dark">Actores y eventos del workflow ({auditTrail.length})</summary>
+                  <ol className="mt-3 space-y-2 text-xs text-text-muted">{auditTrail.map((event, eventIndex) => <li key={`${event.action}-${event.createdAt}-${eventIndex}`}><span className="font-medium text-text-main">{event.action}</span> · {event.actorName ?? "Sistema"} · {formatDate(event.createdAt)}{event.applied ? "" : " · bloqueado"}</li>)}</ol>
+                </details>
               )}
 
               {isViewingLatest && latestVersion.status === "DRAFT" && (
@@ -227,7 +293,7 @@ export function AdminLegalPage() {
                     </Button>
                     <Button
                       type="button"
-                      disabled={!canManageContent || submitForReviewMutation.isPending}
+                      disabled={!canManageContent || submitForReviewMutation.isPending || warnings.length > 0}
                       title={!canManageContent ? "No tienes permiso para editar contenido legal." : undefined}
                       onClick={() => submitForReviewMutation.mutate(latestVersion.id)}
                     >

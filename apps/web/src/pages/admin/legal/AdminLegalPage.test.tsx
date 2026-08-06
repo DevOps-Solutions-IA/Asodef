@@ -144,7 +144,7 @@ describe("AdminLegalPage", () => {
     await user.click(await screen.findByRole("button", { name: /Política de privacidad/ }));
 
     const history = await screen.findByRole("list", { name: "Historial de versiones" });
-    expect(within(history).getByText(/Versión 2 \(actual\)/)).toBeInTheDocument();
+    expect(within(history).getByText(/Versión 2 \(más reciente\)/)).toBeInTheDocument();
     expect(within(history).getByText("Versión 1")).toBeInTheDocument();
 
     // Viewing the latest version still shows its normal PUBLISHED info.

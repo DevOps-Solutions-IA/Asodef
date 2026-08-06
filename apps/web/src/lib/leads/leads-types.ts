@@ -10,6 +10,7 @@ export interface CreateLeadRequest {
   sector: string;
   mensaje: string;
   consentAccepted: true;
+  commercialConsentAccepted?: boolean;
   /** Honeypot - always empty for a real visitor, never rendered as a
    * labeled field. */
   website?: string;

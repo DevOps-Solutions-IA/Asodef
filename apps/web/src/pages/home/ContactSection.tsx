@@ -26,6 +26,7 @@ const contactSchema = z.object({
   consentAccepted: z.literal(true, {
     errorMap: () => ({ message: "Debes aceptar el tratamiento de datos para continuar." }),
   }),
+  commercialConsentAccepted: z.boolean().optional(),
   // Honeypot - never shown to a real visitor (see the hidden field below).
   website: z.string().optional(),
 });
@@ -232,6 +233,13 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
               }
             />
             {errors.consentAccepted && <p className="mt-1.5 text-sm text-danger">{errors.consentAccepted.message}</p>}
+          </div>
+
+          <div className="sm:col-span-2">
+            <Checkbox
+              {...register("commercialConsentAccepted")}
+              label={<>Quiero recibir novedades y beneficios de ASODEF. Este consentimiento es opcional y puedo revocarlo. Consulta el <Link to="/legal/consentimiento-comunicaciones-comerciales" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-dark hover:underline">consentimiento de comunicaciones comerciales</Link>.</>}
+            />
           </div>
 
           <Button type="submit" loading={isBusy} disabled={isBusy} className="sm:col-span-2">

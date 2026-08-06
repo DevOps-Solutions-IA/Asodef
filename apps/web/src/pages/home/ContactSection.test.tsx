@@ -62,7 +62,7 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(field("Correo electrónico"), "visitante@example.com");
   await user.type(field("Sector"), "Servicios");
   await user.type(field("Mensaje"), "Quiero conocer más sobre ASODEF.");
-  await user.click(screen.getByRole("checkbox"));
+  await user.click(screen.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }));
 }
 
 describe("ContactSection", () => {
@@ -103,7 +103,8 @@ describe("ContactSection", () => {
     for (const label of ["Nombre completo", "Empresa", "Cargo", "Ciudad", "Teléfono / WhatsApp", "Correo electrónico", "Sector", "Mensaje"]) {
       expect(field(label)).toBeInTheDocument();
     }
-    expect(screen.getByRole("checkbox")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /tratamiento de mis datos personales/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /recibir novedades y beneficios/ })).toBeInTheDocument();
     const consentLink = screen.getByRole("link", { name: /tratamiento de mis datos personales/ });
     expect(consentLink).toHaveAttribute("href", "/legal/tratamiento-de-datos");
     // US-045 AC: opens in a new tab, so filling out the form isn't lost.
@@ -140,7 +141,7 @@ describe("ContactSection", () => {
     await user.type(field("Correo electrónico"), "visitante@example.com");
     await user.type(field("Sector"), "Servicios");
     await user.type(field("Mensaje"), "Quiero conocer más sobre ASODEF.");
-    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /tratamiento de mis datos personales/ })).not.toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
 

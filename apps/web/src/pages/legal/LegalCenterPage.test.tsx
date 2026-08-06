@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { LEGAL_CATALOG } from "../../lib/legal/legal-catalog";
+import { LEGAL_DOCUMENT_CATALOG } from "../../lib/legal/legal-catalog";
 import { LegalCenterPage } from "./LegalCenterPage";
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
@@ -27,7 +27,7 @@ describe("LegalCenterPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("Negative case (AC): before any document is published, all catalog categories render in 'Aún no publicado' state without erroring", async () => {
+  it("Negative case (AC): before any document is published, all institutional documents render as unavailable without erroring", async () => {
     const fetchMock = vi.fn(() => jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." }));
     renderLegalCenterPage(fetchMock);
 
@@ -36,16 +36,16 @@ describe("LegalCenterPage", () => {
     // datos sensibles"), which a name-based text search would match
     // ambiguously across more than one link.
     const links = await screen.findAllByRole("link");
-    for (const entry of LEGAL_CATALOG) {
+    for (const entry of LEGAL_DOCUMENT_CATALOG) {
       const link = links.find((candidate) => candidate.getAttribute("href") === `/legal/${entry.slug}`);
       expect(link).toBeInTheDocument();
       expect(link).toHaveTextContent(entry.title);
     }
-    expect(await screen.findAllByText("Aún no publicado")).toHaveLength(LEGAL_CATALOG.length);
+    expect(await screen.findAllByText("No disponible")).toHaveLength(LEGAL_DOCUMENT_CATALOG.length);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("Example (AC): a published document shows a Publicado badge instead", async () => {
+  it("Example (AC): a published document shows a Vigente badge instead", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/legal-documents/terminos-y-condiciones")) {
@@ -64,7 +64,7 @@ describe("LegalCenterPage", () => {
     renderLegalCenterPage(fetchMock);
 
     const row = await screen.findByRole("link", { name: /Términos y condiciones/ });
-    expect(await screen.findByText("Publicado")).toBeInTheDocument();
+    expect(await screen.findByText("Vigente")).toBeInTheDocument();
     expect(row).toHaveAttribute("href", "/legal/terminos-y-condiciones");
   });
 

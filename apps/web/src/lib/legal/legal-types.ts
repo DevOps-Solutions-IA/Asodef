@@ -9,7 +9,7 @@ export interface PublicLegalDocument {
   type: string;
   title: string;
   version: number;
-  content: { sections: LegalDocumentSection[] } | null;
+  content: { summary?: string; sections: LegalDocumentSection[] } | null;
   effectiveDate: string | null;
   publicationDate: string | null;
 }

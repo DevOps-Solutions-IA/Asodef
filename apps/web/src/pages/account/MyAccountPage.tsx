@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Card, Dialog, EmptyState, ErrorState, Skeleton } from "@asodef/ui";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
@@ -50,6 +51,12 @@ export function MyAccountPage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-brand-dark">Mi cuenta</h1>
+
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <Link to="/legal/terminos-y-condiciones" className="font-medium text-brand-dark hover:underline">Términos de uso</Link>
+        <Link to="/legal/politica-de-privacidad" className="font-medium text-brand-dark hover:underline">Política de privacidad</Link>
+        <Link to="/legal/condiciones-portal-afiliado" className="font-medium text-brand-dark hover:underline">Condiciones del portal</Link>
+      </div>
 
       <Card className="mt-6">
         <h2 className="font-display text-lg font-semibold text-text-main">Mis consentimientos</h2>

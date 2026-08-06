@@ -82,6 +82,13 @@ export function OrderSummaryPage() {
         </div>
       </Card>
 
+      <aside className="mt-5 rounded-xl border border-border-soft bg-bg-soft p-4 text-sm leading-6 text-text-muted">
+        Al continuar confirmas las condiciones mostradas para esta orden y aceptas los{" "}
+        <Link to="/legal/terminos-de-pago" target="_blank" className="font-medium text-brand-dark hover:underline">términos de pago</Link>, la{" "}
+        <Link to="/legal/reversiones-devoluciones-y-reembolsos" target="_blank" className="font-medium text-brand-dark hover:underline">política de reversiones y reembolsos</Link> y la{" "}
+        <Link to="/legal/tratamiento-de-datos" target="_blank" className="font-medium text-brand-dark hover:underline">política de tratamiento de datos</Link>. La aceptación queda vinculada a la versión vigente registrada con la orden.
+      </aside>
+
       {isPayable ? (
         <div className="mt-6">
           <Button type="button" onClick={() => navigate(`/pagos/procesar/${data.publicReference}`)}>

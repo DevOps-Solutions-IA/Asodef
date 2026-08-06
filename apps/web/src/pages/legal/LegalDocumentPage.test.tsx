@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { LegalDocumentPage } from "./LegalDocumentPage";
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
@@ -12,7 +13,7 @@ function renderLegalDocumentPage(fetchMock: ReturnType<typeof vi.fn>, props = { 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LegalDocumentPage {...props} />
+      <MemoryRouter><LegalDocumentPage {...props} /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -41,12 +42,12 @@ describe("LegalDocumentPage", () => {
     expect(screen.getByText("ASODEF S.A.S.")).toBeInTheDocument();
   });
 
-  it("Negative case (AC): shows an 'Aún no publicado' state, not an error or blank page, for a 404", async () => {
+  it("Negative case (AC): shows a controlled unavailable state, not an error or blank page, for a 404", async () => {
     const fetchMock = vi.fn(() => jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." }));
     renderLegalDocumentPage(fetchMock);
 
     expect(await screen.findByRole("heading", { level: 1, name: "Términos y condiciones" })).toBeInTheDocument();
-    expect(await screen.findByText("Aún no publicado")).toBeInTheDocument();
+    expect(await screen.findByText("Documento no disponible")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

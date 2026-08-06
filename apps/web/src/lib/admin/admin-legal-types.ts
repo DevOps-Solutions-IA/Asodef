@@ -28,7 +28,10 @@ export interface AdminLegalDocumentVersion {
   effectiveDate: string | null;
   expirationDate: string | null;
   changeSummary: string | null;
+  sourceTraceability: unknown;
   approvedByUserId: string | null;
+  approvedByName: string | null;
+  auditTrail: Array<{ action: string; previousStatus: string | null; newStatus: string | null; applied: boolean; actorName: string | null; createdAt: string }>;
   approvalDate: string | null;
   publicationDate: string | null;
   createdAt: string;

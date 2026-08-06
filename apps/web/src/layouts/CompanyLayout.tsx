@@ -55,6 +55,11 @@ export function CompanyLayout() {
           </ul>
         </nav>
         <div className="border-t border-white/10 px-3 py-3">
+          <div className="mb-3 flex flex-col gap-1 px-2 text-xs text-white/65">
+            <Link to="/legal/condiciones-portal-empresarial" className="hover:text-white hover:underline">Condiciones del portal</Link>
+            <Link to="/legal/tratamiento-de-datos" className="hover:text-white hover:underline">Tratamiento de datos</Link>
+            <Link to="/legal/politica-comunicaciones-electronicas" className="hover:text-white hover:underline">Comunicaciones</Link>
+          </div>
           <LogoutButton className="w-full justify-center text-white/70 hover:bg-white/10 hover:text-white" />
         </div>
       </aside>

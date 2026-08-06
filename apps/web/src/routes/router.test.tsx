@@ -286,7 +286,7 @@ describe("router", () => {
 
     expect(await screen.findByRole("heading", { name: "Política de privacidad" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Documentos legales" })).toBeInTheDocument();
-    expect(await screen.findByText("Aún no publicado")).toBeInTheDocument();
+    expect(await screen.findByText("Documento no disponible")).toBeInTheDocument();
   });
 
   it("redirects /pqr to /legal/pqr", async () => {
