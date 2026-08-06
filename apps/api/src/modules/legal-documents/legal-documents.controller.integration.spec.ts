@@ -109,6 +109,33 @@ describe("Legal documents endpoints (integration, real HTTP)", () => {
     expect(entry.latestVersionNumber).toBe(1);
   });
 
+  it("US-089: blocks incomplete known content with every section error and a durable no-op audit", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/admin/legal-documents")
+      .set("Cookie", admin.cookies)
+      .send({
+        type: "privacy_policy",
+        title: "Política incompleta de prueba",
+        slug: `privacy-incomplete-${randomUUID()}`,
+        draftContent: { sections: [{ heading: "Responsable y contacto", body: "Pendiente de confirmación legal" }, { heading: "", body: "" }] },
+      });
+    expect(created.status).toBe(201);
+    createdDocumentIds.push(created.body.id);
+    const versionId = created.body.versions[0].id;
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/admin/legal-documents/versions/${versionId}/submit-for-review`)
+      .set("Cookie", admin.cookies);
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe("LEGAL_CONTENT_INCOMPLETE");
+    expect(response.body.errors).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PLACEHOLDER" }), expect.objectContaining({ code: "EMPTY_HEADING" }), expect.objectContaining({ code: "EMPTY_BODY" }), expect.objectContaining({ code: "MISSING_REQUIRED_SECTION" })]));
+
+    const version = await prisma.legalDocumentVersion.findUniqueOrThrow({ where: { id: versionId } });
+    expect(version.status).toBe("DRAFT");
+    const audit = await prisma.auditLog.findFirstOrThrow({ where: { legalDocumentVersionId: versionId, action: "legal_document_version.content_validation_blocked" }, orderBy: { createdAt: "desc" } });
+    expect(audit.applied).toBe(false);
+  });
+
   describe("Example (AC): draft -> review -> approval produces exactly one APPROVED version with a full audit trail", () => {
     it("runs the full happy path", async () => {
       const document = await createDraftDocument();

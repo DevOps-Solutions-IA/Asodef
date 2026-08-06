@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "legal:publish-corrections": "ts-node src/database/publish-legal-corrections.ts",
     "prisma:studio": "prisma studio"
   },
   "prisma": {

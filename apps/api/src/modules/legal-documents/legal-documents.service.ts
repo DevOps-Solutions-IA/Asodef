@@ -5,6 +5,7 @@ import { AuditService, AuditSource } from "../audit/audit.service";
 import type { CreateLegalDocumentDto } from "./dto/create-legal-document.dto";
 import type { CreateLegalDocumentVersionDto } from "./dto/create-legal-document-version.dto";
 import type { UpdateLegalDocumentVersionDto } from "./dto/update-legal-document-version.dto";
+import { LegalContentValidationException, validateLegalContent, type LegalContentValidationIssue } from "./legal-content-validator";
 import {
   toAdminVersionResponse,
   toPublicLegalDocumentResponse,
@@ -86,6 +87,7 @@ export class LegalDocumentsService {
           status: LegalDocumentVersionStatus.DRAFT,
           draftContent: dto.draftContent as Prisma.InputJsonValue,
           changeSummary: dto.changeSummary,
+          sourceTraceability: dto.sourceTraceability as Prisma.InputJsonValue | undefined,
           effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : undefined,
           expirationDate: dto.expirationDate ? new Date(dto.expirationDate) : undefined,
         },
@@ -124,6 +126,7 @@ export class LegalDocumentsService {
         data: {
           draftContent: dto.draftContent as Prisma.InputJsonValue | undefined,
           changeSummary: dto.changeSummary,
+          sourceTraceability: dto.sourceTraceability as Prisma.InputJsonValue | undefined,
           effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : undefined,
           expirationDate: dto.expirationDate ? new Date(dto.expirationDate) : undefined,
         },
@@ -204,9 +207,15 @@ export class LegalDocumentsService {
    * was actually approved. */
   async approve(versionId: string, actorUserId: string): Promise<AdminLegalDocumentVersionResponse> {
     const outcome = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.legalDocumentVersion.findUnique({ where: { id: versionId } });
+      const existing = await tx.legalDocumentVersion.findUnique({ where: { id: versionId }, include: { legalDocument: { select: { type: true } } } });
       if (!existing) {
         throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+      }
+
+      const validationErrors = validateLegalContent(existing.draftContent, existing.legalDocument.type);
+      if (validationErrors.length > 0) {
+        await this.recordValidationBlocked(tx, existing.id, actorUserId, existing.status, LegalDocumentVersionStatus.APPROVED, validationErrors);
+        return { blocked: false as const, validationErrors };
       }
 
       const now = new Date();
@@ -247,6 +256,9 @@ export class LegalDocumentsService {
       return { blocked: false as const, version: updated };
     });
 
+    if ("validationErrors" in outcome && outcome.validationErrors) {
+      throw new LegalContentValidationException(outcome.validationErrors);
+    }
     if (outcome.blocked) {
       throw new ConflictException("Solo una versión pendiente de aprobación puede aprobarse.");
     }
@@ -259,7 +271,7 @@ export class LegalDocumentsService {
    * if any, as REPLACED - never deleted, never silently detached. */
   async publish(versionId: string, actorUserId: string): Promise<AdminLegalDocumentVersionResponse> {
     const outcome = await this.prisma.$transaction(async (tx) => {
-      const target = await tx.legalDocumentVersion.findUnique({ where: { id: versionId } });
+      const target = await tx.legalDocumentVersion.findUnique({ where: { id: versionId }, include: { legalDocument: { select: { type: true } } } });
       if (!target) {
         throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
       }
@@ -282,6 +294,12 @@ export class LegalDocumentsService {
           source: AuditSource.MANUAL,
         });
         return { blocked: true as const };
+      }
+
+      const validationErrors = validateLegalContent(target.approvedContent, target.legalDocument.type, true);
+      if (validationErrors.length > 0) {
+        await this.recordValidationBlocked(tx, target.id, actorUserId, target.status, LegalDocumentVersionStatus.PUBLISHED, validationErrors);
+        return { blocked: false as const, validationErrors };
       }
 
       const document = await tx.legalDocument.findUniqueOrThrow({ where: { id: target.legalDocumentId } });
@@ -323,9 +341,39 @@ export class LegalDocumentsService {
       return { blocked: false as const, version: published };
     });
 
+    if ("validationErrors" in outcome && outcome.validationErrors) {
+      throw new LegalContentValidationException(outcome.validationErrors);
+    }
     if (outcome.blocked) {
       throw new ConflictException("Solo una versión aprobada puede publicarse.");
     }
+    return toAdminVersionResponse(outcome.version);
+  }
+
+  /** Archives a version without deleting it or any consent/audit references. */
+  async archive(versionId: string, actorUserId: string): Promise<AdminLegalDocumentVersionResponse> {
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.legalDocumentVersion.findUnique({ where: { id: versionId } });
+      if (!existing) throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+      await tx.$queryRaw`SELECT id FROM legal_documents WHERE id = ${existing.legalDocumentId}::uuid FOR UPDATE`;
+      if (existing.status === LegalDocumentVersionStatus.ARCHIVED) return { unchanged: true as const, version: existing };
+
+      const document = await tx.legalDocument.findUniqueOrThrow({ where: { id: existing.legalDocumentId } });
+      if (document.currentVersionId === versionId) {
+        await tx.legalDocument.update({ where: { id: document.id }, data: { currentVersionId: null } });
+      }
+      const archived = await tx.legalDocumentVersion.update({ where: { id: versionId }, data: { status: LegalDocumentVersionStatus.ARCHIVED } });
+      await this.auditService.record(tx, {
+        legalDocumentVersionId: versionId,
+        actorUserId,
+        action: "legal_document_version.archived",
+        previousStatus: existing.status,
+        newStatus: LegalDocumentVersionStatus.ARCHIVED,
+        applied: true,
+        source: AuditSource.MANUAL,
+      });
+      return { unchanged: false as const, version: archived };
+    });
     return toAdminVersionResponse(outcome.version);
   }
 
@@ -350,7 +398,15 @@ export class LegalDocumentsService {
   async getDocument(documentId: string): Promise<AdminLegalDocumentResponse> {
     const document = await this.prisma.legalDocument.findUnique({
       where: { id: documentId },
-      include: { versions: { orderBy: { version: "desc" } } },
+      include: {
+        versions: {
+          orderBy: { version: "desc" },
+          include: {
+            approvedByUser: { select: { fullName: true } },
+            auditLogs: { orderBy: { createdAt: "asc" }, include: { actorUser: { select: { fullName: true } } } },
+          },
+        },
+      },
     });
     if (!document) {
       throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
@@ -422,9 +478,17 @@ export class LegalDocumentsService {
     options: { from: readonly LegalDocumentVersionStatus[]; to: LegalDocumentVersionStatus; action: string; conflictMessage: string },
   ): Promise<AdminLegalDocumentVersionResponse> {
     const outcome = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.legalDocumentVersion.findUnique({ where: { id: versionId } });
+      const existing = await tx.legalDocumentVersion.findUnique({ where: { id: versionId }, include: { legalDocument: { select: { type: true } } } });
       if (!existing) {
         throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+      }
+
+      if (options.to !== LegalDocumentVersionStatus.DRAFT) {
+        const validationErrors = validateLegalContent(existing.draftContent, existing.legalDocument.type);
+        if (validationErrors.length > 0) {
+          await this.recordValidationBlocked(tx, existing.id, actorUserId, existing.status, options.to, validationErrors);
+          return { blocked: false as const, validationErrors };
+        }
       }
 
       const result = await tx.legalDocumentVersion.updateMany({
@@ -459,9 +523,32 @@ export class LegalDocumentsService {
       return { blocked: false as const, version: updated };
     });
 
+    if ("validationErrors" in outcome && outcome.validationErrors) {
+      throw new LegalContentValidationException(outcome.validationErrors);
+    }
     if (outcome.blocked) {
       throw new ConflictException(options.conflictMessage);
     }
     return toAdminVersionResponse(outcome.version);
+  }
+
+  private async recordValidationBlocked(
+    tx: Prisma.TransactionClient,
+    versionId: string,
+    actorUserId: string,
+    previousStatus: LegalDocumentVersionStatus,
+    attemptedStatus: LegalDocumentVersionStatus,
+    validationErrors: LegalContentValidationIssue[],
+  ): Promise<void> {
+    await this.auditService.record(tx, {
+      legalDocumentVersionId: versionId,
+      actorUserId,
+      action: "legal_document_version.content_validation_blocked",
+      previousStatus,
+      newStatus: attemptedStatus,
+      applied: false,
+      source: AuditSource.MANUAL,
+      metadata: { validationErrors } as unknown as Prisma.InputJsonValue,
+    });
   }
 }

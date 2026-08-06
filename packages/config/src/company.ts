@@ -202,12 +202,11 @@ export const ASODEF_CORPORATE_FIELD_PROVENANCE: Record<string, CorporateFieldPro
     notes: null,
   },
   addressLine1: {
-    sourceType: "PUBLIC_BUSINESS_REGISTRY",
-    sourceDescription: "Recent public company-directory information",
-    verificationStatus: "PUBLIC_REGISTRY_CORROBORATED",
-    verifiedAt: null,
-    notes:
-      "Corroborated by recent public company-directory information, but not yet verified against a current Certificate of Existence and Legal Representation. Do not classify as CERTIFICATE_VERIFIED.",
+    sourceType: "CHAMBER_OF_COMMERCE_CERTIFICATE",
+    sourceDescription: "Certificado de Existencia y Representación Legal, Cámara de Comercio de Cali, verificación 08264BJBC4 (KR 40 # 5 A - 116)",
+    verificationStatus: "CHAMBER_CERTIFICATE_CONFIRMED",
+    verifiedAt: "2026-08-05",
+    notes: null,
   },
 };
 

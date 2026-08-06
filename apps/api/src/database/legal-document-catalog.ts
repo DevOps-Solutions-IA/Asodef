@@ -1,29 +1,6 @@
 import { ASODEF_COMPANY } from "@asodef/config";
 
-/**
- * US-044: initial DRAFT content for the 11 legal document types named in
- * the story's own acceptance criteria (the story title/description say
- * "10" - an internal PRD inconsistency, see project memory US-044 -
- * but the enumerated AC list has 11 items; the enumerated list is the
- * literal, testable instruction, so all 11 are seeded).
- *
- * Every section body is either a directly confirmed fact (ASODEF_COMPANY)
- * or the literal PLACEHOLDER string. No prices, guarantees, legal
- * representative, judicial notification email, retention periods, or
- * regulatory citations are invented - those are exactly the fields the
- * PRD says must stay unconfirmed until real legal review supplies them.
- *
- * Corporate-data update (2026-08-05): factual corporate fields now
- * confirmed by the ASODEF institutional dossier / corroborated public
- * business-registry sources - NIT and the registered address are now
- * filled in here (the address carries its own explicit verification
- * note, since it is corroborated but not yet Certificate-verified).
- * Still deliberately unfilled: legal representative, judicial
- * notification email - see ASODEF_PENDING_CORPORATE_FIELDS. This is a
- * content update only - no document status changes (still DRAFT,
- * still unapproved, still unpublished).
- */
-
+/** Historical marker retained only so validation can reject legacy content. */
 export const LEGAL_CONTENT_PLACEHOLDER = "Pendiente de confirmación legal";
 
 export interface LegalDocumentCatalogSection {
@@ -31,352 +8,441 @@ export interface LegalDocumentCatalogSection {
   body: string;
 }
 
+export interface LegalSourceReference {
+  source: string;
+  basis: string;
+}
+
 export interface LegalDocumentCatalogEntry {
   type: string;
   title: string;
   slug: string;
+  description: string;
+  category: "Institucional" | "Privacidad y datos" | "Uso y portales" | "Pagos" | "Atención" | "Tecnología y acceso" | "Comunicaciones";
+  sources: readonly LegalSourceReference[];
   sections: readonly LegalDocumentCatalogSection[];
 }
 
-const IDENTIFICATION_SECTION: LegalDocumentCatalogSection = {
-  heading: "Identificación de la empresa",
-  body: `${ASODEF_COMPANY.legalName}. ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, ${ASODEF_COMPANY.country}.`,
-};
+const CEC = "docs/source/asodef/CW82608264BJBC420260805114141.pdf";
+const DOS = "docs/source/asodef/Dossier_ASODEF.pdf";
+const CON = "docs/source/asodef/CamScanner 05-08-2026 11.50.pdf";
+const IMG = "docs/source/asodef/WhatsApp Image 2026-08-05 at 12.21.59 PM.jpeg";
+const APP = "Comportamiento verificado del esquema, API y frontend ASODEF";
+const CFG = "packages/config/src/company.ts";
 
-const REGISTERED_ADDRESS_SECTION: LegalDocumentCatalogSection = {
-  heading: "Domicilio registrado",
-  // US-069: verified against the Certificado de Existencia y
-  // Representación Legal (Cámara de Comercio de Cali, verificación
-  // 08264BJBC4) - no longer only PUBLIC_REGISTRY_CORROBORATED.
-  body: `${ASODEF_COMPANY.addressLine1}, ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, ${ASODEF_COMPANY.country}. Nota de verificación interna: dirección verificada mediante Certificado de Existencia y Representación Legal, código de verificación ${ASODEF_COMPANY.certificateVerificationCode}, expedido el ${ASODEF_COMPANY.certificateIssueDate}.`,
-};
-
-const CONTACT_SECTION: LegalDocumentCatalogSection = {
-  heading: "Contacto",
-  body: `Correo electrónico corporativo: ${ASODEF_COMPANY.corporateEmail}. Contacto comercial: ${ASODEF_COMPANY.commercialContact.fullName}, ${ASODEF_COMPANY.commercialContact.role} (${ASODEF_COMPANY.commercialContact.whatsappUrl}).`,
-};
-
-const VERSION_SECTION: LegalDocumentCatalogSection = {
-  heading: "Versión",
-  body: "Documento en borrador (versión 1), pendiente de revisión y aprobación legal antes de su publicación.",
-};
-
-const PLACEHOLDER = LEGAL_CONTENT_PLACEHOLDER;
+const source = (name: string, basis: string): LegalSourceReference => ({ source: name, basis });
+const section = (heading: string, body: string): LegalDocumentCatalogSection => ({ heading, body });
+const identity = section(
+  "Responsable y contacto",
+  `${ASODEF_COMPANY.legalName}, NIT ${ASODEF_COMPANY.taxId}, con domicilio en ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, Colombia. Canal de atención: ${ASODEF_COMPANY.corporateEmail}.`,
+);
+const applicability = section(
+  "Vigencia y actualización",
+  "Este documento rige desde la fecha de vigencia indicada en su versión publicada. Las modificaciones se publican como una nueva versión; el historial anterior se conserva para acreditar el texto aplicable en cada momento.",
+);
+const contact = section(
+  "Canales de atención",
+  `Las solicitudes relacionadas con este documento pueden remitirse a ${ASODEF_COMPANY.corporateEmail}. El canal comercial de WhatsApp de ASODEF es ${ASODEF_COMPANY.commercialContact.whatsappUrl}.`,
+);
 
 export const LEGAL_DOCUMENT_CATALOG: readonly LegalDocumentCatalogEntry[] = [
   {
     type: "corporate_info",
     title: "Información empresarial",
     slug: "informacion-empresarial",
+    description: "Identidad, domicilio, registro y canales oficiales de ASODEF S.A.S.",
+    category: "Institucional",
+    sources: [source(CEC, "Identidad, matrícula, domicilio, objeto, representación y vigencia"), source(DOS, "Historia, misión, visión y contacto institucional"), source(CFG, "Datos corporativos tipados")],
     sections: [
-      { heading: "Razón social", body: ASODEF_COMPANY.legalName },
-      { heading: "Ciudad y país de operación", body: `${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, ${ASODEF_COMPANY.country}.` },
-      { heading: "Correo electrónico corporativo", body: ASODEF_COMPANY.corporateEmail },
-      {
-        heading: "Contacto comercial",
-        body: `${ASODEF_COMPANY.commercialContact.fullName}, ${ASODEF_COMPANY.commercialContact.role}. WhatsApp: ${ASODEF_COMPANY.commercialContact.whatsappUrl}`,
-      },
-      // US-069: confirmed by the Certificado de Existencia y
-      // Representacion Legal (Camara de Comercio de Cali, verificacion
-      // 08264BJBC4) - no longer PLACEHOLDER.
-      {
-        heading: "Representante legal",
-        body: `Principal: ${ASODEF_COMPANY.legalRepresentativeName} (${ASODEF_COMPANY.legalRepresentativeDocument}). Suplente: ${ASODEF_COMPANY.alternateLegalRepresentative}.`,
-      },
-      {
-        heading: "Matrícula mercantil",
-        body: `${ASODEF_COMPANY.chamberOfCommerce}, matrícula ${ASODEF_COMPANY.commercialRegistrationNumber}, registrada el ${ASODEF_COMPANY.registrationDate}. Último año renovado: ${ASODEF_COMPANY.lastRenewalYear}.`,
-      },
-      { heading: "Tamaño empresarial", body: `${ASODEF_COMPANY.companySize} (clasificación DANE, Decreto 1074 de 2015 y Resolución 2225 de 2019).` },
-      REGISTERED_ADDRESS_SECTION,
-      { heading: "Identificación tributaria (NIT)", body: `NIT ${ASODEF_COMPANY.taxId}` },
-      {
-        heading: "Verificación del certificado",
-        body: `Datos verificados mediante Certificado de Existencia y Representación Legal, código de verificación ${ASODEF_COMPANY.certificateVerificationCode}, expedido el ${ASODEF_COMPANY.certificateIssueDate}.`,
-      },
+      section("Identificación", `${ASODEF_COMPANY.legalName} es una Sociedad por Acciones Simplificada identificada con NIT ${ASODEF_COMPANY.taxId}. Su domicilio principal es ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}, Colombia.`),
+      section("Registro mercantil", `La sociedad está matriculada en la ${ASODEF_COMPANY.chamberOfCommerce} bajo la matrícula ${ASODEF_COMPANY.commercialRegistrationNumber}-16 desde el 10 de septiembre de 2012. El último año renovado informado en el certificado disponible es ${ASODEF_COMPANY.lastRenewalYear}.`),
+      section("Domicilio y notificaciones", `Domicilio principal y dirección de notificación judicial registrada: ${ASODEF_COMPANY.addressLine1}, ${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.department}. Correo de notificación judicial registrado: ${ASODEF_COMPANY.judicialNotificationEmail}.`),
+      section("Actividad", `Objeto principal registrado: ${ASODEF_COMPANY.fullCorporatePurpose} La actividad principal informada corresponde al código CIIU ${ASODEF_COMPANY.economicActivityCode}. La sociedad tiene duración indefinida y no figura disuelta en el certificado consultado.`),
+      section("Representación", `Representante legal principal registrado: ${ASODEF_COMPANY.legalRepresentativeName}. La información pública se limita al nombre y calidad; los números de identificación y demás datos personales del certificado no se reproducen por minimización.`),
+      section("Información institucional", "ASODEF articula planes de previsión exequial y una red institucional de beneficios para afiliados, beneficiarios y empresas aliadas. Las cifras, beneficios, coberturas y condiciones de cada relación no constituyen una garantía general y se determinan en el documento o contrato particular aplicable."),
+      contact,
+      section("Fuente y fecha de verificación", `Datos corporativos verificados con certificado de existencia y representación legal de la Cámara de Comercio de Cali, expedido el ${ASODEF_COMPANY.certificateIssueDate}, código ${ASODEF_COMPANY.certificateVerificationCode}.`),
+      applicability,
     ],
   },
   {
     type: "privacy_policy",
     title: "Política de privacidad",
     slug: "politica-de-privacidad",
+    description: "Cómo ASODEF protege la privacidad al usar sus canales y servicios digitales.",
+    category: "Privacidad y datos",
+    sources: [source(CEC, "Identidad del responsable"), source(CON, "Categorías de datos de titulares y beneficiarios"), source(APP, "Formularios, cuentas, pagos, PQR, DSR, CRM y auditoría"), source(CFG, "Canales oficiales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Responsable del tratamiento", body: `${ASODEF_COMPANY.legalName} (${ASODEF_COMPANY.corporateEmail}).` },
-      { heading: "Datos personales recopilados", body: PLACEHOLDER },
-      { heading: "Finalidad del tratamiento", body: PLACEHOLDER },
-      { heading: "Derechos del titular", body: PLACEHOLDER },
-      { heading: "Conservación de los datos", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Alcance", "Esta política se aplica a visitantes, prospectos, titulares, afiliados, beneficiarios, contactos de empresas, usuarios de portales y personas que utilizan formularios, canales de atención, pagos o servicios administrativos de ASODEF."),
+      section("Datos que tratamos", "Según la interacción, ASODEF trata datos de identificación y contacto; datos de empresa y vínculo; información de afiliación, titulares y beneficiarios; referencias, obligaciones, órdenes, intentos, resultados y comprobantes de pago; PQR y solicitudes de titulares; contratos y aceptaciones; preferencias y evidencias de consentimiento; datos técnicos como dirección IP, agente de usuario, sesiones y eventos de auditoría."),
+      section("Finalidades", "Los datos se usan para autenticar y administrar cuentas; atender contactos, PQR y derechos de titulares; gestionar empresas, CRM, afiliaciones, beneficiarios, contratos y comunicaciones; consultar obligaciones, procesar y conciliar pagos, emitir comprobantes y tramitar reversiones o reembolsos; conservar evidencia de autorizaciones; proteger la plataforma; generar reportes y cumplir obligaciones aplicables."),
+      section("Elecciones y comunicaciones", "Las comunicaciones necesarias para una solicitud, cuenta, contrato o transacción se distinguen de las comunicaciones comerciales opcionales. Estas últimas requieren una elección separada y pueden revocarse; la supresión impide nuevos envíos comerciales sin borrar la evidencia histórica."),
+      section("Conservación", "ASODEF conserva cada categoría durante el tiempo necesario para la finalidad informada, la relación vigente, la atención de solicitudes y el cumplimiento de obligaciones legales, contables, contractuales, de seguridad y probatorias aplicables. No se publica un plazo uniforme que no haya sido verificado para todas las categorías."),
+      section("Seguridad y acceso", "El acceso se limita mediante autenticación, sesiones revocables, permisos por rol y alcance organizacional. La plataforma mantiene registros de auditoría, protección de credenciales, validación de entradas y controles para impedir acceso o modificación no autorizados."),
+      section("Derechos", "El titular puede solicitar acceso, consulta, actualización, corrección, información sobre el uso, prueba de autorización, revocación o supresión cuando proceda, presentar reclamos e informar incidentes. ASODEF puede solicitar información razonable para verificar identidad y legitimación."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "data_processing_policy",
-    title: "Tratamiento de datos",
+    title: "Política de tratamiento de datos personales",
     slug: "tratamiento-de-datos",
+    description: "Reglas de ASODEF para recolectar, usar, conservar y proteger datos personales.",
+    category: "Privacidad y datos",
+    sources: [source(CEC, "Responsable y domicilio"), source(CON, "Tratamiento real de titular, beneficiarios y firma"), source(APP, "Modelos, finalidades, consentimientos, seguridad y derechos"), source(CFG, "Canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Responsable del tratamiento", body: `${ASODEF_COMPANY.legalName} (${ASODEF_COMPANY.corporateEmail}).` },
-      { heading: "Base legal del tratamiento", body: PLACEHOLDER },
-      { heading: "Finalidades específicas", body: PLACEHOLDER },
-      { heading: "Transferencia y transmisión de datos", body: PLACEHOLDER },
-      { heading: "Medidas de seguridad", body: PLACEHOLDER },
-      { heading: "Derechos del titular y procedimiento", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Principios", "ASODEF trata datos con finalidad legítima e informada, acceso restringido, veracidad, transparencia, circulación controlada, seguridad y confidencialidad. La recolección se limita a lo razonablemente necesario para la interacción o servicio."),
+      section("Categorías y titulares", "El tratamiento puede comprender visitantes y prospectos; titulares, afiliados y beneficiarios, incluidos menores representados; clientes y contactos empresariales; usuarios autorizados; proveedores o aliados registrados; solicitantes PQR o de derechos; pagadores y partes de contratos."),
+      section("Finalidades específicas", "Las finalidades comprenden identificación y contacto; vinculación y administración de relaciones; autenticación y soporte de cuenta; gestión comercial y empresarial; contratos y aceptaciones; afiliación y beneficiarios; cartera, pagos, comprobantes, conciliación, reversión y reembolso; atención PQR y derechos; comunicaciones autorizadas; reportes, auditoría, prevención de fraude y seguridad."),
+      section("Autorización y bases aplicables", "Cuando se requiere autorización, ASODEF solicita una manifestación previa, informada y verificable, asociada a una finalidad y, cuando corresponde, a una versión exacta del documento aceptado. Los tratamientos necesarios para gestionar una solicitud, ejecutar una relación, cumplir una obligación o atender una autoridad se realizan dentro del marco aplicable y se informan de manera diferenciada."),
+      section("Encargados, transmisión y circulación", "ASODEF limita el acceso a personal y componentes que lo necesitan para la finalidad. Una eventual transmisión o circulación a un tercero debe estar asociada al servicio aplicable, contar con controles y respetar esta política. Este texto no identifica proveedores ni países que no están confirmados, ni declara transferencias internacionales concretas."),
+      section("Datos sensibles y menores", "Las respuestas sobre datos sensibles son facultativas salvo una habilitación legal o necesidad claramente informada. El tratamiento de menores atiende su interés superior, respeta sus derechos y exige intervención del representante cuando corresponda."),
+      section("Conservación, supresión y evidencia", "Los datos se mantienen por la necesidad de la finalidad y las obligaciones aplicables. La supresión no procede respecto de información cuya conservación sea necesaria para obligaciones, seguridad, defensa de derechos o evidencia; cuando procede, se restringe o elimina de forma controlada. Las autorizaciones y su revocación se conservan como evidencia."),
+      section("Consultas y reclamos", `El titular puede usar el formulario de solicitudes de datos o escribir a ${ASODEF_COMPANY.corporateEmail}. Debe identificar su solicitud, aportar datos de contacto, describir los hechos y, cuando corresponda, acreditar representación. ASODEF registra una referencia, verifica identidad, gestiona estados y comunica el resultado.`),
+      contact,
+      applicability,
     ],
   },
   {
     type: "privacy_notice",
     title: "Aviso de privacidad",
     slug: "aviso-de-privacidad",
+    description: "Resumen del tratamiento y de los mecanismos para ejercer derechos.",
+    category: "Privacidad y datos",
+    sources: [source(CEC, "Responsable"), source(APP, "Puntos de captura y derechos"), source(CFG, "Canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Finalidad del aviso", body: PLACEHOLDER },
-      { heading: "Datos tratados", body: PLACEHOLDER },
-      { heading: "Mecanismos para ejercer derechos", body: PLACEHOLDER },
-      { heading: "Cambios al aviso de privacidad", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Tratamiento informado", "ASODEF recolecta los datos que la persona entrega en formularios, cuentas, pagos, PQR, solicitudes de datos, contratos, portales y comunicaciones, además de evidencia técnica necesaria para seguridad, consentimiento y auditoría."),
+      section("Finalidades principales", "La información permite responder solicitudes, administrar relaciones y cuentas, prestar funcionalidades, gestionar pagos y comprobantes, atender PQR y derechos, gestionar contratos y empresas, enviar comunicaciones necesarias u opcionales autorizadas y proteger la plataforma."),
+      section("Datos sensibles y de menores", "No es obligatorio responder preguntas sobre datos sensibles salvo habilitación o necesidad informada. Cuando se reportan menores o beneficiarios, quien suministra los datos debe estar legitimado y ASODEF aplica un tratamiento reforzado y orientado al interés superior."),
+      section("Derechos y política completa", "La persona puede conocer, actualizar y rectificar sus datos, solicitar prueba de autorización e información del uso, formular consultas o reclamos y pedir revocación o supresión cuando proceda. El detalle está en la Política de tratamiento de datos personales publicada en este Centro Legal."),
+      contact,
+      applicability,
     ],
   },
-  {
-    type: "terms_and_conditions",
-    title: "Términos y condiciones",
-    slug: "terminos-y-condiciones",
-    // US-044 AC[0]'s own literal topic list for this document, in order.
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Definiciones", body: PLACEHOLDER },
-      { heading: "Elegibilidad", body: PLACEHOLDER },
-      { heading: "Precios, impuestos y pagos", body: PLACEHOLDER },
-      { heading: "Reembolsos y reversiones", body: PLACEHOLDER },
-      { heading: "Cancelaciones", body: PLACEHOLDER },
-      { heading: "Renovaciones", body: PLACEHOLDER },
-      { heading: "Propiedad intelectual", body: PLACEHOLDER },
-      { heading: "Responsabilidad", body: PLACEHOLDER },
-      { heading: "Ley aplicable", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "payment_terms",
-    title: "Términos de pago",
-    slug: "terminos-de-pago",
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Métodos de pago aceptados", body: PLACEHOLDER },
-      { heading: "Moneda y precios", body: PLACEHOLDER },
-      { heading: "Procesamiento de pagos", body: PLACEHOLDER },
-      { heading: "Facturación", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "refund_policy",
-    title: "Reversiones y reembolsos",
-    slug: "reversiones-y-reembolsos",
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Condiciones para reversión", body: PLACEHOLDER },
-      { heading: "Condiciones para reembolso", body: PLACEHOLDER },
-      { heading: "Plazos de procesamiento", body: PLACEHOLDER },
-      { heading: "Procedimiento de solicitud", body: `Solicitudes vía ${ASODEF_COMPANY.corporateEmail}.` },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "cookie_policy",
-    title: "Política de cookies",
-    slug: "politica-de-cookies",
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Tipos de cookies utilizadas", body: PLACEHOLDER },
-      { heading: "Finalidad de las cookies", body: PLACEHOLDER },
-      { heading: "Gestión y preferencias de cookies", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "pqr",
-    title: "PQR",
-    slug: "pqr",
-    sections: [
-      IDENTIFICATION_SECTION,
-      {
-        heading: "Canal de radicación",
-        body: `Correo electrónico: ${ASODEF_COMPANY.corporateEmail}. WhatsApp: ${ASODEF_COMPANY.commercialContact.whatsappUrl}.`,
-      },
-      { heading: "Tiempos de respuesta", body: PLACEHOLDER },
-      { heading: "Procedimiento interno", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "security",
-    title: "Seguridad",
-    slug: "seguridad",
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Medidas de seguridad implementadas", body: PLACEHOLDER },
-      { heading: "Reporte de incidentes de seguridad", body: PLACEHOLDER },
-      { heading: "Canal de contacto para reportes", body: ASODEF_COMPANY.corporateEmail },
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "accessibility",
-    title: "Accesibilidad",
-    slug: "accesibilidad",
-    sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Compromiso de accesibilidad", body: PLACEHOLDER },
-      { heading: "Estándares seguidos", body: PLACEHOLDER },
-      { heading: "Canal de contacto para reportar barreras de accesibilidad", body: ASODEF_COMPANY.corporateEmail },
-      VERSION_SECTION,
-    ],
-  },
-  // US-068: 10 additional document types, closing the gap between the
-  // 22 types the PRD extension enumerates and the 11 originally seeded
-  // by US-044. Same discipline as above: confirmed facts inserted
-  // literally, everything else PLACEHOLDER - never fabricated.
   {
     type: "general_data_authorization",
     title: "Autorización general de tratamiento",
     slug: "autorizacion-general-de-tratamiento",
+    description: "Texto de autorización informada para las finalidades operativas de ASODEF.",
+    category: "Privacidad y datos",
+    sources: [source(CON, "Categorías de datos y relaciones de afiliación"), source(APP, "Finalidades y evidencia de consentimiento"), source(CFG, "Responsable y canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Alcance de la autorización", body: PLACEHOLDER },
-      { heading: "Datos autorizados a tratar", body: PLACEHOLDER },
-      { heading: "Vigencia de la autorización", body: PLACEHOLDER },
-      { heading: "Mecanismo de revocación", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Manifestación", "Al seleccionar la casilla o mecanismo de aceptación correspondiente, el titular autoriza de manera previa, informada y verificable a ASODEF para tratar los datos suministrados dentro de las finalidades descritas en este documento y en la Política de tratamiento de datos personales."),
+      section("Datos comprendidos", "La autorización puede comprender identificación, contacto, relación con ASODEF o una empresa, afiliación y beneficiarios, solicitudes, contratos, obligaciones y pagos, comunicaciones y evidencia técnica de la interacción. Los datos sensibles y de menores se rigen por textos y elecciones reforzadas cuando resulten aplicables."),
+      section("Finalidades autorizadas", "Registrar y atender la solicitud; crear y administrar la relación, cuenta o acceso; gestionar afiliaciones, beneficiarios, empresas, CRM y contratos; consultar y gestionar obligaciones, pagos, recibos, conciliaciones, reversiones y reembolsos; atender PQR y derechos; mantener evidencia, seguridad y auditoría; y enviar comunicaciones necesarias. El marketing opcional no se presume incluido."),
+      section("Carácter facultativo", "La entrega de datos no necesarios y la autorización para comunicaciones comerciales son facultativas. No autorizar una finalidad opcional no impide recibir comunicaciones transaccionales o de servicio necesarias para una relación vigente."),
+      section("Vigencia y conservación", "La autorización opera mientras subsistan las finalidades y obligaciones aplicables. La revocación no tiene efectos retroactivos ni obliga a eliminar evidencia u otra información que deba conservarse por una obligación, seguridad o defensa de derechos."),
+      section("Revocación y derechos", "El titular puede presentar una solicitud de revocación, supresión, acceso, consulta, actualización, corrección, prueba de autorización o información sobre el uso mediante el formulario de solicitudes de datos o los canales oficiales. ASODEF verifica identidad y comunica el resultado."),
+      section("Evidencia", "La plataforma registra la finalidad, resultado, fecha, canal, método de aceptación, versión legal aplicable y, cuando está disponible, dirección IP y agente de usuario. Los registros anteriores se preservan para demostrar la secuencia de otorgamiento, sustitución o revocación."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "whatsapp_consent",
     title: "Consentimiento para WhatsApp",
     slug: "consentimiento-whatsapp",
+    description: "Elección voluntaria para recibir comunicaciones de ASODEF por WhatsApp.",
+    category: "Comunicaciones",
+    sources: [source(DOS, "Canal comercial"), source(IMG, "Uso institucional del canal"), source(APP, "Consentimientos, supresión y revocación"), source(CFG, "Número oficial")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Canal", body: `WhatsApp comercial: ${ASODEF_COMPANY.commercialContact.whatsappUrl}.` },
-      { heading: "Finalidad de los mensajes por WhatsApp", body: PLACEHOLDER },
-      { heading: "Cómo revocar este consentimiento", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Canal autorizado", `El titular autoriza el uso del número que suministre para comunicaciones mediante WhatsApp relacionadas con ASODEF. El canal comercial institucional identificado es ${ASODEF_COMPANY.commercialContact.whatsappUrl}; la aceptación no implica que todos los mensajes se originen necesariamente desde una única línea.`),
+      section("Finalidades", "El canal puede utilizarse para responder solicitudes, enviar información de servicio o transaccional y, solo cuando exista consentimiento comercial vigente, compartir novedades, beneficios o invitaciones. Cada comunicación debe corresponder a la finalidad registrada."),
+      section("Voluntariedad y cuidados", "La autorización para mensajes comerciales por WhatsApp es opcional. El titular debe mantener actualizado su número y proteger el acceso a su dispositivo. No debe enviar contraseñas ni información innecesaria por este canal."),
+      section("Revocación y supresión", "El consentimiento comercial puede revocarse desde Mis consentimientos o por los canales oficiales. La plataforma registra la revocación y suprime nuevos envíos comerciales; los mensajes necesarios para una solicitud o transacción no se confunden con marketing."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "email_consent",
     title: "Consentimiento para correo electrónico",
     slug: "consentimiento-correo-electronico",
+    description: "Elección y reglas para comunicaciones enviadas al correo indicado.",
+    category: "Comunicaciones",
+    sources: [source(APP, "Comunicaciones, plantillas y consentimientos"), source(CFG, "Correo corporativo")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Canal", body: `Correo electrónico corporativo: ${ASODEF_COMPANY.corporateEmail}.` },
-      { heading: "Finalidad de los correos electrónicos", body: PLACEHOLDER },
-      { heading: "Cómo revocar este consentimiento", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Canal y alcance", "El titular autoriza el uso del correo electrónico suministrado para responder solicitudes y remitir comunicaciones relacionadas con su interacción. Los mensajes comerciales requieren una elección opcional separada cuando corresponda."),
+      section("Mensajes de servicio", "Pueden enviarse confirmaciones, referencias, resultados, comprobantes, recuperación o seguridad de cuenta, avances de PQR o solicitudes y comunicaciones vinculadas a contratos o trámites. Su envío depende del evento real registrado en la plataforma."),
+      section("Mensajes comerciales", "Novedades, invitaciones, beneficios y campañas solo se envían cuando existe consentimiento comercial vigente y no hay una supresión aplicable. La plataforma distingue plantillas transaccionales y de marketing."),
+      section("Revocación y actualización", "El titular puede revocar los mensajes comerciales o actualizar su dirección mediante Mis consentimientos o los canales oficiales. La revocación se registra sin borrar la evidencia anterior y no bloquea mensajes necesarios para gestionar una solicitud o relación."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "commercial_communications_consent",
     title: "Consentimiento de comunicaciones comerciales",
     slug: "consentimiento-comunicaciones-comerciales",
+    description: "Autorización opcional para novedades, beneficios y campañas de ASODEF.",
+    category: "Comunicaciones",
+    sources: [source(DOS, "Portafolio y alianzas"), source(IMG, "Comunicación promocional"), source(APP, "Marketing, supresión y revocación"), source(CFG, "Canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Tipos de comunicaciones comerciales", body: PLACEHOLDER },
-      { heading: "Independencia de mensajes transaccionales", body: PLACEHOLDER },
-      { heading: "Cómo revocar este consentimiento", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Autorización opcional", "Al aceptar esta finalidad, el titular autoriza a ASODEF a enviar información comercial sobre novedades institucionales, beneficios, campañas, invitaciones, alianzas o servicios por los canales para los que exista información de contacto y autorización aplicable."),
+      section("Separación de finalidades", "Esta autorización es independiente del tratamiento necesario para atender una solicitud, administrar una cuenta, ejecutar un contrato, informar sobre un pago o responder una PQR. Negarla o revocarla no cancela por sí sola una relación ni impide mensajes transaccionales."),
+      section("Segmentación responsable", "La plataforma puede usar información de relación o preferencias para seleccionar destinatarios dentro de la finalidad autorizada. No se presume autorización para datos sensibles ni se incorporan destinatarios suprimidos."),
+      section("Revocación y supresión", "El titular puede revocar desde Mis consentimientos o solicitarlo por los canales oficiales. Una revocación vigente bloquea nuevos envíos de marketing y queda registrada con fecha, canal y evidencia, conservando el historial anterior."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "sensitive_data_processing",
     title: "Tratamiento de datos sensibles",
     slug: "tratamiento-datos-sensibles",
+    description: "Protección reforzada y carácter facultativo de la información sensible.",
+    category: "Privacidad y datos",
+    sources: [source(CON, "Contexto de afiliación y posibles datos de salud/familia"), source(APP, "Controles de acceso, formularios y auditoría"), source(CFG, "Responsable")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Categorías de datos sensibles tratadas", body: PLACEHOLDER },
-      { heading: "Carácter facultativo de las respuestas", body: PLACEHOLDER },
-      { heading: "Medidas de seguridad reforzadas", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Alcance", "ASODEF evita solicitar datos sensibles que no sean necesarios. En contextos de afiliación, beneficiarios, PQR, derechos o atención, una persona podría entregar información de salud, biométrica, familiar u otra que afecte su intimidad; su tratamiento exige finalidad clara y protección reforzada."),
+      section("Carácter facultativo", "El titular no está obligado a responder preguntas sobre datos sensibles salvo que exista una habilitación legal o que la información sea necesaria para una finalidad específica previamente explicada. La negativa frente a una finalidad opcional no autoriza a inferir información."),
+      section("Finalidad y minimización", "Solo se utiliza la información sensible que resulte pertinente para verificar o gestionar la solicitud, afiliación, beneficiario, relación o derecho correspondiente. El acceso se restringe a roles y personal que requieren conocerla."),
+      section("Seguridad reforzada", "La plataforma aplica autenticación, permisos, sesiones revocables, auditoría, validación y minimización de respuestas. Los datos sensibles no deben incorporarse en campos abiertos, exportaciones o comunicaciones cuando no sean necesarios."),
+      section("Derechos", "El titular puede pedir información sobre el uso, actualización, corrección, revocación o supresión cuando proceda. ASODEF puede requerir verificación de identidad antes de revelar o modificar información sensible."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "minors_beneficiaries_processing",
     title: "Tratamiento de datos de menores y beneficiarios",
     slug: "tratamiento-menores-y-beneficiarios",
+    description: "Reglas para reportar y proteger información de beneficiarios y menores.",
+    category: "Privacidad y datos",
+    sources: [source(CON, "Campos reales de grupo familiar y beneficiarios"), source(APP, "Modelos de cliente/beneficiario y derechos"), source(CFG, "Responsable")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Alcance frente a menores y beneficiarios reportados", body: PLACEHOLDER },
-      { heading: "Consentimiento del representante legal del menor", body: PLACEHOLDER },
-      { heading: "Interés superior del menor", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Finalidad", "Los datos de beneficiarios se tratan para registrar y administrar el vínculo reportado, identificar a las personas relacionadas con una afiliación o contrato, atender novedades y permitir la gestión de los servicios o derechos que correspondan según el instrumento particular."),
+      section("Legitimación de quien reporta", "Quien suministra datos de un beneficiario declara que cuenta con autorización o legitimación para hacerlo. Cuando se trata de un menor, debe actuar su representante legal o una persona habilitada y suministrar únicamente información pertinente."),
+      section("Interés superior", "Toda decisión sobre datos de menores prioriza su interés superior, el respeto de sus derechos y la escucha de su opinión cuando resulte procedente según su madurez. No se utiliza su información para marketing dirigido por el solo hecho de ser beneficiario."),
+      section("Minimización y acceso", "Se limitan las categorías a identificación, parentesco o vínculo, fecha de nacimiento, contacto cuando aplique y la información necesaria para la gestión. El acceso se restringe por rol y alcance; las consultas públicas no exponen listas de beneficiarios."),
+      section("Actualización y derechos", "El titular o representante puede solicitar corrección, actualización, acceso o supresión cuando proceda. ASODEF verifica identidad, representación y el efecto sobre obligaciones o evidencia antes de ejecutar la solicitud."),
+      contact,
+      applicability,
     ],
   },
   {
-    type: "data_subject_request_procedure",
-    title: "Procedimiento de consultas y reclamos de titulares",
-    slug: "procedimiento-consultas-y-reclamos",
+    type: "terms_and_conditions",
+    title: "Términos y condiciones de uso",
+    slug: "terminos-y-condiciones",
+    description: "Reglas generales para acceder y utilizar la plataforma digital ASODEF.",
+    category: "Uso y portales",
+    sources: [source(CEC, "Identidad y objeto"), source(APP, "Autenticación, módulos, pagos, portales, contratos y auditoría"), source(CFG, "Canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Canal de radicación de consultas y reclamos", body: ASODEF_COMPANY.corporateEmail },
-      { heading: "Requisitos de la solicitud", body: PLACEHOLDER },
-      { heading: "Términos legales de respuesta", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
-    ],
-  },
-  {
-    type: "electronic_communications_policy",
-    title: "Política de comunicaciones electrónicas",
-    slug: "politica-comunicaciones-electronicas",
-    sections: [
-      IDENTIFICATION_SECTION,
-      {
-        heading: "Notificación judicial electrónica",
-        body: `${ASODEF_COMPANY.legalName} autorizó recibir notificaciones judiciales por correo electrónico, conforme al Artículo 291 del Código General del Proceso y al Artículo 67 del Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA), según consta en su Certificado de Existencia y Representación Legal (código de verificación ${ASODEF_COMPANY.certificateVerificationCode}). Correo de notificación judicial: ${ASODEF_COMPANY.judicialNotificationEmail}.`,
-      },
-      { heading: "Otras comunicaciones electrónicas", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Aceptación y alcance", "El acceso o uso de la plataforma implica respetar estos términos y los documentos específicos vinculados al formulario, portal, contrato o transacción. Cuando se solicita aceptación expresa, la plataforma conserva la versión, fecha, canal y evidencia aplicables."),
+      section("Cuentas y seguridad", "La persona debe suministrar información veraz, custodiar sus credenciales, usar únicamente su cuenta y notificar accesos no reconocidos. ASODEF puede revocar sesiones, aplicar bloqueos de seguridad y limitar funciones según rol, organización y estado de la cuenta."),
+      section("Uso permitido", "La plataforma puede utilizarse para información institucional, contacto, pagos, comprobantes, cuenta, portales, PQR, solicitudes de datos y funciones administrativas autorizadas. Está prohibido suplantar, intentar acceso ajeno, alterar evidencia, automatizar abusivamente, introducir código dañino o usar datos fuera de la finalidad autorizada."),
+      section("Información y operaciones", "La información mostrada depende de registros disponibles y permisos. Una referencia o estado no sustituye el contrato, comprobante o decisión aplicable. El usuario debe revisar datos, valor, concepto y condiciones antes de aceptar una operación y reportar inconsistencias por los canales oficiales."),
+      section("Precios, impuestos y pagos", "No existe en estos términos un precio o medio universal. Para cada transacción rigen el valor, concepto, moneda, impuestos, medios disponibles y demás condiciones mostradas y aceptadas en el flujo específico. El entorno local o de prueba no constituye habilitación de pagos productivos."),
+      section("Cancelaciones, renovaciones y cobertura", "Las reglas de cancelación, renovación, permanencia, cobertura, exclusiones o garantías dependen del contrato, plan o condición particular aplicable. La plataforma no crea ni amplía esos derechos por mostrar información o habilitar una gestión."),
+      section("Reversiones y reembolsos", "Las solicitudes se tramitan con la política publicada y la regla legal o particular aplicable. La radicación no equivale a aprobación; ASODEF valida identidad, transacción, estado, soportes y resultado antes de actualizar registros."),
+      section("Propiedad intelectual", "El software, diseño, contenidos y signos distintivos de ASODEF o de sus legítimos titulares están protegidos. Se autoriza el uso personal o funcional del portal, no su reproducción, extracción masiva, modificación o explotación no autorizada."),
+      section("Disponibilidad y responsabilidad", "ASODEF aplica controles razonables y comunica estados reales, pero una funcionalidad puede estar temporalmente limitada por mantenimiento, seguridad o dependencias. Nada en estos términos excluye responsabilidades inderogables ni constituye una garantía de servicio, resultado o cobertura no soportada."),
+      section("Ley y solución de solicitudes", "Estos términos se interpretan conforme al ordenamiento colombiano. Antes de escalar una diferencia, la persona puede usar los canales PQR o de datos según la materia, sin limitar los mecanismos que la ley le reconozca."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "business_portal_terms",
     title: "Condiciones del portal empresarial",
     slug: "condiciones-portal-empresarial",
+    description: "Acceso y responsabilidades de empresas y usuarios autorizados.",
+    category: "Uso y portales",
+    sources: [source(DOS, "Relación con empresas aliadas"), source(APP, "Portal, organización, RBAC, contratos, pagos y reportes"), source(CFG, "Identidad")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Acceso y elegibilidad", body: PLACEHOLDER },
-      { heading: "Uso permitido del portal empresarial", body: PLACEHOLDER },
-      { heading: "Responsabilidades de la empresa aliada", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Acceso empresarial", "El portal está destinado a empresas registradas y a usuarios vinculados con permisos vigentes. Cada usuario debe actuar dentro de la organización y rol asignados; el acceso a una empresa no habilita consultar ni modificar información de otra."),
+      section("Administración y exactitud", "La empresa debe mantener actualizados sus datos, contactos y usuarios autorizados, revisar la información registrada y comunicar cambios de representación o accesos. La creación o modificación de datos queda sujeta a validación, permisos y auditoría."),
+      section("Funciones", "Según permisos, el portal permite consultar y gestionar información empresarial, contratos, afiliados o relaciones vinculadas, pagos, comunicaciones, reportes y documentos. La visibilidad de una función no reemplaza las condiciones del contrato o servicio aplicable."),
+      section("Datos personales", "La empresa y sus usuarios deben usar datos de afiliados, beneficiarios y contactos exclusivamente para finalidades autorizadas, respetar solicitudes y medidas de seguridad, y evitar exportar, compartir o reutilizar información sin legitimación."),
+      section("Aceptaciones y comunicaciones", "Las aceptaciones electrónicas registran actor, versión, fecha y evidencia disponible. Las comunicaciones comerciales requieren consentimiento y respetan supresión/revocación; las operativas se limitan a la relación o gestión correspondiente."),
+      section("Seguridad y suspensión", "Las credenciales son individuales. ASODEF puede revocar sesiones o limitar accesos ante riesgo, terminación de vínculo, instrucciones de la empresa o incumplimiento, conservando la evidencia que deba permanecer."),
+      section("Condiciones particulares", "Precios, vigencia, renovación, alcance, niveles de servicio, cobertura, exclusiones y terminación se rigen por el contrato o condición particular aceptada, no por este documento general."),
+      contact,
+      applicability,
     ],
   },
   {
     type: "affiliate_portal_terms",
     title: "Condiciones del portal de usuario o afiliado",
     slug: "condiciones-portal-afiliado",
+    description: "Reglas de cuenta, consulta, pagos y consentimientos para afiliados.",
+    category: "Uso y portales",
+    sources: [source(DOS, "Afiliados, beneficiarios y beneficios"), source(CON, "Contexto de titular y beneficiarios"), source(APP, "Cuenta, pagos, recibos y consentimientos"), source(CFG, "Canales")],
     sections: [
-      IDENTIFICATION_SECTION,
-      { heading: "Acceso y elegibilidad", body: PLACEHOLDER },
-      { heading: "Uso permitido del portal de afiliado", body: PLACEHOLDER },
-      { heading: "Responsabilidades del afiliado", body: PLACEHOLDER },
-      CONTACT_SECTION,
-      VERSION_SECTION,
+      identity,
+      section("Cuenta personal", "El portal permite a una persona autenticada acceder a información propia habilitada, consultar gestiones y administrar consentimientos. La cuenta es personal; no debe compartirse ni utilizarse para consultar información de terceros sin representación válida."),
+      section("Información de afiliación y beneficiarios", "Los datos mostrados reflejan los registros disponibles. La inclusión de un beneficiario o una referencia de afiliación no amplía coberturas ni sustituye el contrato particular. Las novedades deben solicitarse por los mecanismos habilitados y pueden requerir verificación."),
+      section("Pagos y comprobantes", "El usuario puede consultar obligaciones o referencias, revisar una orden, aceptar las condiciones mostradas, conocer el resultado y obtener comprobante cuando el pago esté verificado como aprobado. Un intento o estado pendiente no equivale a pago aprobado."),
+      section("Consentimientos", "Mis consentimientos muestra evidencia asociada a la cuenta y permite revocar finalidades comerciales habilitadas. Los términos o tratamientos necesarios no se revocan mediante un botón comercial; los derechos de datos se ejercen mediante el procedimiento correspondiente."),
+      section("Deberes", "El usuario debe suministrar información veraz, revisar valores y referencias, custodiar credenciales y reportar errores o accesos no reconocidos. No debe manipular estados, compartir comprobantes alterados ni intentar eludir controles."),
+      section("Condiciones particulares", "Planes, precios, periodicidad, cobertura, exclusiones, renovaciones, cancelaciones y garantías son las del contrato o transacción aplicable. Este portal facilita consulta y gestión, pero no modifica esas condiciones."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "payment_terms",
+    title: "Términos de pago",
+    slug: "terminos-de-pago",
+    description: "Condiciones del flujo de consulta, orden, resultado y comprobante de pago.",
+    category: "Pagos",
+    sources: [source(APP, "Obligaciones, órdenes, intentos, transacciones, eventos, recibos y conciliación"), source(CFG, "Responsable y canales")],
+    sections: [
+      identity,
+      section("Consulta y orden", "El Centro de Pagos permite localizar una obligación mediante los criterios habilitados o una referencia. Antes de continuar, la persona debe revisar titular o referencia, concepto, valor y estado. La creación de una orden genera una referencia pública y evidencia del flujo."),
+      section("Valor, moneda y medios", "Rigen exclusivamente el valor, moneda, impuestos y medios que se muestren para la obligación y se acepten en la transacción específica. Este documento no anuncia precios ni medios de pago generales y el modo local de prueba no identifica al proveedor final de producción."),
+      section("Procesamiento", "Una orden puede registrar intentos, eventos y transacciones con estados aprobada, pendiente, rechazada, fallida o expirada. ASODEF presenta el estado recibido o conciliado; una pantalla de envío o un intento creado no equivalen por sí solos a aprobación."),
+      section("Comprobante", "El comprobante ASODEF se habilita únicamente cuando la orden está verificada como aprobada. Incluye la referencia pública y datos pertinentes de la transacción; no debe alterarse. La entidad financiera o medio aplicable puede emitir soportes adicionales."),
+      section("Conciliación y correcciones", "ASODEF puede contrastar órdenes, transacciones y eventos para identificar diferencias y resolverlas mediante conciliación auditada. Una corrección de estado conserva la secuencia anterior y no elimina evidencia."),
+      section("Datos y aceptación", "El pago está sujeto a la Política de tratamiento de datos, a estos términos y a las condiciones mostradas. Cuando se crea la orden, la plataforma registra la versión exacta aceptada y evidencia técnica disponible."),
+      section("Reversiones y reembolsos", "Una solicitud posterior se tramita conforme a la política publicada, la ley y la condición particular aplicable. La radicación no garantiza aprobación ni un plazo voluntario no informado."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "refund_policy",
+    title: "Reversiones, devoluciones y reembolsos",
+    slug: "reversiones-y-reembolsos",
+    description: "Cómo solicitar y seguir una reversión o reembolso asociado a un pago.",
+    category: "Pagos",
+    sources: [source(APP, "Refunds, payments, transiciones y conciliación"), source(CFG, "Canales")],
+    sections: [
+      identity,
+      section("Alcance y conceptos", "Esta política orienta solicitudes asociadas a pagos registrados en ASODEF. Una reversión busca deshacer una operación cuando sea jurídicamente procedente; un reembolso corresponde a la devolución aprobada de recursos. La denominación final depende de la causa, medio y condición aplicable."),
+      section("Radicación", "La persona debe indicar referencia de pago u orden, identificación y contacto, motivo, valor cuestionado y soportes disponibles. No debe enviar claves ni datos completos de instrumentos de pago. ASODEF registra la solicitud y puede pedir verificación adicional."),
+      section("Validación", "ASODEF revisa identidad o legitimación, existencia y estado de la transacción, duplicidad, concepto, soportes, conciliación y regla aplicable. Puede requerir información adicional o rechazar con razón cuando no exista pago aprobado, no haya legitimación o la solicitud no corresponda."),
+      section("Estados y decisión", "El módulo conserva estados, notas, actor y evidencia del análisis. La solicitud presentada no equivale a aprobación. Una decisión aprobada se procesa y concilia; una decisión negativa se comunica con su razón y conserva el historial."),
+      section("Plazos y medios", "El tiempo y medio efectivo dependen de la verificación, la regla legal, la condición de la transacción y la operación del medio aplicable. ASODEF no publica aquí un plazo voluntario uniforme ni una garantía que no esté confirmada; informará el estado real del caso."),
+      section("Protección y auditoría", "Los accesos administrativos requieren permisos, las transiciones quedan auditadas y las referencias públicas evitan exponer identificadores internos. Los soportes se usan solo para gestionar y acreditar el caso."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "pqr",
+    title: "Política y procedimiento de PQR",
+    slug: "pqr",
+    description: "Radicación, seguimiento y gestión de peticiones, quejas, reclamos y sugerencias.",
+    category: "Atención",
+    sources: [source(APP, "Formulario, referencia, estados, asignación, SLA y auditoría PQR"), source(CFG, "Canales")],
+    sections: [
+      identity,
+      section("Tipos de caso", "La persona puede presentar peticiones, quejas, reclamos o sugerencias mediante el formulario público. Debe elegir la categoría que mejor describa el asunto; ASODEF puede reclasificar internamente sin perder la solicitud original."),
+      section("Información para radicar", "Se solicita nombre, documento, correo, tipo y descripción suficiente. La persona debe evitar datos sensibles innecesarios. Al enviar, acepta el tratamiento necesario para registrar, verificar, atender y comunicar la respuesta."),
+      section("Referencia y seguimiento", "La plataforma genera un número o referencia pública para consultar el estado sin exponer el identificador interno. El solicitante debe conservarla y mantener disponible el correo indicado para requerimientos o respuesta."),
+      section("Gestión interna", "El personal autorizado puede asignar responsable, registrar prioridad y fecha objetivo, cambiar estados, solicitar información y documentar resolución. Las acciones quedan auditadas con actor y fecha."),
+      section("Respuesta", "ASODEF atiende cada caso dentro del término legal o contractual que resulte aplicable a su naturaleza. Si requiere información, validación o coordinación adicional, el estado lo reflejará. No se promete un término único para categorías jurídicamente diferentes."),
+      section("Relación con otros procedimientos", "Las solicitudes sobre datos personales siguen además el procedimiento de consultas y reclamos de titulares. Las reversiones o reembolsos se evalúan con su política específica; presentar una PQR no altera automáticamente el estado de un pago o contrato."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "data_subject_request_procedure",
+    title: "Procedimiento de consultas y reclamos de titulares",
+    slug: "procedimiento-consultas-y-reclamos",
+    description: "Canal y etapas para ejercer derechos sobre datos personales.",
+    category: "Atención",
+    sources: [source(APP, "11 tipos de solicitud, referencia, identidad, estados y auditoría"), source(CFG, "Responsable y canales")],
+    sections: [
+      identity,
+      section("Solicitudes disponibles", "El formulario permite acceso, consulta, actualización, corrección, eliminación, revocación, prueba de autorización, información sobre uso, reclamo, verificación de identidad y reporte de incidente. La procedencia se determina según el derecho y las obligaciones aplicables."),
+      section("Requisitos", "La solicitud debe identificar al titular, aportar correo y documento, indicar el derecho ejercido y describir con claridad los datos o hechos. Si actúa un tercero, ASODEF puede pedir acreditación de representación; si faltan elementos, puede solicitar su complemento."),
+      section("Radicación y referencia", "Al enviar, la plataforma registra una referencia pública y estado RECEIVED. La consulta del estado utiliza esa referencia y no revela el identificador interno del caso."),
+      section("Verificación y trámite", "ASODEF puede pasar el caso por verificación de identidad, revisión, solicitud de información, resolución o cierre. Solo personal autorizado accede al expediente y cada transición queda registrada."),
+      section("Consultas y reclamos", "Una consulta busca conocer datos o su uso. Un reclamo permite solicitar corrección, actualización, supresión o exponer un posible incumplimiento. ASODEF responde dentro del término aplicable al tipo y circunstancias, sin inventar un plazo interno uniforme."),
+      section("Decisión y conservación", "La respuesta puede resolver, requerir información o negar con razón cuando exista una obligación o impedimento aplicable. La supresión o revocación no borra evidencia que deba conservarse para demostrar autorizaciones, atender obligaciones, seguridad o defensa de derechos."),
+      section("Escalamiento", "El uso de este procedimiento no limita la posibilidad de acudir a la autoridad competente una vez cumplidos los presupuestos que exija el ordenamiento aplicable."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "cookie_policy",
+    title: "Política de cookies",
+    slug: "politica-de-cookies",
+    description: "Cookies esenciales y preferencias realmente utilizadas por la plataforma.",
+    category: "Tecnología y acceso",
+    sources: [source(APP, "Cookies httpOnly de sesión, preferencias y banner"), source(CFG, "Responsable")],
+    sections: [
+      identity,
+      section("Qué son", "Las cookies son pequeños datos que el navegador conserva o envía para mantener una interacción. Tecnologías equivalentes pueden guardar una preferencia local. Esta política describe únicamente usos observados en la plataforma ASODEF."),
+      section("Cookies esenciales", "La autenticación utiliza cookies de acceso y renovación protegidas con atributos httpOnly y SameSite, y configuración secure en el entorno que corresponde. Son necesarias para iniciar, mantener y revocar sesiones y no se usan como publicidad."),
+      section("Preferencias", "El centro de preferencias registra la elección de categorías y su evidencia. La preferencia permite recordar la decisión y puede actualizarse. Rechazar categorías opcionales no desactiva cookies estrictamente necesarias para seguridad o sesión."),
+      section("Analítica y publicidad", "La plataforma no declara cookies de analítica, publicidad comportamental ni rastreadores externos que no estén implementados. Si en el futuro se incorpora una categoría opcional, deberá informarse y solicitarse preferencia antes de tratarla como vigente."),
+      section("Gestión desde el navegador", "El usuario puede usar el centro de preferencias y los controles del navegador. Eliminar cookies de sesión puede cerrar la cuenta; bloquear todas las cookies puede impedir funciones de autenticación."),
+      section("Evidencia y privacidad", "Cuando se registra una preferencia, ASODEF conserva categoría, resultado, fecha, versión de política y evidencia técnica disponible conforme a la Política de tratamiento de datos."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "security",
+    title: "Política de seguridad de la información",
+    slug: "seguridad",
+    description: "Controles aplicados para proteger cuentas, datos, operaciones y evidencia.",
+    category: "Tecnología y acceso",
+    sources: [source(APP, "Auth, hashes, sesiones, lockout, RBAC, scopes, auditoría, validación, rate limiting y exports"), source(CFG, "Canal de reporte")],
+    sections: [
+      identity,
+      section("Objetivo y alcance", "ASODEF protege la confidencialidad, integridad y disponibilidad razonable de la información en sus sitios, API, portales y módulos administrativos. Los controles se aplican según el riesgo y la función, sin convertir esta política en una garantía absoluta."),
+      section("Identidad y acceso", "Las credenciales se almacenan mediante hash resistente; la autenticación usa sesiones revocables y cookies protegidas. Existen recuperación controlada, bloqueo por intentos, roles, permisos y alcance organizacional. Las rutas administrativas exigen autorización en backend."),
+      section("Aplicación y datos", "La API valida entradas, limita cargas y respuestas, usa referencias públicas cuando existen y evita exponer campos internos innecesarios. Las relaciones críticas tienen integridad referencial y las operaciones sensibles se ejecutan transaccionalmente."),
+      section("Auditoría y trazabilidad", "Pagos, documentos legales, PQR, solicitudes de datos, consentimientos, CRM y otras acciones relevantes conservan actor, fuente, estados, fecha y metadatos. Los intentos bloqueados pueden registrarse como no aplicados para evitar silencio operativo."),
+      section("Sesiones, comunicaciones y exportaciones", "Las sesiones pueden revocarse; las comunicaciones respetan plantillas, consentimiento y supresión; las exportaciones requieren permisos y se procesan mediante jobs persistidos con control de concurrencia. La información sensible se minimiza en logs y respuestas."),
+      section("Responsabilidad del usuario", "El usuario debe proteger sus credenciales y dispositivos, cerrar sesiones en equipos compartidos, verificar referencias y reportar actividad no reconocida. ASODEF nunca necesita que se envíen contraseñas por correo o WhatsApp."),
+      section("Incidentes", "Un posible acceso no autorizado, alteración, pérdida o divulgación debe reportarse con fecha, descripción y datos de contacto, evitando reenviar información sensible innecesaria. ASODEF registra, clasifica, investiga y documenta la respuesta dentro de sus flujos disponibles."),
+      contact,
+      applicability,
+    ],
+  },
+  {
+    type: "accessibility",
+    title: "Declaración de accesibilidad",
+    slug: "accesibilidad",
+    description: "Prácticas de acceso por teclado, lectura, contraste y adaptación responsive.",
+    category: "Tecnología y acceso",
+    sources: [source(APP, "Componentes semánticos, foco, breakpoints y reduced motion"), source(CFG, "Canal de barreras")],
+    sections: [
+      identity,
+      section("Compromiso", "ASODEF procura que sus contenidos y funciones digitales puedan ser comprendidos y operados por personas con distintas capacidades, dispositivos y formas de interacción. La accesibilidad se revisa como parte del diseño, desarrollo y verificación."),
+      section("Prácticas implementadas", "La interfaz usa estructura semántica, etiquetas de formularios, mensajes de error asociados, navegación por teclado, foco visible, contraste dentro del sistema visual, estados de carga/error/vacío y diseño adaptable. Los componentes respetan la preferencia de movimiento reducido."),
+      section("Documentos legales", "El Centro Legal ofrece búsqueda, encabezados jerárquicos, índice, lectura editorial, versión y fecha, navegación relacionada y acción de impresión. En móvil el índice se presenta de forma colapsable y el contenido evita desplazamiento horizontal."),
+      section("Alcance de la declaración", "Esta declaración describe prácticas implementadas y objetivos de mejora continua; no afirma una certificación externa ni conformidad absoluta. Algunos contenidos o dependencias pueden presentar barreras que deben reportarse para su corrección."),
+      section("Reportar una barrera", `Para informar una barrera, escriba a ${ASODEF_COMPANY.corporateEmail} indicando ruta, dispositivo, navegador, tecnología de asistencia si aplica y una descripción del problema. No incluya datos sensibles innecesarios.`),
+      applicability,
+    ],
+  },
+  {
+    type: "electronic_communications_policy",
+    title: "Política de comunicaciones electrónicas",
+    slug: "politica-comunicaciones-electronicas",
+    description: "Canales, finalidades, evidencia, preferencias y revocación de mensajes.",
+    category: "Comunicaciones",
+    sources: [source(CEC, "Notificación judicial electrónica"), source(DOS, "Contacto institucional"), source(IMG, "Canal promocional"), source(APP, "Plantillas, entregas, supresión, consentimientos y contratos"), source(CFG, "Correos y WhatsApp")],
+    sections: [
+      identity,
+      section("Canales", "ASODEF puede utilizar correo electrónico y WhatsApp cuando la persona los suministra, además de avisos dentro de la plataforma. El canal concreto depende de la solicitud, relación, preferencia y disponibilidad; no se afirma un proveedor de transporte externo definitivo."),
+      section("Comunicaciones transaccionales", "Incluyen seguridad y cuenta, referencias y estados de solicitudes, pagos y comprobantes, contratos, PQR y otras gestiones iniciadas o necesarias. Se limitan a la finalidad operativa y no se convierten en marketing por incluir identidad institucional."),
+      section("Comunicaciones comerciales", "Novedades, beneficios, alianzas, invitaciones o campañas requieren consentimiento comercial vigente. Antes de enviar, el sistema verifica la finalidad y la lista de supresión; una revocación impide nuevos envíos comerciales al destinatario aplicable."),
+      section("Evidencia", "La plataforma puede conservar plantilla, tipo, canal, destinatario, estado, intento, fecha, error técnico y consentimiento relacionado. Las aceptaciones electrónicas de contratos o términos registran la versión, actor, método y evidencia disponible."),
+      section("Preferencias, revocación y seguridad", "El titular puede revocar finalidades comerciales desde Mis consentimientos o por los canales oficiales. Los mensajes transaccionales necesarios continúan cuando existe una relación o solicitud vigente. ASODEF no solicita contraseñas ni datos completos de pago por mensajes."),
+      section("Notificación judicial", `El certificado disponible indica que ${ASODEF_COMPANY.legalName} autorizó recibir notificaciones personales electrónicas. El correo judicial registrado es ${ASODEF_COMPANY.judicialNotificationEmail}; el correo general ${ASODEF_COMPANY.corporateEmail} no lo sustituye para ese propósito.`),
+      contact,
+      applicability,
     ],
   },
 ] as const;

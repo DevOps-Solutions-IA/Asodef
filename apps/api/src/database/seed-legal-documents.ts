@@ -10,11 +10,9 @@ function toDraftContent(entry: LegalDocumentCatalogEntry): Prisma.InputJsonValue
  * catalog entry, always leaving it in DRAFT (never approved/published -
  * that's a real admin action, not something a seed script may do).
  *
- * Idempotent, and safe to rerun after real review has started: if
- * version 1 has already moved past DRAFT (LEGAL_REVIEW, PENDING_APPROVAL,
- * APPROVED, PUBLISHED, REPLACED, ARCHIVED), the seed leaves its content
- * untouched - the seed is only authoritative for content nobody has
- * reviewed yet.
+ * Idempotent and history-safe: once version 1 exists, the seed never
+ * mutates it, even while DRAFT. Corrective content is always introduced
+ * as a new version through the audited workflow.
  */
 export async function seedLegalDocuments(client: PrismaClient): Promise<void> {
   for (const entry of LEGAL_DOCUMENT_CATALOG) {
@@ -36,14 +34,6 @@ export async function seedLegalDocuments(client: PrismaClient): Promise<void> {
           status: "DRAFT",
           draftContent: toDraftContent(entry),
         },
-      });
-      continue;
-    }
-
-    if (existingVersion.status === "DRAFT") {
-      await client.legalDocumentVersion.update({
-        where: { id: existingVersion.id },
-        data: { draftContent: toDraftContent(entry) },
       });
     }
   }

@@ -935,6 +935,10 @@ model LegalDocumentVersion {
   effectiveDate    DateTime?                  @map("effective_date") @db.Timestamptz(3)
   expirationDate   DateTime?                  @map("expiration_date") @db.Timestamptz(3)
   changeSummary    String?                    @map("change_summary")
+  // Evidence supporting this exact version. Paths and concise factual
+  // bases only; source documents themselves and sensitive payloads are
+  // never copied into the database.
+  sourceTraceability Json?                    @map("source_traceability")
   approvedByUserId String?                    @map("approved_by_user_id") @db.Uuid
   approvalDate     DateTime?                  @map("approval_date") @db.Timestamptz(3)
   publicationDate  DateTime?                  @map("publication_date") @db.Timestamptz(3)

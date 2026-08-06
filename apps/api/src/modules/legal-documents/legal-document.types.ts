@@ -46,13 +46,21 @@ export interface AdminLegalDocumentVersionResponse {
   effectiveDate: Date | null;
   expirationDate: Date | null;
   changeSummary: string | null;
+  sourceTraceability: unknown;
   approvedByUserId: string | null;
+  approvedByName: string | null;
+  auditTrail: Array<{ action: string; previousStatus: string | null; newStatus: string | null; applied: boolean; actorName: string | null; createdAt: Date }>;
   approvalDate: Date | null;
   publicationDate: Date | null;
   createdAt: Date;
 }
 
-export function toAdminVersionResponse(version: LegalDocumentVersion): AdminLegalDocumentVersionResponse {
+type AdminVersionWithRelations = LegalDocumentVersion & {
+  approvedByUser?: { fullName: string } | null;
+  auditLogs?: Array<{ action: string; previousStatus: string | null; newStatus: string | null; applied: boolean; createdAt: Date; actorUser?: { fullName: string } | null }>;
+};
+
+export function toAdminVersionResponse(version: AdminVersionWithRelations): AdminLegalDocumentVersionResponse {
   return {
     id: version.id,
     version: version.version,
@@ -62,7 +70,10 @@ export function toAdminVersionResponse(version: LegalDocumentVersion): AdminLega
     effectiveDate: version.effectiveDate,
     expirationDate: version.expirationDate,
     changeSummary: version.changeSummary,
+    sourceTraceability: version.sourceTraceability,
     approvedByUserId: version.approvedByUserId,
+    approvedByName: version.approvedByUser?.fullName ?? null,
+    auditTrail: (version.auditLogs ?? []).map((entry) => ({ action: entry.action, previousStatus: entry.previousStatus, newStatus: entry.newStatus, applied: entry.applied, actorName: entry.actorUser?.fullName ?? null, createdAt: entry.createdAt })),
     approvalDate: version.approvalDate,
     publicationDate: version.publicationDate,
     createdAt: version.createdAt,

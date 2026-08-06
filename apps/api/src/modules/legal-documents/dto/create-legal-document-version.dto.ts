@@ -1,4 +1,4 @@
-import { IsISO8601, IsObject, IsOptional, IsString } from "class-validator";
+import { IsArray, IsISO8601, IsObject, IsOptional, IsString } from "class-validator";
 
 export class CreateLegalDocumentVersionDto {
   @IsObject({ message: "El contenido del borrador debe ser un objeto." })
@@ -7,6 +7,10 @@ export class CreateLegalDocumentVersionDto {
   @IsOptional()
   @IsString()
   changeSummary?: string;
+
+  @IsOptional()
+  @IsArray({ message: "La trazabilidad de fuentes debe ser una lista." })
+  sourceTraceability?: Array<Record<string, unknown>>;
 
   @IsOptional()
   @IsISO8601({}, { message: "La fecha de vigencia no es válida." })

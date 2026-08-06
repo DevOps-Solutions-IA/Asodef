@@ -71,13 +71,13 @@ describe("ConsentService (integration, real Postgres)", () => {
       data: {
         legalDocumentId: document.id,
         version: 1,
-        status: "PUBLISHED",
-        draftContent: { sections: [] },
-        approvedContent: { sections: [] },
-        publicationDate: new Date(),
+        // ConsentService needs a resolvable version id, not a publicly
+        // discoverable document. Keeping fixtures DRAFT prevents a
+        // crashed test process from leaving synthetic legal content live.
+        status: "DRAFT",
+        draftContent: { sections: [{ heading: "Fixture", body: "Contenido sintético aislado para una prueba de consentimiento." }] },
       },
     });
-    await prisma.legalDocument.update({ where: { id: document.id }, data: { currentVersionId: version.id } });
     return version;
   }
 

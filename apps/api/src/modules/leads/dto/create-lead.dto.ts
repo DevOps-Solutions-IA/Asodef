@@ -1,4 +1,4 @@
-import { Equals, IsEmail, IsOptional, IsString, MinLength } from "class-validator";
+import { Equals, IsBoolean, IsEmail, IsOptional, IsString, MinLength } from "class-validator";
 import { Transform } from "class-transformer";
 
 export class CreateLeadDto {
@@ -39,6 +39,10 @@ export class CreateLeadDto {
    * rejected, not merely "any boolean accepted". */
   @Equals(true, { message: "Debes aceptar el tratamiento de datos para continuar." })
   consentAccepted!: true;
+
+  @IsOptional()
+  @IsBoolean()
+  commercialConsentAccepted?: boolean;
 
   /** Honeypot: a real visitor never fills this hidden field. Any
    * non-empty value marks the submission as bot traffic - see

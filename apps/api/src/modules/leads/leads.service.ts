@@ -10,6 +10,7 @@ import { CreateLeadDto } from "./dto/create-lead.dto";
 import { toLeadSubmissionResponse, type LeadSubmissionResponse } from "./leads.types";
 
 const DATA_PROCESSING_POLICY_SLUG = "tratamiento-de-datos";
+const COMMERCIAL_CONSENT_SLUG = "consentimiento-comunicaciones-comerciales";
 
 @Injectable()
 export class LeadsService {
@@ -81,6 +82,16 @@ export class LeadsService {
         source: "web_contact_form",
         acceptanceMethod: "checkbox",
       });
+
+      if (dto.commercialConsentAccepted === true) {
+        const commercialVersionId = await this.legalDocumentsService.resolveCurrentPublishedVersionId(COMMERCIAL_CONSENT_SLUG, tx);
+        await this.consentService.record(tx, "commercial_communications", { leadSubmissionId: created.id }, commercialVersionId, {
+          ipAddress: context.ipAddress ?? null,
+          userAgent: context.userAgent ?? null,
+          source: "web_contact_form",
+          acceptanceMethod: "optional_checkbox",
+        });
+      }
 
       return created;
     });

@@ -106,4 +106,12 @@ export class LegalDocumentsController {
   publish(@Param("versionId", ParseUUIDPipe) versionId: string, @CurrentUser() actor: RequestUser) {
     return this.legalDocumentsService.publish(versionId, actor.id);
   }
+
+  @ApiCookieAuth("asodef_at")
+  @RequirePermissions("legal.approve")
+  @Post("admin/legal-documents/versions/:versionId/archive")
+  @HttpCode(HttpStatus.OK)
+  archive(@Param("versionId", ParseUUIDPipe) versionId: string, @CurrentUser() actor: RequestUser) {
+    return this.legalDocumentsService.archive(versionId, actor.id);
+  }
 }
