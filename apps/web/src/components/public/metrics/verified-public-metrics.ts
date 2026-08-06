@@ -1,63 +1,98 @@
-import { BENEFITS } from "../../../lib/public-content/benefits";
-import { PUBLIC_ROUTES } from "../../../lib/public-content/public-routes";
+import { ASODEF_COMPANY } from "@asodef/config";
 
-export type VerifiedMetricId = "benefit-categories" | "published-legal-documents" | "specialized-public-workflows";
+export type VerifiedIndicatorId = "corporate-years" | "registered-domicile" | "legal-form";
 
-export interface VerifiedPublicMetric {
-  id: VerifiedMetricId;
-  value: number;
-  label: string;
-  context: string;
-  source: {
-    kind: "code-registry" | "verified-database-snapshot";
-    path: string;
-    derivation: string;
-  };
+interface VerifiedIndicatorSource {
+  kind: "verified-corporate-config";
+  path: string;
+  field: string;
+  derivation: string;
 }
 
-const SPECIALIZED_PUBLIC_WORKFLOWS = [PUBLIC_ROUTES.payments.path, PUBLIC_ROUTES.pqr.path, PUBLIC_ROUTES.dsr.path, PUBLIC_ROUTES.start.path] as const;
+interface VerifiedIndicatorBase {
+  id: VerifiedIndicatorId;
+  label: string;
+  context: string;
+  source: VerifiedIndicatorSource;
+}
+
+export interface VerifiedPublicMetric extends VerifiedIndicatorBase {
+  kind: "numeric";
+  value: number;
+}
+
+export interface VerifiedPublicTextIndicator extends VerifiedIndicatorBase {
+  kind: "text";
+  value: string;
+}
+
+export type VerifiedPublicIndicator = VerifiedPublicMetric | VerifiedPublicTextIndicator;
+
+/** Returns completed anniversaries, not an inclusive calendar-year count. */
+export function completedYearsSince(isoDate: string, asOf: Date) {
+  const [yearPart, monthPart, dayPart] = isoDate.split("-");
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+  const day = Number(dayPart);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error("La fecha corporativa configurada no tiene formato ISO válido.");
+  }
+  const currentYear = asOf.getUTCFullYear();
+  const currentMonth = asOf.getUTCMonth() + 1;
+  const currentDay = asOf.getUTCDate();
+  const anniversaryPassed = currentMonth > month || (currentMonth === month && currentDay >= day);
+  return currentYear - year - (anniversaryPassed ? 0 : 1);
+}
+
+const completedCorporateYears = completedYearsSince(ASODEF_COMPANY.registrationDate, new Date());
 
 /**
- * Only finite, deterministic and reviewable figures belong here. Never add
- * customer, transaction, satisfaction or coverage totals without a real
- * authoritative source and its public-use authorization.
+ * A deliberately small identity set. Customer, transaction, satisfaction,
+ * coverage and catalog totals do not belong here without a dated public
+ * source and the context needed to interpret them.
  */
-export const VERIFIED_PUBLIC_METRICS = [
+export const VERIFIED_PUBLIC_INDICATORS = [
   {
-    id: "benefit-categories",
-    value: BENEFITS.length,
-    label: "categorías de beneficios",
-    context: "Cada categoría tiene una página con proceso, alcance y fuentes.",
+    id: "corporate-years",
+    kind: "numeric",
+    value: completedCorporateYears,
+    label: "años como ASODEF S.A.S.",
+    context: "Desde el 10 de septiembre de 2012.",
     source: {
-      kind: "code-registry",
-      path: "apps/web/src/lib/public-content/benefits.ts",
-      derivation: "Longitud del registro canónico BENEFITS.",
+      kind: "verified-corporate-config",
+      path: "packages/config/src/company.ts",
+      field: "ASODEF_COMPANY.registrationDate",
+      derivation: "Años completos transcurridos desde la fecha registral 2012-09-10 hasta la fecha de consulta.",
     },
   },
   {
-    id: "published-legal-documents",
-    value: 21,
-    label: "documentos institucionales publicados",
-    context: "Versiones vigentes disponibles en el Centro Legal.",
+    id: "registered-domicile",
+    kind: "text",
+    value: `${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.country}`,
+    label: "domicilio registrado",
+    context: "Sede corporativa verificada.",
     source: {
-      kind: "verified-database-snapshot",
-      path: "database:LegalDocument.currentVersionId",
-      derivation: "Verificación de base de datos al inicio y cierre de la fase: 21 de 21 documentos institucionales con versión vigente PUBLISHED.",
+      kind: "verified-corporate-config",
+      path: "packages/config/src/company.ts",
+      field: "ASODEF_COMPANY.city + ASODEF_COMPANY.country",
+      derivation: "Ciudad y país confirmados en los datos corporativos vigentes.",
     },
   },
   {
-    id: "specialized-public-workflows",
-    value: SPECIALIZED_PUBLIC_WORKFLOWS.length,
-    label: "gestiones públicas",
-    context: "Pagos, PQR, datos personales y orientación guiada.",
+    id: "legal-form",
+    kind: "text",
+    value: "S.A.S.",
+    label: "forma jurídica registrada",
+    context: ASODEF_COMPANY.legalForm,
     source: {
-      kind: "code-registry",
-      path: "apps/web/src/lib/public-content/public-routes.ts",
-      derivation: `Conteo de rutas funcionales: ${SPECIALIZED_PUBLIC_WORKFLOWS.join(", ")}.`,
+      kind: "verified-corporate-config",
+      path: "packages/config/src/company.ts",
+      field: "ASODEF_COMPANY.legalForm",
+      derivation: "Forma jurídica confirmada por el certificado de existencia y representación legal.",
     },
   },
-] as const satisfies readonly VerifiedPublicMetric[];
+] as const satisfies readonly VerifiedPublicIndicator[];
 
-export function getVerifiedPublicMetric(id: VerifiedMetricId) {
-  return VERIFIED_PUBLIC_METRICS.find((metric) => metric.id === id);
+export function getVerifiedPublicIndicator(id: VerifiedIndicatorId) {
+  return VERIFIED_PUBLIC_INDICATORS.find((indicator) => indicator.id === id);
 }

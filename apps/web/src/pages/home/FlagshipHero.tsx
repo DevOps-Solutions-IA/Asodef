@@ -11,7 +11,6 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { HorizontalQuickActions } from "../../components/public/mobile";
 import { ConnectionPulse } from "../../components/public/motion";
 
 const ecosystemLinks = [
@@ -24,12 +23,11 @@ const ecosystemLinks = [
 ] as const;
 
 const quickActions = [
-  { label: "Consultar beneficios", to: "/beneficios", icon: HeartHandshake },
-  { label: "Pagar", to: "/pagos", icon: CreditCard },
-  { label: "Radicar solicitud", to: "/solicitudes-de-datos", icon: FileCheck2 },
-  { label: "Consultar caso", to: "/pqr?accion=consultar", icon: MessageSquareText },
-  { label: "Ingresar", to: "/iniciar-sesion", icon: LogIn },
-  { label: "Recibir orientación", to: "/comenzar", icon: ArrowRight },
+  { label: "Pagar", to: "/pagos", icon: CreditCard, primary: true },
+  { label: "Radicar PQR", to: "/pqr?accion=radicar", icon: MessageSquareText, primary: false },
+  { label: "Consultar caso", to: "/pqr?accion=consultar", icon: MessageSquareText, primary: false },
+  { label: "Solicitudes de datos", to: "/solicitudes-de-datos", icon: FileCheck2, primary: false },
+  { label: "Ingresar", to: "/iniciar-sesion", icon: LogIn, primary: false },
 ] as const;
 
 export function FlagshipHero() {
@@ -40,22 +38,22 @@ export function FlagshipHero() {
 
       <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-14 lg:px-12">
         <div className="relative z-10">
-          <p className="inline-flex items-center gap-2 rounded-full border border-brand-dark/15 bg-white/75 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-brand-dark shadow-e1">
+          <p className="hidden items-center gap-2 rounded-full border border-brand-dark/15 bg-white/75 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-brand-dark shadow-e1 sm:inline-flex">
             <ShieldCheck aria-hidden className="h-4 w-4" />
             Personas · afiliados · empresas · aliados
           </p>
-          <h1 className="mt-6 max-w-4xl font-display text-[clamp(2.65rem,6.4vw,6.2rem)] font-semibold leading-[.92] tracking-[-.06em] text-text-main sm:mt-7">
-            Beneficios y gestiones en el <span className="text-brand-orange">canal correcto.</span>
+          <h1 className="max-w-4xl font-display text-[clamp(2.55rem,6.2vw,5.9rem)] font-semibold leading-[.94] tracking-[-.055em] text-text-main sm:mt-7">
+            Beneficios, pagos y solicitudes en <span className="text-brand-orange">un solo lugar.</span>
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-text-muted sm:mt-8 sm:text-xl">
-            Consulta beneficios, paga, radica solicitudes o entra a tu portal según tu relación con ASODEF.
+          <p className="mt-5 max-w-2xl text-base leading-7 text-text-muted sm:mt-8 sm:text-xl sm:leading-8">
+            Elige una acción o entra a tu portal para continuar con el servicio de ASODEF que necesitas.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3 sm:mt-9">
-            <Link to="/comenzar" className="public-button-primary">
+          <div className="mt-7 grid gap-2 min-[390px]:grid-cols-2 sm:mt-9 sm:flex sm:flex-wrap sm:gap-3">
+            <Link to="/comenzar" className="public-button-primary w-full sm:w-auto">
               Recibir orientación
               <ArrowRight aria-hidden className="h-4 w-4" />
             </Link>
-            <Link to="/beneficios" className="public-button-secondary">Consultar beneficios</Link>
+            <Link to="/beneficios" className="public-button-secondary w-full sm:w-auto">Consultar beneficios</Link>
           </div>
           <div className="mt-8 hidden flex-wrap gap-x-7 gap-y-3 border-t border-brand-dark/10 pt-5 text-sm font-medium text-text-muted sm:flex sm:mt-10 sm:pt-6">
             <span>Pagos con Bold</span>
@@ -89,7 +87,11 @@ export function FlagshipHero() {
         </nav>
       </div>
 
-      <div className="mx-auto mt-7 max-w-7xl px-5 sm:hidden"><HorizontalQuickActions actions={quickActions} /></div>
+      <nav className="mx-auto mt-7 max-w-7xl px-5 sm:hidden" aria-label="Acciones rápidas">
+        <ul className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {quickActions.map(({ label, to, icon: Icon, primary }) => <li key={label} className="snap-start"><Link to={to} className={`flex min-h-12 min-w-max items-center gap-2 rounded-full border px-4 text-sm font-semibold shadow-e1 transition active:scale-[.98] motion-reduce:transform-none motion-reduce:transition-none ${primary ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white text-brand-dark"}`}><Icon aria-hidden className={`h-4 w-4 ${primary ? "text-brand-orange-light" : "text-brand-orange"}`} />{label}</Link></li>)}
+        </ul>
+      </nav>
     </section>
   );
 }

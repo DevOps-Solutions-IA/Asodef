@@ -1,13 +1,26 @@
-# Métricas públicas verificadas
+# Indicadores públicos verificados
 
-Estado: `VERIFIED` para el código y los catálogos indicados. Estas cifras se muestran únicamente fuera del Centro Legal y no alteran sus datos, versiones ni presentación.
+Estado: `VERIFIED`. Este bloque aparece exclusivamente en la experiencia pública no legal y no altera el Centro Legal, su catálogo ni sus versiones.
 
-| Métrica | Valor | Fuente autoritativa | Derivación | Comportamiento público |
+## Indicador temporal
+
+| Indicador | Valor al 2026-08-06 | Fuente autoritativa | Derivación | Presentación |
 | --- | ---: | --- | --- | --- |
-| Categorías de beneficios | 8 | `apps/web/src/lib/public-content/benefits.ts` | Longitud del registro canónico y tipado `BENEFITS` | El valor final es accesible para lector de pantalla; la cifra visible se anima una sola vez. |
-| Documentos institucionales publicados | 21 | Instantánea verificada de `LegalDocument.currentVersionId` y sus versiones `PUBLISHED` | Verificación al inicio y al cierre: 21 de 21 documentos institucionales con versión vigente publicada | Enlaza conceptualmente con el Centro Legal existente; no modifica su catálogo ni sus documentos. |
-| Gestiones públicas | 4 | `apps/web/src/lib/public-content/public-routes.ts` | Miembros tipados `payments`, `pqr`, `dsr` y `start`: `/pagos`, `/pqr`, `/solicitudes-de-datos` y `/comenzar` | Resume pagos, PQR, datos personales y orientación; no módulos decorativos ni promesas futuras. |
+| Años como ASODEF S.A.S. | 13 | `ASODEF_COMPANY.registrationDate = 2012-09-10`, en `packages/config/src/company.ts` | Años completos entre la fecha registral y la fecha de consulta. El certificado de existencia y representación legal, código `08264BJBC4`, confirmó el dato el 2026-08-05. | El valor final está siempre disponible para lectores de pantalla. La cifra visible se anima una sola vez al entrar y se entrega de inmediato con `prefers-reduced-motion`. |
 
-La implementación vive en `apps/web/src/components/public/metrics/verified-public-metrics.ts`. Los tests verifican la correspondencia con las fuentes, la exposición permanente del valor final accesible y la entrega inmediata del estado final cuando `prefers-reduced-motion` está activo.
+El valor no es un conteo inclusivo de años calendario. La función `completedYearsSince` descuenta el aniversario cuando todavía no ha ocurrido en el año consultado; por eso el valor pasa de 13 a 14 el 10 de septiembre de 2026.
 
-Quedan deliberadamente excluidos los totales de usuarios, familias, empresas, transacciones, satisfacción, cobertura y éxito. No existe en el alcance actual una fuente pública autoritativa y fechada que permita presentarlos sin contexto o falsa precisión.
+## Indicadores cualitativos
+
+| Indicador | Valor mostrado | Fuente | Alcance |
+| --- | --- | --- | --- |
+| Domicilio registrado | Cali, Colombia | `ASODEF_COMPANY.city` y `ASODEF_COMPANY.country`, confirmados por el dossier institucional | Identidad territorial; no afirma cobertura geográfica. |
+| Forma jurídica registrada | S.A.S. | `ASODEF_COMPANY.legalForm`, confirmado por el certificado de Cámara de Comercio el 2026-08-05 | Abreviatura de Sociedad por Acciones Simplificada; no comunica tamaño, liderazgo ni garantía. |
+
+## Decisión editorial
+
+El Inicio ya no presenta como banda institucional los conteos de categorías de beneficios, documentos legales o rutas públicas. Aunque esos conteos son comprobables en el sistema, mezclaban magnitudes de naturaleza distinta y podían interpretarse como escala comercial.
+
+Quedan excluidos los totales de usuarios, familias, empresas, transacciones, satisfacción, cobertura y éxito. No existe una fuente pública autoritativa y fechada que permita presentarlos con el contexto necesario.
+
+Implementación: `apps/web/src/components/public/metrics/verified-public-metrics.ts` y `VerifiedMetricCounter.tsx`.
