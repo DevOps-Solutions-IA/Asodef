@@ -73,7 +73,7 @@ export function StatisticsSection({ eyebrow, heading, description, numericStats,
   }
 
   return (
-    <section id="cifras" aria-labelledby={heading ? "statistics-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="cifras" aria-labelledby={heading ? "statistics-heading" : undefined} className="marketing-section">
       {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="statistics-heading" />}
 
       <div className="mt-10 grid grid-cols-2 gap-6 sm:gap-8 lg:grid-cols-5">
@@ -85,12 +85,12 @@ export function StatisticsSection({ eyebrow, heading, description, numericStats,
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.4 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.1 }}
-              className="rounded-2xl border border-border-soft bg-white p-6 text-center shadow-e1 transition-shadow duration-200 hover:shadow-e2"
+              className="premium-card-glow rounded-xl3 border border-brand-dark/10 bg-white/90 p-6 text-left shadow-e1 transition duration-200 hover:-translate-y-1 hover:shadow-e2 motion-reduce:transform-none"
             >
               <p className="font-display text-3xl font-semibold tabular-nums text-brand-dark sm:text-4xl">
                 <CountUpValue target={stat.value} prefersReducedMotion={prefersReducedMotion} />
               </p>
-              <p className="mt-2 text-sm text-text-muted">{stat.label}</p>
+              <p className="mt-3 border-t border-brand-dark/10 pt-3 text-sm font-medium text-text-muted">{stat.label}</p>
             </motion.div>
           ))}
 
@@ -106,10 +106,10 @@ export function StatisticsSection({ eyebrow, heading, description, numericStats,
                 ease: EASE,
                 delay: prefersReducedMotion ? 0 : ((numericStats?.length ?? 0) + index) * 0.1,
               }}
-              className="rounded-2xl border border-border-soft bg-white p-6 text-center shadow-e1 transition-shadow duration-200 hover:shadow-e2"
+              className="premium-card-glow rounded-xl3 border border-brand-dark/10 bg-white/90 p-6 text-left shadow-e1 transition duration-200 hover:-translate-y-1 hover:shadow-e2 motion-reduce:transform-none"
             >
               <p className="font-display text-xl font-semibold text-brand-dark sm:text-2xl">{stat.value}</p>
-              <p className="mt-2 text-sm text-text-muted">{stat.label}</p>
+              <p className="mt-3 border-t border-brand-dark/10 pt-3 text-sm font-medium text-text-muted">{stat.label}</p>
             </motion.div>
           ))}
       </div>

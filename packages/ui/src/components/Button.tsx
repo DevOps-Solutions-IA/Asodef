@@ -21,7 +21,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // that specifically want it (Hero/AllianceCta already pass their own
 // className overrides where that's the intent).
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
-  primary: "bg-brand-dark text-white shadow-e1 hover:bg-brand-dark-600 hover:shadow-e2 focus-visible:ring-brand-dark",
+  primary: "border border-brand-dark-600/60 bg-brand-dark text-white shadow-e1 hover:-translate-y-0.5 hover:bg-brand-dark-600 hover:shadow-e2 focus-visible:ring-brand-dark",
   secondary:
     "bg-white/80 border border-brand-dark/10 text-brand-dark shadow-e1 hover:border-brand-dark/20 hover:bg-brand-dark-50 hover:shadow-e2 focus-visible:ring-brand-dark",
   outline: "border border-border-soft bg-transparent text-text-main hover:border-brand-dark/20 hover:bg-bg-soft focus-visible:ring-brand-dark",
@@ -48,7 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={props.type ?? "button"}
         className={cn(
           "inline-flex items-center justify-center rounded-full font-medium",
-          "transition-[background-color,box-shadow,transform,border-color] duration-150 ease-out",
+          "relative isolate overflow-hidden transition-[background-color,box-shadow,transform,border-color] duration-150 ease-out",
           "active:scale-[0.98]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
           "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:active:scale-100",

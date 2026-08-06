@@ -16,6 +16,7 @@ import { queryKeys } from "../../../lib/query-keys";
 import { useAuth } from "../../../lib/auth/auth-context";
 import { LEGAL_VERSION_STATUS_LABELS } from "../../../lib/admin/admin-legal-types";
 import { ApiError } from "../../../lib/api-error";
+import { BookOpenCheck, FileClock, Scale } from "lucide-react";
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
@@ -130,13 +131,14 @@ export function AdminLegalPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Legal" description="Edición de borradores, flujo de revisión/aprobación y publicación de documentos legales." />
+      <PageHeader eyebrow="Gobierno documental" icon={<Scale className="h-5 w-5" />} title="Legal" description="Edición de borradores, flujo de revisión, aprobación y publicación con trazabilidad verificable." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <section aria-labelledby="legal-documents-heading" className="flex flex-col gap-3">
-          <h2 id="legal-documents-heading" className="font-display text-lg font-semibold text-text-main">
-            Documentos
-          </h2>
+        <section aria-labelledby="legal-documents-heading" className="surface-panel flex flex-col gap-3 p-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="legal-documents-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main"><BookOpenCheck aria-hidden="true" className="h-5 w-5 text-brand-orange" /> Documentos</h2>
+            {documentsQuery.isSuccess && <Badge variant="neutral">{documentsQuery.data.length}</Badge>}
+          </div>
 
           {documentsQuery.isLoading && <Skeleton className="h-64 w-full" />}
           {documentsQuery.isError && (
@@ -145,14 +147,14 @@ export function AdminLegalPage() {
           {documentsQuery.isSuccess && documentsQuery.data.length === 0 && <EmptyState title="Sin documentos" description="No hay documentos legales registrados." />}
 
           {documentsQuery.isSuccess && documentsQuery.data.length > 0 && (
-            <ul className="flex flex-col gap-1">
+            <ul className="flex flex-col gap-1.5">
               {documentsQuery.data.map((doc) => (
                 <li key={doc.id}>
                   <button
                     type="button"
                     onClick={() => selectDocument(doc.id)}
-                    className={`block w-full rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                      selectedDocumentId === doc.id ? "bg-brand-dark/10 font-medium text-brand-dark" : "text-text-main hover:bg-bg-soft"
+                    className={`block w-full rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${
+                      selectedDocumentId === doc.id ? "border-brand-dark/15 bg-brand-dark/10 font-medium text-brand-dark shadow-inner-highlight" : "border-transparent text-text-main hover:border-border-soft hover:bg-bg-soft"
                     }`}
                   >
                     {doc.title}
@@ -164,7 +166,7 @@ export function AdminLegalPage() {
           )}
         </section>
 
-        <section aria-labelledby="legal-document-detail-heading">
+        <section aria-labelledby="legal-document-detail-heading" className="min-w-0">
           <h2 id="legal-document-detail-heading" className="sr-only">
             Detalle del documento
           </h2>
@@ -175,9 +177,10 @@ export function AdminLegalPage() {
           {selectedDocumentId && documentQuery.isError && <ErrorState description={getAdminErrorMessage(documentQuery.error)} />}
 
           {document && latestVersion && (
-            <div className="flex flex-col gap-5">
-              <div className="flex items-center justify-between">
+            <div className="surface-panel flex flex-col gap-5 p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-4 border-b border-border-soft pb-5">
                 <div>
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-brand-green"><FileClock aria-hidden="true" className="h-4 w-4" /> Expediente documental</p>
                   <h3 className="font-display text-xl font-semibold text-text-main">{document.title}</h3>
                   <p className="text-sm text-text-muted">Versión {viewedVersion.version}{viewedVersion.id === document.currentVersionId ? " · vigente" : ""}</p>
                 </div>

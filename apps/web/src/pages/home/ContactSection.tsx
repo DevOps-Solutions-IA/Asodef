@@ -104,13 +104,13 @@ export function ContactSection({ eyebrow, heading, description }: ContactSection
   const isBusy = isSubmitting || submitLeadMutation.isPending;
 
   return (
-    <section id="contacto" aria-labelledby={heading ? "contact-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="contacto" aria-labelledby={heading ? "contact-heading" : undefined} className="marketing-section marketing-section--soft">
       {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="contact-heading" />}
 
-      <div className="mx-auto mt-10 max-w-2xl">
+      <div className="mx-auto mt-10 max-w-4xl rounded-[32px] border border-brand-dark/10 bg-white/70 p-5 shadow-e3 backdrop-blur-xl sm:p-8">
         {/* Institutional contact channels (Section 5, CONTACTO) - always
          * shown regardless of whether the form itself is available. */}
-        <dl className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <dl className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="flex items-start gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-shadow duration-200 hover:shadow-e2">
             <MessageCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-dark" />
             <div>

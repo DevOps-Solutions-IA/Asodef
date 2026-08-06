@@ -6,6 +6,7 @@ import { BrandLogo } from "../../layouts/shared/BrandLogo";
 import { getReceipt, getReceiptDownloadUrl } from "../../lib/payments/payments-api";
 import { queryKeys } from "../../lib/query-keys";
 import { formatCurrency } from "./format-currency";
+import { BadgeCheck, Download, ReceiptText } from "lucide-react";
 
 const LINK_BUTTON_CLASS =
   "inline-flex h-11 items-center justify-center rounded-full bg-brand-dark px-5 text-sm font-medium text-white transition-colors hover:bg-brand-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark focus-visible:ring-offset-2";
@@ -46,12 +47,13 @@ export function ReceiptViewPage() {
   }
 
   return (
-    <div>
-      <BrandLogo variant="compact" className="h-8 w-auto" />
-      <h1 className="mt-4 font-display text-2xl font-semibold text-brand-dark">Comprobante de pago</h1>
-      <p className="mt-1 text-sm text-text-muted">{data.statusLabel}</p>
+    <div className="mx-auto max-w-3xl">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><BrandLogo variant="compact" className="h-8 w-auto" /><h1 className="mt-4 flex items-center gap-2 font-display text-2xl font-semibold text-brand-dark"><ReceiptText aria-hidden="true" className="h-6 w-6 text-brand-orange" /> Comprobante de pago</h1><p className="mt-1 text-sm text-text-muted">{data.statusLabel}</p></div>
+        <span className="inline-flex self-start items-center gap-2 rounded-full border border-brand-green/20 bg-brand-green/10 px-3 py-1.5 text-xs font-semibold text-brand-green sm:self-auto"><BadgeCheck aria-hidden="true" className="h-4 w-4" /> Documento verificable</span>
+      </header>
 
-      <Card className="mt-6">
+      <Card variant="accent" className="mt-6">
         <dl className="grid gap-4 sm:grid-cols-2">
           <div>
             <dt className="text-sm text-text-muted">No. de comprobante</dt>
@@ -87,7 +89,7 @@ export function ReceiptViewPage() {
 
         <div className="mt-6">
           <a href={getReceiptDownloadUrl(data.publicReference)} className={LINK_BUTTON_CLASS}>
-            Descargar PDF
+            <Download aria-hidden="true" className="mr-2 h-4 w-4" /> Descargar PDF
           </a>
         </div>
       </Card>

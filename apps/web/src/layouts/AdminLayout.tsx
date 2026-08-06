@@ -1,11 +1,9 @@
-import { useRef } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
-import { ASODEF_COMPANY } from "@asodef/config";
+import {
+  BarChart3, BriefcaseBusiness, Building2, ClipboardCheck, CreditCard, FileCheck2, FileText,
+  Gauge, Handshake, Landmark, Megaphone, Scale, ScrollText, ShieldCheck, Users, UserRoundCheck,
+} from "lucide-react";
 import { useAuth } from "../lib/auth/auth-context";
-import { BrandLogo } from "./shared/BrandLogo";
-import { SkipToContent } from "./shared/SkipToContent";
-import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
-import { LogoutButton } from "./shared/LogoutButton";
+import { WorkspaceShell, type WorkspaceNavItem } from "./shared/WorkspaceShell";
 
 // US-060's literal nav list. `permission` is the key required to SHOW the
 // item (and matches the PermissionRoute guarding its route in router.tsx -
@@ -13,36 +11,29 @@ import { LogoutButton } from "./shared/LogoutButton";
 // users.manage" note). Items with no `permission` (Dashboard, Planes)
 // render for every internal-staff role that already cleared the outer
 // RoleRoute gate - no permission key exists for them and none is invented.
-interface AdminNavItem {
-  to: string;
-  label: string;
-  end?: true;
-  permission: string | null;
-}
-
-const NAV_ITEMS: AdminNavItem[] = [
-  { to: "/admin", label: "Dashboard", end: true, permission: null },
+const NAV_ITEMS: WorkspaceNavItem[] = [
+  { to: "/admin", label: "Dashboard", icon: Gauge, end: true, permission: null },
   // crm.read gates visibility (crm.manage additionally gates mutation
   // inside the section - see router.tsx). "Empresas y aliados" is a
   // second entry point into that same CRM section's "empresas" tab, not a
   // separate page, so it shares the same permission.
-  { to: "/admin/crm", label: "CRM", permission: "crm.read" },
-  { to: "/admin/crm/empresas", label: "Empresas y aliados", permission: "crm.read" },
-  { to: "/admin/planes", label: "Planes", permission: null },
-  { to: "/admin/contratos", label: "Contratos", permission: "contracts.read" },
-  { to: "/admin/comunicaciones", label: "Comunicaciones", permission: null },
-  { to: "/admin/pagos", label: "Pagos", permission: "payments.read" },
-  { to: "/admin/conciliacion", label: "Conciliación", permission: "payments.reconcile" },
+  { to: "/admin/crm", label: "CRM", icon: BriefcaseBusiness, permission: "crm.read" },
+  { to: "/admin/crm/empresas", label: "Empresas y aliados", icon: Building2, permission: "crm.read" },
+  { to: "/admin/planes", label: "Planes", icon: Handshake, permission: null },
+  { to: "/admin/contratos", label: "Contratos", icon: FileCheck2, permission: "contracts.read" },
+  { to: "/admin/comunicaciones", label: "Comunicaciones", icon: Megaphone, permission: null },
+  { to: "/admin/pagos", label: "Pagos", icon: CreditCard, permission: "payments.read" },
+  { to: "/admin/conciliacion", label: "Conciliación", icon: Landmark, permission: "payments.reconcile" },
   // content.manage gates visibility (legal.approve additionally gates
   // approve/publish inside the page - see router.tsx).
-  { to: "/admin/legal", label: "Legal", permission: "content.manage" },
-  { to: "/admin/consentimientos", label: "Consentimientos", permission: "data.manage" },
-  { to: "/admin/solicitudes-de-datos", label: "Solicitudes de datos", permission: "data.manage" },
-  { to: "/admin/pqr", label: "PQR", permission: "pqr.manage" },
-  { to: "/admin/aprobaciones", label: "Aprobaciones", permission: "approvals.manage" },
-  { to: "/admin/reportes", label: "Reportes", permission: "reports.read" },
-  { to: "/admin/auditoria", label: "Auditoría", permission: "audit.read" },
-  { to: "/admin/usuarios", label: "Usuarios", permission: "users.read" },
+  { to: "/admin/legal", label: "Legal", icon: Scale, permission: "content.manage" },
+  { to: "/admin/consentimientos", label: "Consentimientos", icon: UserRoundCheck, permission: "data.manage" },
+  { to: "/admin/solicitudes-de-datos", label: "Solicitudes de datos", icon: ScrollText, permission: "data.manage" },
+  { to: "/admin/pqr", label: "PQR", icon: ClipboardCheck, permission: "pqr.manage" },
+  { to: "/admin/aprobaciones", label: "Aprobaciones", icon: ShieldCheck, permission: "approvals.manage" },
+  { to: "/admin/reportes", label: "Reportes", icon: BarChart3, permission: "reports.read" },
+  { to: "/admin/auditoria", label: "Auditoría", icon: FileText, permission: "audit.read" },
+  { to: "/admin/usuarios", label: "Usuarios", icon: Users, permission: "users.read" },
 ];
 
 /**
@@ -59,50 +50,7 @@ const NAV_ITEMS: AdminNavItem[] = [
  * explicit "not just a hidden nav item" requirement.
  */
 export function AdminLayout() {
-  const mainRef = useRef<HTMLElement>(null);
-  useFocusMainOnRouteChange(mainRef);
   const { hasPermission } = useAuth();
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.permission === null || hasPermission(item.permission));
-
-  return (
-    <div className="flex min-h-screen flex-col bg-bg-base sm:flex-row">
-      <SkipToContent targetId="main-content" />
-      <aside className="relative z-10 border-b border-border-soft bg-white shadow-e1 sm:w-64 sm:shrink-0 sm:overflow-y-auto sm:border-b-0 sm:border-r">
-        <div className="px-5 py-5">
-          <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
-            <BrandLogo className="h-8 w-auto" />
-          </Link>
-          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-text-muted">Panel administrativo</p>
-        </div>
-        <nav aria-label="Administración">
-          <ul className="flex flex-col gap-0.5 px-3 pb-5 text-sm">
-            {visibleNavItems.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `relative block rounded-lg py-2 pl-4 pr-3 transition-colors duration-150 ${
-                      isActive
-                        ? "bg-brand-dark-50 font-semibold text-brand-dark before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-orange"
-                        : "text-text-main hover:bg-bg-soft"
-                    }`
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="border-t border-border-soft px-3 py-3">
-          <LogoutButton className="w-full justify-center" />
-        </div>
-      </aside>
-
-      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 px-5 py-8 focus:outline-none sm:px-8 sm:py-10">
-        <Outlet />
-      </main>
-    </div>
-  );
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.permission == null || hasPermission(item.permission));
+  return <WorkspaceShell productLabel="Panel administrativo" navLabel="Administración" navItems={visibleNavItems} />;
 }

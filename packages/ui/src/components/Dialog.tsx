@@ -58,12 +58,13 @@ export function Dialog({ open, onClose, title, description, children, className 
         }
       }}
       className={cn(
-        "m-auto w-full max-w-lg rounded-xl3 border border-black/[0.06] bg-white p-0 shadow-e4",
+        "m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-xl3 border border-white/60 bg-white/95 p-0 shadow-e4 backdrop-blur-xl",
         "backdrop:bg-brand-dark/40 backdrop:backdrop-blur-sm",
         className,
       )}
     >
-      <div className="p-6" onClick={(event) => event.stopPropagation()}>
+      <div className="relative p-6" onClick={(event) => event.stopPropagation()}>
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-orange via-brand-light to-brand-dark" />
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id={titleId} className="font-display text-xl font-semibold text-text-main">

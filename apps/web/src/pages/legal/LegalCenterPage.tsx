@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
-import { ArrowRight, FileText, Search, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookOpenCheck, FileText, Layers3, Search, ShieldCheck } from "lucide-react";
 import { Badge, EmptyState, ErrorState, Input, Skeleton } from "@asodef/ui";
 import { getPublicLegalDocument } from "../../lib/legal/legal-api";
 import { LEGAL_CATEGORIES, LEGAL_DOCUMENT_CATALOG } from "../../lib/legal/legal-catalog";
@@ -35,9 +35,10 @@ export function LegalCenterPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <section className="relative overflow-hidden rounded-3xl border border-brand-dark/10 bg-brand-dark px-6 py-9 text-white shadow-e3 sm:px-10 sm:py-12">
+      <section className="relative overflow-hidden rounded-[2rem] border border-brand-dark/10 bg-brand-dark px-6 py-9 text-white shadow-e4 sm:px-10 sm:py-12 lg:px-12 lg:py-14">
         <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand-green/30" aria-hidden="true" />
         <div className="absolute -bottom-24 right-20 h-48 w-48 rounded-full bg-brand-orange/15" aria-hidden="true" />
+        <div className="absolute inset-y-0 right-0 hidden w-2/5 border-l border-white/5 bg-[linear-gradient(135deg,transparent,rgba(255,255,255,0.05))] lg:block" aria-hidden="true" />
         <div className="relative max-w-2xl">
           <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
             <ShieldCheck className="h-6 w-6" aria-hidden="true" />
@@ -51,10 +52,15 @@ export function LegalCenterPage() {
             {latestPublication ? `Última actualización: ${formatDate(latestPublication)}` : "Verificando versiones publicadas…"}
           </p>
         </div>
+        <div className="relative mt-8 grid gap-3 border-t border-white/10 pt-6 sm:grid-cols-3 lg:max-w-3xl">
+          <span className="flex items-center gap-2 text-xs text-white/75"><BookOpenCheck className="h-4 w-4 text-brand-light" aria-hidden="true" /> Versiones oficiales vigentes</span>
+          <span className="flex items-center gap-2 text-xs text-white/75"><Layers3 className="h-4 w-4 text-brand-light" aria-hidden="true" /> Historial institucional preservado</span>
+          <span className="flex items-center gap-2 text-xs text-white/75"><ShieldCheck className="h-4 w-4 text-brand-light" aria-hidden="true" /> Publicación controlada</span>
+        </div>
       </section>
 
       <section aria-labelledby="legal-library-heading">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="sticky top-20 z-10 -mx-3 flex flex-col justify-between gap-4 rounded-2xl border border-transparent bg-surface-canvas/90 px-3 py-3 backdrop-blur-md sm:flex-row sm:items-end lg:top-24">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-green">Biblioteca institucional</p>
             <h2 id="legal-library-heading" className="mt-1 font-display text-2xl font-semibold text-brand-dark">Documentos vigentes</h2>
@@ -86,7 +92,7 @@ export function LegalCenterPage() {
                     const published = result?.isSuccess && Boolean(result.data.content);
                     return (
                       <li key={entry.slug}>
-                        <Link to={`/legal/${entry.slug}`} className="group flex h-full flex-col rounded-2xl border border-border-soft bg-white p-5 shadow-e1 transition duration-200 hover:-translate-y-0.5 hover:border-brand-dark/20 hover:shadow-e2 motion-reduce:transform-none">
+                        <Link to={`/legal/${entry.slug}`} className="premium-card-glow group flex h-full flex-col rounded-2xl border border-border-soft bg-white p-5 shadow-e1 transition duration-enterprise ease-enterprise hover:-translate-y-0.5 hover:border-brand-dark/20 hover:shadow-e3 motion-reduce:transform-none">
                           <div className="flex items-start justify-between gap-4">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-dark-50 text-brand-dark"><FileText className="h-5 w-5" aria-hidden="true" /></span>
                             {result?.isPending ? <Skeleton className="h-6 w-20" /> : published ? <Badge variant="success">Vigente</Badge> : <Badge variant="neutral">No disponible</Badge>}

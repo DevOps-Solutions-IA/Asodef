@@ -15,7 +15,7 @@ export function StatusBadge({ tone, label, className, ...props }: StatusBadgePro
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+        "inline-flex items-center gap-1.5 rounded-full border border-current/10 px-2.5 py-1 text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
         config.className,
         className,
       )}

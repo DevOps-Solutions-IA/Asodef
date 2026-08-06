@@ -19,14 +19,14 @@ export function SectionHeading({ eyebrow, title, description, align = "left", cl
   return (
     <div className={cn("max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {eyebrow && (
-        <span className="inline-flex rounded-full border border-brand-dark/15 bg-white/70 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-brand-dark backdrop-blur">
+        <span className="inline-flex items-center gap-2 rounded-full border border-brand-dark/15 bg-white/75 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-brand-dark shadow-e1 backdrop-blur before:h-1.5 before:w-1.5 before:rounded-full before:bg-brand-orange">
           {eyebrow}
         </span>
       )}
-      <h2 id={headingId} className={cn("font-display text-3xl font-semibold text-text-main sm:text-4xl", eyebrow && "mt-4")}>
+      <h2 id={headingId} className={cn("font-display text-3xl font-semibold tracking-[-0.025em] text-text-main sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08]", eyebrow && "mt-5")}>
         {title}
       </h2>
-      {description && <p className="mt-3 text-base text-text-muted">{description}</p>}
+      {description && <p className="mt-4 text-base leading-7 text-text-muted">{description}</p>}
     </div>
   );
 }

@@ -23,10 +23,10 @@ export function CookieConsentBanner() {
         <div
           role="region"
           aria-label="Preferencias de cookies"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-5 py-5 shadow-[0_-8px_30px_rgba(6,40,30,0.1)] sm:px-8"
+          className="fixed inset-x-3 bottom-3 z-40 rounded-xl3 border border-brand-dark/10 bg-white/94 px-4 py-4 shadow-e4 backdrop-blur-xl sm:inset-x-5 sm:px-5"
         >
-          <div className="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-text-main">
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <p className="max-w-3xl text-xs leading-5 text-text-main sm:text-sm">
               Usamos cookies estrictamente necesarias para el funcionamiento del sitio, y cookies opcionales de
               preferencias, analíticas y marketing solo con tu autorización. Consulta la{" "}
               <a href="/legal/politica-de-cookies" className="font-medium text-brand-dark hover:underline">
@@ -35,13 +35,13 @@ export function CookieConsentBanner() {
               .
             </p>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button type="button" variant="ghost" onClick={openPreferences}>
+              <Button type="button" size="sm" variant="ghost" onClick={openPreferences}>
                 Personalizar
               </Button>
-              <Button type="button" variant="secondary" onClick={rejectOptional}>
+              <Button type="button" size="sm" variant="secondary" onClick={rejectOptional}>
                 Rechazar opcionales
               </Button>
-              <Button type="button" onClick={acceptAll}>
+              <Button type="button" size="sm" onClick={acceptAll}>
                 Aceptar todas
               </Button>
             </div>

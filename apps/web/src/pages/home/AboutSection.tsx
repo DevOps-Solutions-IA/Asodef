@@ -36,12 +36,13 @@ export function AboutSection({ eyebrow, heading, description, cards }: AboutSect
   }
 
   return (
-    <section id="quienes-somos" aria-labelledby={heading ? "about-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="quienes-somos" aria-labelledby={heading ? "about-heading" : undefined} className="marketing-section marketing-section--soft">
       <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
         <div className="flex flex-col justify-center">
           {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="about-heading" />}
-          <div className="mt-8 overflow-hidden rounded-[28px]">
+          <div className="relative mt-8 overflow-hidden rounded-[30px] border border-brand-dark/10 shadow-e3">
             <img src={aboutImage} alt="" role="presentation" className="h-full w-full object-cover" />
+            <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-brand-deep/30 to-transparent" />
           </div>
         </div>
 
@@ -54,8 +55,9 @@ export function AboutSection({ eyebrow, heading, description, cards }: AboutSect
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.12 }}
-                className="rounded-2xl border border-border-soft bg-white p-6 shadow-e1 transition-shadow duration-200 hover:shadow-e2"
+                className="premium-card-glow rounded-xl3 border border-brand-dark/10 bg-white/90 p-7 shadow-e1 transition duration-200 hover:-translate-y-0.5 hover:shadow-e2 motion-reduce:transform-none"
               >
+                <span className="mb-4 block h-1 w-10 rounded-full bg-brand-orange" aria-hidden="true" />
                 <h3 className="font-display text-lg font-semibold text-text-main">{card.title}</h3>
                 {card.body && <p className="mt-2 text-sm text-text-muted">{card.body}</p>}
               </motion.article>

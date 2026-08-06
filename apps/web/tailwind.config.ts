@@ -66,6 +66,11 @@ export default {
         warning: "var(--color-warning)",
         danger: "var(--color-danger)",
         info: "var(--color-info)",
+        "surface-canvas": "var(--surface-canvas)",
+        "surface-panel": "var(--surface-panel)",
+        "surface-subtle": "var(--surface-subtle)",
+        "surface-emphasis": "var(--surface-emphasis)",
+        "surface-inverse": "var(--surface-inverse)",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
@@ -90,6 +95,14 @@ export default {
         // one-off arbitrary value.
         xl2: "1.25rem",
         xl3: "1.75rem",
+      },
+      transitionTimingFunction: {
+        enterprise: "var(--ease-enterprise)",
+      },
+      transitionDuration: {
+        fast: "var(--motion-fast)",
+        base: "var(--motion-base)",
+        slow: "var(--motion-slow)",
       },
     },
   },

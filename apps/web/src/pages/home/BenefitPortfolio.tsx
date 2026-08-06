@@ -41,7 +41,7 @@ export function BenefitPortfolio({ eyebrow, heading, description, categories }: 
   }
 
   return (
-    <section id="portafolio" aria-labelledby={heading ? "portfolio-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="portafolio" aria-labelledby={heading ? "portfolio-heading" : undefined} className="marketing-section">
       {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="portfolio-heading" />}
 
       {categories && categories.length > 0 && (
@@ -55,9 +55,9 @@ export function BenefitPortfolio({ eyebrow, heading, description, categories }: 
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.3 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.06 }}
-                className="flex flex-col rounded-2xl border border-border-soft bg-bg-elevated p-6 shadow-e1 transition-shadow hover:shadow-e2 motion-safe:hover:-translate-y-1 motion-safe:transition-transform"
+                className="group flex flex-col overflow-hidden rounded-xl3 border border-brand-dark/10 bg-bg-elevated p-6 shadow-e1 transition-shadow hover:shadow-e3 motion-safe:hover:-translate-y-1 motion-safe:transition-transform"
               >
-                <Icon aria-hidden="true" className="h-8 w-8 text-brand-green" />
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-dark text-white shadow-e2 transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none"><Icon aria-hidden="true" className="h-6 w-6" /></span>
                 <h3 className="mt-4 font-display text-lg font-semibold text-text-main">{category.title}</h3>
                 {category.description && <p className="mt-2 flex-1 text-sm text-text-muted">{category.description}</p>}
                 <Link

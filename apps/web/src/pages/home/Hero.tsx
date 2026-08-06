@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
 import { cn, usePrefersReducedMotion } from "@asodef/ui";
+import { CheckCircle2, LockKeyhole, Network } from "lucide-react";
 import heroImage from "../../assets/hero-family.webp";
 
 export interface HeroStat {
@@ -75,8 +76,11 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
   const duration = prefersReducedMotion ? 0 : 0.7;
 
   return (
-    <section className="relative isolate flex min-h-[100svh] items-center overflow-hidden py-16 sm:py-20">
-      <div className="grid w-full items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <section className="relative isolate flex min-h-[calc(100svh-4.5rem)] items-center overflow-hidden py-14 sm:py-20">
+      <div aria-hidden="true" className="absolute -left-40 top-20 -z-10 h-96 w-96 rounded-full bg-brand-light/10 blur-3xl" />
+      <div aria-hidden="true" className="absolute right-[-14rem] top-[-8rem] -z-10 h-[34rem] w-[34rem] rounded-full border border-brand-dark/10" />
+      <div aria-hidden="true" className="absolute right-[-9rem] top-[-3rem] -z-10 h-[24rem] w-[24rem] rounded-full border border-brand-orange/10" />
+      <div className="grid w-full items-center gap-12 lg:grid-cols-[1.05fr_.95fr] lg:gap-20">
         <div>
           {eyebrow && (
             <motion.span
@@ -94,7 +98,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
               initial={textInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration, ease: EASE, delay: prefersReducedMotion ? 0 : 0.1 }}
-              className={cn("font-display font-semibold text-text-main", "text-[clamp(2.25rem,5vw+1rem,4rem)] leading-[1.05]", eyebrow && "mt-5")}
+              className={cn("max-w-2xl font-display font-semibold tracking-[-0.045em] text-text-main", "text-[clamp(2.5rem,5vw+1rem,4.6rem)] leading-[1.01]", eyebrow && "mt-6")}
             >
               {heading}
             </motion.h1>
@@ -105,7 +109,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
               initial={textInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration, ease: EASE, delay: prefersReducedMotion ? 0 : 0.2 }}
-              className="mt-6 max-w-lg text-lg text-text-muted"
+              className="mt-6 max-w-xl text-lg leading-8 text-text-muted"
             >
               {supportingCopy}
             </motion.p>
@@ -125,14 +129,26 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
               ))}
             </motion.div>
           )}
+
+          <motion.div
+            initial={textInitial}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration, ease: EASE, delay: prefersReducedMotion ? 0 : 0.38 }}
+            className="mt-9 grid max-w-xl grid-cols-1 gap-3 border-t border-brand-dark/10 pt-5 text-xs font-medium text-text-muted sm:grid-cols-3"
+          >
+            <span className="flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-brand-dark" /> Canales protegidos</span>
+            <span className="flex items-center gap-2"><Network aria-hidden="true" className="h-4 w-4 text-brand-dark" /> Gestión integrada</span>
+            <span className="flex items-center gap-2"><CheckCircle2 aria-hidden="true" className="h-4 w-4 text-brand-dark" /> Información verificable</span>
+          </motion.div>
         </div>
 
-        <div className="relative">
+        <div className="relative mx-auto w-full max-w-xl lg:max-w-none">
+          <div aria-hidden="true" className="absolute -inset-5 rounded-[42%_58%_55%_45%/45%_40%_60%_55%] border border-brand-dark/10" />
           <motion.div
             initial={imageInitial}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: prefersReducedMotion ? 0 : 0.8, ease: EASE }}
-            className="relative aspect-[6/7] overflow-hidden rounded-[40%_60%_55%_45%/45%_40%_60%_55%] shadow-[0_30px_80px_rgba(6,77,56,0.25)]"
+            className="relative aspect-[6/7] overflow-hidden rounded-[40%_60%_55%_45%/45%_40%_60%_55%] border border-white/50 shadow-[0_34px_90px_rgba(6,77,56,0.28)]"
           >
             {/* Stable placeholder path (US-012) - a real photograph drops
              * in at this exact path later with no code change required. */}
@@ -145,7 +161,7 @@ export function Hero({ eyebrow, heading, supportingCopy, stats, ctas }: HeroProp
                 <div
                   key={stat.label}
                   className={cn(
-                    "absolute rounded-2xl border border-white/40 bg-white/80 px-5 py-3 text-center shadow-e3 backdrop-blur-xl",
+                    "absolute rounded-2xl border border-white/55 bg-white/84 px-5 py-3 text-center shadow-e3 backdrop-blur-xl",
                     STAT_POSITION_CLASSES[index % STAT_POSITION_CLASSES.length],
                   )}
                 >

@@ -34,7 +34,7 @@ export function CoverageSection({ eyebrow, heading, description, cards }: Covera
   }
 
   return (
-    <section id="cobertura" aria-labelledby={heading ? "coverage-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="cobertura" aria-labelledby={heading ? "coverage-heading" : undefined} className="marketing-section marketing-section--soft">
       {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="coverage-heading" />}
 
       <div className="mt-10 grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
@@ -42,7 +42,7 @@ export function CoverageSection({ eyebrow, heading, description, cards }: Covera
           src={colombiaMap}
           alt=""
           aria-hidden="true"
-          className="mx-auto h-auto w-full max-w-xs"
+          className="mx-auto h-auto w-full max-w-sm drop-shadow-[0_24px_35px_rgba(6,77,56,0.18)]"
           width={300}
           height={480}
         />
@@ -56,7 +56,7 @@ export function CoverageSection({ eyebrow, heading, description, cards }: Covera
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.1 }}
-                className="rounded-2xl border border-border-soft bg-white p-6 shadow-e1 transition-shadow duration-200 hover:shadow-e2"
+                className="premium-card-glow rounded-xl3 border border-brand-dark/10 bg-white/90 p-7 shadow-e1 transition duration-200 hover:-translate-y-0.5 hover:shadow-e2 motion-reduce:transform-none"
               >
                 <h3 className="font-display text-lg font-semibold text-text-main">{card.title}</h3>
                 {card.body && <p className="mt-2 text-sm text-text-muted">{card.body}</p>}

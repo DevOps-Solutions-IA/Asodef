@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, Dialog, EmptyState, ErrorState, Skeleton } from "@asodef/ui";
+import { Badge, Button, Card, Dialog, EmptyState, ErrorState, PageHeader, Skeleton } from "@asodef/ui";
+import { FileCheck2, ShieldCheck } from "lucide-react";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
 import { getMyConsentRecords, revokeMyConsent } from "../../lib/me/me-consent-api";
 import { CONSENT_PURPOSE_LABELS, CONSENT_STATUS_LABELS } from "../../lib/me/me-consent-types";
@@ -49,17 +50,17 @@ export function MyAccountPage() {
   });
 
   return (
-    <div>
-      <h1 className="font-display text-2xl font-semibold text-brand-dark">Mi cuenta</h1>
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Portal personal" icon={<ShieldCheck className="h-5 w-5" />} title="Mi cuenta" description="Consulta y administra la evidencia asociada a tus consentimientos en ASODEF." />
 
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+      <div className="flex flex-wrap gap-2 rounded-2xl border border-border-soft bg-white p-3 text-sm shadow-e1">
         <Link to="/legal/terminos-y-condiciones" className="font-medium text-brand-dark hover:underline">Términos de uso</Link>
         <Link to="/legal/politica-de-privacidad" className="font-medium text-brand-dark hover:underline">Política de privacidad</Link>
         <Link to="/legal/condiciones-portal-afiliado" className="font-medium text-brand-dark hover:underline">Condiciones del portal</Link>
       </div>
 
-      <Card className="mt-6">
-        <h2 className="font-display text-lg font-semibold text-text-main">Mis consentimientos</h2>
+      <Card>
+        <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-text-main"><FileCheck2 aria-hidden="true" className="h-5 w-5 text-brand-orange" /> Mis consentimientos</h2>
         <p className="mt-1 text-sm text-text-muted">Historial de los consentimientos que has otorgado o revocado en ASODEF.</p>
 
         {isPending && (
@@ -84,7 +85,7 @@ export function MyAccountPage() {
               return (
                 <li
                   key={record.id}
-                  className="flex flex-col gap-2 rounded-xl border border-border-soft bg-white px-4 py-3 text-sm shadow-e1 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-2xl border border-border-soft bg-white px-4 py-3 text-sm shadow-e1 transition-shadow hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="font-medium text-text-main">{CONSENT_PURPOSE_LABELS[record.purposeKey] ?? record.purposeKey}</p>

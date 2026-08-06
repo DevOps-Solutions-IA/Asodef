@@ -30,8 +30,9 @@ export function TrustBar({ items }: TrustBarProps) {
   }
 
   return (
-    <section aria-label="Indicadores de confianza" className="relative isolate">
-      <div className="rounded-[28px] bg-brand-deep px-6 py-10 sm:px-10 sm:py-12">
+    <section aria-label="Indicadores de confianza" className="relative isolate py-6">
+      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-brand-deep px-6 py-10 shadow-e3 sm:px-10 sm:py-12">
+        <div aria-hidden="true" className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand-green/25 blur-3xl" />
         <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:gap-8">
           {items.slice(0, 4).map((item, index) => (
             <motion.div
@@ -40,8 +41,9 @@ export function TrustBar({ items }: TrustBarProps) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.4 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.1 }}
-              className="text-center text-white sm:text-left"
+              className="relative border-l border-white/12 pl-4 text-left text-white first:border-l-0 first:pl-0"
             >
+              <span aria-hidden="true" className="mb-3 block h-1.5 w-8 rounded-full bg-brand-orange" />
               <p className="font-display text-lg font-semibold sm:text-xl">{item.label}</p>
               {item.sublabel && <p className="mt-1 text-sm text-white/70">{item.sublabel}</p>}
             </motion.div>

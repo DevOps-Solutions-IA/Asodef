@@ -42,13 +42,13 @@ export function AllianceCta({ eyebrow, heading, description, primaryAction, what
   const whatsappHref = whatsapp ? `https://wa.me/${whatsapp.phoneNumber}?text=${encodeURIComponent(whatsapp.message)}` : undefined;
 
   return (
-    <section id="aliados" aria-labelledby="alliance-heading" className="scroll-mt-24 py-20 md:py-28">
+    <section id="aliados" aria-labelledby="alliance-heading" className="marketing-section">
       <motion.div
         initial={prefersReducedMotion ? false : { opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.4 }}
         transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE }}
-        className="relative isolate overflow-hidden rounded-[28px] bg-brand-deep px-6 py-14 text-center sm:px-12 sm:py-16"
+        className="relative isolate overflow-hidden rounded-[36px] border border-white/10 bg-brand-deep px-6 py-16 text-center shadow-e4 sm:px-12 sm:py-20"
       >
         <div
           aria-hidden="true"

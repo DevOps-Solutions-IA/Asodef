@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
+import { ArrowLeft, Scale } from "lucide-react";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
 import { BrandLogo } from "./shared/BrandLogo";
@@ -15,21 +16,22 @@ export function LegalLayout() {
   useFocusMainOnRouteChange(mainRef);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg-base">
+    <div className="flex min-h-screen flex-col bg-surface-canvas">
       <SkipToContent targetId="main-content" />
-      <header className="relative z-10 border-b border-border-soft bg-white shadow-e1">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
+      <header className="sticky top-0 z-30 border-b border-brand-dark/10 bg-white/88 shadow-e1 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:px-8">
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
-            <BrandLogo variant="full" className="h-11 w-auto sm:h-12" />
+            <BrandLogo variant="full" className="h-10 w-auto sm:h-11" />
           </Link>
-          <Link to="/" className="text-sm text-text-muted hover:text-brand-dark hover:underline">
-            Volver al sitio
-          </Link>
+          <div className="flex items-center gap-4">
+            <span className="hidden items-center gap-2 rounded-full bg-brand-dark-50 px-3 py-1.5 text-xs font-semibold text-brand-dark sm:flex"><Scale aria-hidden="true" className="h-3.5 w-3.5" /> Información institucional</span>
+            <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-text-muted hover:text-brand-dark"><ArrowLeft aria-hidden="true" className="h-4 w-4" />Volver al sitio</Link>
+          </div>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-8 sm:flex-row sm:px-8 sm:py-10">
-        <details className="rounded-xl border border-border-soft bg-white p-4 shadow-e1 sm:hidden">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-8 sm:px-8 sm:py-10 lg:flex-row">
+        <details className="rounded-2xl border border-brand-dark/10 bg-white/85 p-4 shadow-e1 backdrop-blur lg:hidden">
           <summary className="cursor-pointer font-display text-sm font-semibold text-brand-dark">Explorar documentos</summary>
           <nav aria-label="Documentos legales móviles" className="mt-3 max-h-72 overflow-y-auto">
             <ul className="flex flex-col gap-1 text-sm">
@@ -38,12 +40,12 @@ export function LegalLayout() {
           </nav>
         </details>
 
-        <nav aria-label="Documentos legales" className="hidden w-60 shrink-0 sm:block">
-          <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto pr-2">
+        <nav aria-label="Documentos legales" className="hidden w-64 shrink-0 lg:block">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-xl3 border border-brand-dark/10 bg-white/72 p-4 shadow-e1 backdrop-blur-xl">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-text-muted">
             Centro legal
           </h2>
-          <ul className="mt-3 flex flex-col gap-1 text-sm">
+          <ul className="mt-3 flex flex-col gap-1 text-[13px]">
             {LEGAL_CATALOG.map((entry) => (
               <li key={entry.slug}>
                 <NavLink

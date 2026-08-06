@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { CircleDollarSign, ShieldCheck } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, ErrorState, Spinner, StatusBadge } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
@@ -145,9 +146,11 @@ function MockConfirmation({ publicReference, orderStatus, orderStatusLabel }: Mo
         se realizó.
       </p>
 
-      <Card className="mt-6 flex flex-col items-center gap-4 py-10 text-center">
+      <Card variant="accent" className="mt-6 flex flex-col items-center gap-4 py-10 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-dark text-white shadow-e2"><CircleDollarSign aria-hidden="true" className="h-7 w-7" /></span>
         <StatusBadge tone={getPaymentOrderStatusTone(orderStatus)} label={orderStatusLabel} />
         <p className="text-sm text-text-muted">Referencia: {publicReference}</p>
+        <p className="flex items-center gap-2 text-xs text-text-muted"><ShieldCheck aria-hidden="true" className="h-4 w-4 text-brand-green" /> Simulación controlada sin cobro real</p>
         <Button type="button" onClick={() => navigate(`/pagos/resultado?reference=${encodeURIComponent(publicReference)}`)}>
           Ver resultado
         </Button>

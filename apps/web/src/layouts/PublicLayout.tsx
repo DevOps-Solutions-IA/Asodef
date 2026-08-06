@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { ASODEF_COMPANY } from "@asodef/config";
 import { Drawer, IconButton } from "@asodef/ui";
-import { Menu } from "lucide-react";
+import { ArrowRight, Menu, ShieldCheck } from "lucide-react";
 import { useCookieConsent } from "../lib/cookie-consent/cookie-consent-context";
 import { BrandLogo } from "./shared/BrandLogo";
 import { SkipToContent } from "./shared/SkipToContent";
@@ -49,7 +49,7 @@ const LEGAL_LINKS = [
 ];
 
 const NAV_LINK_CLASS =
-  "relative py-1 font-medium text-text-main/90 transition-colors duration-150 after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 after:rounded-full after:bg-brand-orange after:transition-all after:duration-300 after:ease-out hover:text-brand-dark hover:after:w-full";
+  "relative py-2 font-medium text-text-main/80 transition-colors duration-150 after:absolute after:bottom-1 after:left-0 after:h-[1.5px] after:w-0 after:rounded-full after:bg-brand-orange after:transition-all after:duration-300 after:ease-out hover:text-brand-dark hover:after:w-full";
 
 /**
  * Public marketing site shell (US-011): header transitions from
@@ -97,21 +97,21 @@ export function PublicLayout() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg-base">
+    <div className="flex min-h-screen flex-col overflow-x-clip bg-bg-base">
       <SkipToContent targetId="main-content" />
       <header
         className={
           "sticky top-0 z-40 border-b transition-[background-color,box-shadow,border-color] duration-300 " +
-          (scrolled ? "border-border-soft bg-[#F4F5F1]/85 shadow-e1 backdrop-blur-xl" : "border-transparent bg-transparent shadow-none")
+          (scrolled ? "border-brand-dark/10 bg-[#F4F5F1]/90 shadow-e2 backdrop-blur-2xl" : "border-transparent bg-bg-base/70 shadow-none backdrop-blur-lg")
         }
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8 lg:px-12">
           <Link to="/" aria-label={ASODEF_COMPANY.legalName}>
-            <BrandLogo className="h-9 w-auto sm:h-10" />
+            <BrandLogo className="h-10 w-auto sm:h-11" />
           </Link>
 
-          <nav aria-label="Principal" className="hidden sm:block">
-            <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-text-main">
+          <nav aria-label="Principal" className="hidden lg:block">
+            <ul className="flex items-center gap-x-5 text-[13px] text-text-main xl:gap-x-7">
               {NAV_LINKS.map((link) => (
                 <li key={link.to}>
                   <Link to={link.to} className={NAV_LINK_CLASS}>
@@ -122,11 +122,20 @@ export function PublicLayout() {
             </ul>
           </nav>
 
+          <div className="hidden items-center gap-3 lg:flex">
+            <span className="hidden items-center gap-1.5 text-xs font-medium text-text-muted xl:flex">
+              <ShieldCheck aria-hidden="true" className="h-4 w-4 text-brand-green" /> Institución verificada
+            </span>
+            <Link to="/#contacto" className="inline-flex h-10 items-center gap-2 rounded-full bg-brand-dark px-4 text-xs font-semibold text-white shadow-e1 transition hover:-translate-y-0.5 hover:bg-brand-dark-600 hover:shadow-e2">
+              Conversemos <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
           <IconButton
             ref={hamburgerRef}
             aria-label="Abrir menú de navegación"
             icon={<Menu className="h-5 w-5" />}
-            className="sm:hidden"
+            className="lg:hidden"
             onClick={() => setDrawerOpen(true)}
           />
         </div>

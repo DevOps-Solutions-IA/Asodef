@@ -32,7 +32,7 @@ export function CompanyBenefits({ eyebrow, heading, description, cards }: Compan
   }
 
   return (
-    <section id="beneficios" aria-labelledby={heading ? "benefits-heading" : undefined} className="scroll-mt-24 py-20 md:py-28">
+    <section id="beneficios" aria-labelledby={heading ? "benefits-heading" : undefined} className="marketing-section marketing-section--soft">
       {heading && <SectionHeading eyebrow={eyebrow} title={heading} description={description} headingId="benefits-heading" />}
 
       {cards && cards.length > 0 && (
@@ -45,11 +45,11 @@ export function CompanyBenefits({ eyebrow, heading, description, cards }: Compan
               viewport={{ once: true, amount: 0.3 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.6, ease: EASE, delay: prefersReducedMotion ? 0 : index * 0.08 }}
               className={
-                "rounded-2xl border border-border-soft bg-white p-6 shadow-e1 transition-shadow hover:shadow-e2 motion-safe:hover:-translate-y-1 motion-safe:transition-transform" +
+                "premium-card-glow rounded-xl3 border border-brand-dark/10 bg-white/92 p-7 shadow-e1 transition-shadow hover:shadow-e3 motion-safe:hover:-translate-y-1 motion-safe:transition-transform" +
                 (index === 0 ? " sm:col-span-2 lg:col-span-2" : "")
               }
             >
-              <span className="font-display text-sm font-semibold text-brand-orange">{String(index + 1).padStart(2, "0")}</span>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark-50 font-display text-sm font-semibold text-brand-dark ring-1 ring-brand-dark/10">{String(index + 1).padStart(2, "0")}</span>
               <h3 className="mt-2 font-display text-lg font-semibold text-text-main">{card.title}</h3>
               {card.body && <p className="mt-2 text-sm text-text-muted">{card.body}</p>}
             </motion.article>

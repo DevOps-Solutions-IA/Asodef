@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, ErrorState, Skeleton, StatusBadge } from "@asodef/ui";
+import { Badge, Button, Card, ErrorState, PageHeader, Skeleton, StatusBadge } from "@asodef/ui";
+import { CreditCard, FileCheck2 } from "lucide-react";
 import { ApiError } from "../../lib/api-error";
 import { getPaymentOrder } from "../../lib/payments/payments-api";
 import { queryKeys } from "../../lib/query-keys";
@@ -54,15 +55,10 @@ export function OrderSummaryPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-semibold text-brand-dark">Resumen de tu pago</h1>
-        <Badge variant="warning">Modo prueba</Badge>
-      </div>
-      <p className="mt-1 text-sm text-text-muted">
-        Bold está en modo de prueba - ningún cobro real se realizará en esta sesión de revisión.
-      </p>
+      <PageHeader eyebrow="Confirmación transaccional" icon={<CreditCard className="h-5 w-5" />} title="Resumen de tu pago" description="Revisa el concepto, valor y condiciones vigentes antes de continuar." actions={<Badge variant="warning">Modo prueba</Badge>} />
+      <p className="mt-4 rounded-xl border border-status-warning/20 bg-status-warning/5 px-4 py-3 text-sm text-text-muted">Bold está en modo de prueba - ningún cobro real se realizará en esta sesión de revisión.</p>
 
-      <Card className="mt-6">
+      <Card className="mt-6" variant="accent">
         <p className="text-sm text-text-muted">Concepto</p>
         <p className="font-display text-lg font-semibold text-text-main">{data.obligation.concept}</p>
 
@@ -82,11 +78,14 @@ export function OrderSummaryPage() {
         </div>
       </Card>
 
-      <aside className="mt-5 rounded-xl border border-border-soft bg-bg-soft p-4 text-sm leading-6 text-text-muted">
+      <aside className="mt-5 flex gap-3 rounded-2xl border border-border-soft bg-white p-5 text-sm leading-6 text-text-muted shadow-e1">
+        <FileCheck2 aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+        <p>
         Al continuar confirmas las condiciones mostradas para esta orden y aceptas los{" "}
         <Link to="/legal/terminos-de-pago" target="_blank" className="font-medium text-brand-dark hover:underline">términos de pago</Link>, la{" "}
-        <Link to="/legal/reversiones-devoluciones-y-reembolsos" target="_blank" className="font-medium text-brand-dark hover:underline">política de reversiones y reembolsos</Link> y la{" "}
+        <Link to="/legal/reversiones-y-reembolsos" target="_blank" className="font-medium text-brand-dark hover:underline">política de reversiones y reembolsos</Link> y la{" "}
         <Link to="/legal/tratamiento-de-datos" target="_blank" className="font-medium text-brand-dark hover:underline">política de tratamiento de datos</Link>. La aceptación queda vinculada a la versión vigente registrada con la orden.
+        </p>
       </aside>
 
       {isPayable ? (

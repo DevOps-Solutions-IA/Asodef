@@ -6,6 +6,7 @@ import { ApiError } from "../../lib/api-error";
 import { getBoldPaymentStatus, getReceiptDownloadUrl } from "../../lib/payments/payments-api";
 import { queryKeys } from "../../lib/query-keys";
 import { PAYMENT_RESULT_CONFIG, toPaymentResultState } from "./payment-result-state";
+import { CheckCircle2, Clock3, ReceiptText, ShieldAlert } from "lucide-react";
 
 const LINK_BUTTON_CLASS =
   "inline-flex h-11 items-center justify-center rounded-full bg-brand-dark px-5 text-sm font-medium text-white transition-colors hover:bg-brand-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-dark focus-visible:ring-offset-2";
@@ -67,15 +68,17 @@ export function PaymentResultPage() {
 
   const state = toPaymentResultState(data.orderStatus);
   const config = PAYMENT_RESULT_CONFIG[state];
+  const ResultIcon = state === "approved" ? CheckCircle2 : state === "pending" ? Clock3 : ShieldAlert;
 
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-brand-dark">{config.heading}</h1>
       <p className="mt-1 text-sm text-text-muted">{config.description}</p>
 
-      <Card className="mt-6 flex flex-col items-center gap-4 py-10 text-center">
+      <Card variant="accent" className="mt-6 flex flex-col items-center gap-4 py-10 text-center">
+        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-dark-50 text-brand-dark ring-1 ring-brand-dark/10"><ResultIcon aria-hidden="true" className="h-8 w-8" /></span>
         <StatusBadge tone={config.tone} label={data.orderStatusLabel} />
-        <p className="text-sm text-text-muted">Referencia: {data.publicReference}</p>
+        <p className="inline-flex items-center gap-2 rounded-full bg-bg-soft px-3 py-1.5 text-sm text-text-muted"><ReceiptText aria-hidden="true" className="h-4 w-4" /> Referencia: {data.publicReference}</p>
 
         <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
           {state === "approved" && (

@@ -71,6 +71,24 @@
   --color-danger: #c83f49;
   --color-info: #2878b5;
 
+  /* Enterprise surface vocabulary. These are semantic aliases over the
+   * established ASODEF palette, not new brand colors. */
+  --surface-canvas: #f4f6f2;
+  --surface-panel: rgba(255, 255, 255, 0.9);
+  --surface-panel-solid: #ffffff;
+  --surface-subtle: #eef3ed;
+  --surface-emphasis: #e4eee8;
+  --surface-inverse: #003f2d;
+  --border-subtle: rgba(6, 77, 56, 0.09);
+  --border-strong: rgba(6, 77, 56, 0.17);
+  --highlight-top: rgba(255, 255, 255, 0.82);
+  --workspace-sidebar-width: 18rem;
+  --workspace-topbar-height: 4.5rem;
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 420ms;
+  --ease-enterprise: cubic-bezier(0.22, 1, 0.36, 1);
+
   /* Elevation - every shadow tinted toward brand-dark instead of flat
    * black, the same technique the pre-existing Card/Dialog/Drawer/Hero
    * shadows already used ad hoc; formalized here as a 5-step scale so
@@ -93,6 +111,7 @@ html {
 body {
   @apply bg-bg-base text-text-main antialiased;
   font-family: var(--font-sans);
+  background-color: var(--surface-canvas);
 }
 
 ::selection {
@@ -148,4 +167,96 @@ body {
   header, footer, .print-hide { display: none !important; }
   .legal-document-print { color: #111111; }
   .legal-document-print section { break-inside: avoid; }
+}
+
+@layer components {
+  .workspace-canvas {
+    background:
+      radial-gradient(circle at 82% 4%, rgba(67, 139, 52, 0.08), transparent 30rem),
+      radial-gradient(circle at 14% 94%, rgba(242, 138, 0, 0.045), transparent 26rem),
+      var(--surface-canvas);
+  }
+
+  .workspace-main {
+    min-width: 0;
+    isolation: isolate;
+  }
+
+  .surface-panel {
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-e1);
+    backdrop-filter: blur(18px);
+  }
+
+  .data-surface {
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 1.25rem;
+    background: var(--surface-panel-solid);
+    box-shadow: var(--shadow-e2);
+  }
+
+  .workspace-main table thead {
+    background: linear-gradient(180deg, rgba(234, 243, 239, 0.96), rgba(228, 238, 232, 0.86));
+    color: var(--color-brand-dark);
+  }
+
+  .workspace-main table thead th {
+    letter-spacing: 0.08em;
+  }
+
+  .workspace-main table tbody tr {
+    transition: background-color var(--motion-fast) ease-out;
+  }
+
+  .workspace-main table tbody tr:hover {
+    background: rgba(234, 243, 239, 0.58);
+  }
+
+  .filter-surface {
+    border: 1px solid var(--border-subtle);
+    border-radius: 1.25rem;
+    background: rgba(255, 255, 255, 0.72);
+    padding: 1rem;
+    box-shadow: var(--shadow-e1);
+    backdrop-filter: blur(14px);
+  }
+
+  .marketing-section {
+    position: relative;
+    scroll-margin-top: 6rem;
+    padding-block: clamp(4.5rem, 8vw, 7rem);
+  }
+
+  .marketing-section::before {
+    position: absolute;
+    inset: 1rem -100vw;
+    z-index: -1;
+    border-block: 1px solid transparent;
+    content: "";
+    pointer-events: none;
+  }
+
+  .marketing-section--soft::before {
+    border-color: rgba(6, 77, 56, 0.045);
+    background:
+      radial-gradient(circle at 12% 18%, rgba(128, 174, 58, 0.1), transparent 22rem),
+      rgba(255, 255, 255, 0.42);
+  }
+
+  .premium-card-glow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .premium-card-glow::after {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.8), transparent 40%);
+    content: "";
+    pointer-events: none;
+  }
 }

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, BriefcaseBusiness, CreditCard, Gauge, UsersRound } from "lucide-react";
 import { cn, ErrorState, PageHeader, Skeleton } from "@asodef/ui";
 import { getUserStats } from "../../lib/admin/admin-users-api";
 import { getAdminDashboard } from "../../lib/admin/admin-dashboard-api";
@@ -16,28 +16,30 @@ interface MetricCardProps {
    * a warning-tinted accent bar and icon so it reads as needing a look
    * at a glance, not just another neutral count in the same grid. */
   tone?: "neutral" | "attention";
+  icon?: React.ReactNode;
 }
 
 /** Dense stat-tile treatment, deliberately distinct from the
  * translucent, backdrop-blur Card used on spacious marketing/auth
  * surfaces - a tight grid of 20+ tiles reads better as compact, crisp
  * surfaces than as many small "glass" panels stacked together. */
-function MetricCard({ label, value, tone = "neutral" }: MetricCardProps) {
+function MetricCard({ label, value, tone = "neutral", icon }: MetricCardProps) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border bg-white p-4 shadow-e1 transition-shadow duration-150 hover:shadow-e2",
+        "premium-card-glow relative min-h-28 overflow-hidden rounded-2xl border bg-white p-4 shadow-e1 transition-all duration-enterprise ease-enterprise hover:-translate-y-0.5 hover:shadow-e3 motion-reduce:transform-none",
         tone === "attention" ? "border-warning/30" : "border-border-soft",
       )}
     >
       {tone === "attention" && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] bg-warning" />}
       <div className="flex items-start justify-between gap-2 pl-1.5">
-        <p className="text-sm text-text-muted">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-muted">{label}</p>
         {tone === "attention" && <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-warning" />}
       </div>
-      <p className="mt-1 pl-1.5 font-display text-3xl font-semibold tabular-nums text-text-main">
+      <p className="mt-3 pl-1.5 font-display text-3xl font-semibold tabular-nums tracking-tight text-text-main">
         {typeof value === "number" ? value.toLocaleString("es-CO") : value}
       </p>
+      {icon && <span aria-hidden="true" className="absolute bottom-3 right-3 text-brand-dark/10">{icon}</span>}
     </div>
   );
 }
@@ -71,7 +73,7 @@ export function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Dashboard administrativo" description="Métricas comerciales, financieras y operativas en tiempo real." />
+      <PageHeader eyebrow="Inteligencia operativa" icon={<Gauge className="h-5 w-5" />} title="Dashboard administrativo" description="Lectura consolidada de la actividad comercial, financiera y operativa en tiempo real." />
 
       {dashboardQuery.isLoading && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-busy="true">
@@ -93,7 +95,7 @@ export function AdminDashboardPage() {
               Comercial
             </h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              <MetricCard label="Nuevos prospectos (30d)" value={dashboardQuery.data.newProspects30d} />
+              <MetricCard label="Nuevos prospectos (30d)" value={dashboardQuery.data.newProspects30d} icon={<UsersRound className="h-9 w-9" />} />
               <MetricCard label="Oportunidades ganadas" value={dashboardQuery.data.opportunitiesWon} />
               <MetricCard label="Oportunidades perdidas" value={dashboardQuery.data.opportunitiesLost} />
               <MetricCard label="Tasa de conversión" value={formatPercent(dashboardQuery.data.conversionRate)} />
@@ -104,8 +106,8 @@ export function AdminDashboardPage() {
             </div>
 
             {Object.keys(dashboardQuery.data.opportunitiesByStage).length > 0 && (
-              <div className="rounded-xl border border-border-soft bg-white p-5 shadow-e1">
-                <p className="mb-3 text-sm font-medium text-text-main">Oportunidades por etapa</p>
+              <div className="data-surface p-5">
+                <p className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-main"><BarChart3 aria-hidden="true" className="h-4 w-4 text-brand-orange" /> Oportunidades por etapa</p>
                 <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {Object.entries(dashboardQuery.data.opportunitiesByStage).map(([stage, count]) => (
                     <div key={stage} className="flex justify-between gap-2 text-sm">
@@ -123,7 +125,7 @@ export function AdminDashboardPage() {
               Contratos
             </h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              <MetricCard label="Pendientes de firma" value={dashboardQuery.data.contractsPendingSignature} />
+              <MetricCard label="Pendientes de firma" value={dashboardQuery.data.contractsPendingSignature} icon={<BriefcaseBusiness className="h-9 w-9" />} />
               <MetricCard
                 label="Próximos a vencer (30d)"
                 value={dashboardQuery.data.contractsNearingExpiration}
@@ -137,7 +139,7 @@ export function AdminDashboardPage() {
               Pagos
             </h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              <MetricCard label="Recaudo diario" value={formatMoney(dashboardQuery.data.recaudoDiarioCents)} />
+              <MetricCard label="Recaudo diario" value={formatMoney(dashboardQuery.data.recaudoDiarioCents)} icon={<CreditCard className="h-9 w-9" />} />
               <MetricCard label="Recaudo mensual" value={formatMoney(dashboardQuery.data.recaudoMensualCents)} />
               <MetricCard label="Pagos aprobados" value={dashboardQuery.data.pagosAprobados} />
               <MetricCard label="Pagos pendientes" value={dashboardQuery.data.pagosPendientes} />
@@ -175,7 +177,7 @@ export function AdminDashboardPage() {
           {userStatsQuery.isError && <ErrorState description={getAdminErrorMessage(userStatsQuery.error)} />}
           {userStatsQuery.isSuccess && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              <MetricCard label="Usuarios totales" value={userStatsQuery.data.totalUsers} />
+              <MetricCard label="Usuarios totales" value={userStatsQuery.data.totalUsers} icon={<Activity className="h-9 w-9" />} />
               <MetricCard label="Usuarios activos" value={userStatsQuery.data.activeUsers} />
               <MetricCard label="Usuarios inactivos" value={userStatsQuery.data.inactiveUsers} />
               <MetricCard label="Usuarios suspendidos" value={userStatsQuery.data.suspendedUsers} />
