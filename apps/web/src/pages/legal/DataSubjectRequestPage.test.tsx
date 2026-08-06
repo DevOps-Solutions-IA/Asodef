@@ -41,6 +41,7 @@ describe("DataSubjectRequestPage", () => {
     expect(screen.getByRole("button", { name: "Crear solicitud" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Consultar referencia" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Descripción de la solicitud")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Elige si quieres registrar una solicitud nueva/)).not.toBeInTheDocument();
   });
 
   it("opens creation when a connected route requests accion=crear", () => {

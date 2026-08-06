@@ -79,12 +79,12 @@ export function GeneralContactForm() {
 
   if (mutation.isSuccess) {
     return (
-      <div ref={resultRef} tabIndex={-1} className="rounded-[1.75rem] border border-success/25 bg-success/5 p-6 focus:outline-none sm:p-8" role="status">
-        <CheckCircle2 aria-hidden="true" className="h-10 w-10 text-success" />
-        <h2 className="mt-5 font-display text-3xl font-semibold text-text-main">Mensaje registrado</h2>
-        <p className="mt-3 leading-7 text-text-muted">Conserva la referencia para identificar esta solicitud de orientación.</p>
-        <p className="mt-5 break-all rounded-xl bg-white px-4 py-3 font-mono font-bold text-brand-dark shadow-e1">{mutation.data.reference}</p>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+      <div ref={resultRef} tabIndex={-1} className="rounded-2xl border border-success/25 bg-success/5 p-4 focus:outline-none sm:rounded-[1.75rem] sm:p-8" role="status">
+        <CheckCircle2 aria-hidden="true" className="h-8 w-8 text-success sm:h-10 sm:w-10" />
+        <h2 className="mt-4 font-display text-2xl font-semibold text-text-main sm:mt-5 sm:text-3xl">Mensaje registrado</h2>
+        <p className="mt-2 text-sm leading-6 text-text-muted sm:mt-3 sm:text-base sm:leading-7">Conserva la referencia para identificar esta solicitud de orientación.</p>
+        <p className="mt-4 break-all rounded-xl bg-white px-3 py-3 font-mono text-sm font-bold text-brand-dark shadow-e1 sm:mt-5 sm:px-4 sm:text-base">{mutation.data.reference}</p>
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:flex sm:flex-row sm:flex-wrap sm:gap-3">
           <CopyReferenceAction value={mutation.data.reference} />
           <button
             type="button"
@@ -103,15 +103,15 @@ export function GeneralContactForm() {
   }
 
   return (
-    <div className="rounded-[1.75rem] border border-brand-dark/10 bg-white p-5 shadow-e2 sm:p-8">
-      <h2 className="font-display text-3xl font-semibold text-text-main">Registra un mensaje para orientación</h2>
-      <p className="mt-3 max-w-2xl leading-7 text-text-muted">Indica quién eres, dónde podemos responder y qué necesitas. No solicitamos datos empresariales cuando no corresponden.</p>
+    <div className="rounded-2xl border border-brand-dark/10 bg-white p-4 shadow-e2 sm:rounded-[1.75rem] sm:p-8">
+      <h2 className="font-display text-2xl font-semibold leading-tight text-text-main sm:text-3xl">Registra un mensaje para orientación</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:mt-3 sm:text-base sm:leading-7">Indica tu contacto y el asunto. No pedimos datos empresariales cuando no corresponden.</p>
       {mutation.isError && (
         <div ref={resultRef} tabIndex={-1} className="mt-5 focus:outline-none">
           <Alert variant="danger">{mutation.error instanceof Error ? mutation.error.message : "No pudimos registrar el mensaje. Intenta nuevamente."}</Alert>
         </div>
       )}
-      <form onSubmit={onSubmit} noValidate className="mt-7 grid gap-4 sm:grid-cols-2">
+      <form onSubmit={onSubmit} noValidate className="mt-5 grid gap-3 sm:mt-7 sm:grid-cols-2 sm:gap-4">
         <FormField label="Nombre completo" error={errors.fullName?.message} required>
           {(controlProps) => <Input {...controlProps} autoComplete="name" {...register("fullName")} />}
         </FormField>
@@ -119,12 +119,12 @@ export function GeneralContactForm() {
           {(controlProps) => <Input {...controlProps} type="email" autoComplete="email" {...register("email")} />}
         </FormField>
         <FormField label="Mensaje" error={errors.message?.message} required className="sm:col-span-2">
-          {(controlProps) => <Textarea {...controlProps} rows={4} maxLength={1200} {...register("message")} />}
+          {(controlProps) => <Textarea {...controlProps} rows={3} maxLength={1200} {...register("message")} />}
         </FormField>
         <div aria-hidden="true" className="absolute h-0 w-0 overflow-hidden opacity-0">
           <label>No completar este campo<input type="text" tabIndex={-1} autoComplete="off" {...register("website")} /></label>
         </div>
-        <div className="space-y-4 sm:col-span-2">
+        <div className="space-y-3 sm:col-span-2 sm:space-y-4">
           <div>
             <Checkbox {...register("dataProcessingConsent")} label={<>Autorizo el tratamiento necesario para gestionar este mensaje. <Link className="font-medium text-brand-dark underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer" to="/legal/tratamiento-de-datos">Consultar política</Link>.</>} />
             {errors.dataProcessingConsent && <p role="alert" className="mt-2 text-sm text-danger">{errors.dataProcessingConsent.message}</p>}
@@ -135,7 +135,7 @@ export function GeneralContactForm() {
           </div>
           <Checkbox {...register("commercialConsent")} label={<>Opcional: acepto comunicaciones comerciales. <Link className="font-medium text-brand-dark underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer" to="/legal/consentimiento-comunicaciones-comerciales">Consultar consentimiento</Link>.</>} />
         </div>
-        <Button type="submit" loading={isSubmitting || mutation.isPending} disabled={isSubmitting || mutation.isPending} className="sm:col-span-2">Enviar mensaje</Button>
+        <Button type="submit" loading={isSubmitting || mutation.isPending} disabled={isSubmitting || mutation.isPending} className="min-h-12 w-full sm:col-span-2">Enviar mensaje</Button>
       </form>
     </div>
   );

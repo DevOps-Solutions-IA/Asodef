@@ -23,12 +23,12 @@ export function TransactionalTaskSwitcher({
   onChange: (mode: TransactionalMode) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Selecciona la tarea que quieres realizar">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3" role="group" aria-label="Selecciona la tarea que quieres realizar">
       <button
         type="button"
         onClick={() => onChange("create")}
         aria-pressed={mode === "create"}
-        className={`min-h-14 rounded-2xl border px-5 py-4 text-left font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 ${
+        className={`min-h-12 rounded-xl border px-3 py-3 text-center text-sm font-semibold leading-5 transition-[background-color,border-color,transform] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 active:scale-[.99] sm:min-h-14 sm:rounded-2xl sm:px-5 sm:py-4 sm:text-left sm:text-base ${
           mode === "create" ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white text-brand-dark hover:border-brand-dark/35"
         }`}
       >
@@ -38,7 +38,7 @@ export function TransactionalTaskSwitcher({
         type="button"
         onClick={() => onChange("track")}
         aria-pressed={mode === "track"}
-        className={`min-h-14 rounded-2xl border px-5 py-4 text-left font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 ${
+        className={`min-h-12 rounded-xl border px-3 py-3 text-center text-sm font-semibold leading-5 transition-[background-color,border-color,transform] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 active:scale-[.99] sm:min-h-14 sm:rounded-2xl sm:px-5 sm:py-4 sm:text-left sm:text-base ${
           mode === "track" ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white text-brand-dark hover:border-brand-dark/35"
         }`}
       >
@@ -69,22 +69,22 @@ export function ProgressiveStepShell({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 text-sm">
+      <div className="flex items-center justify-between gap-4 text-xs sm:text-sm">
         <p className="font-semibold text-brand-dark">Paso {step + 1} de {total}</p>
         <span className="text-text-muted">{Math.round(((step + 1) / total) * 100)}%</span>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-brand-dark/10" aria-hidden="true">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-dark/10 sm:mt-3" aria-hidden="true">
         <div
           className="h-full rounded-full bg-brand-orange transition-[width] duration-300 motion-reduce:transition-none"
           style={{ width: `${((step + 1) / total) * 100}%` }}
         />
       </div>
       <div aria-live="polite" className="sr-only">Paso {step + 1} de {total}: {title}</div>
-      <h2 ref={headingRef} tabIndex={-1} className="mt-7 font-display text-2xl font-semibold text-text-main focus:outline-none sm:text-3xl">
+      <h2 ref={headingRef} tabIndex={-1} className="mt-5 font-display text-xl font-semibold leading-tight text-text-main focus:outline-none sm:mt-7 sm:text-3xl">
         {title}
       </h2>
-      {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:text-base">{description}</p>}
-      <div className="mt-6">{children}</div>
+      {description && <p className="mt-2 max-w-2xl text-sm leading-5 text-text-muted sm:text-base sm:leading-6">{description}</p>}
+      <div className="mt-5 sm:mt-6">{children}</div>
     </div>
   );
 }
@@ -111,7 +111,7 @@ export function ChoiceGrid({
   }
 
   return (
-    <div role="radiogroup" aria-label={label} className="grid gap-3 sm:grid-cols-2">
+    <div role="radiogroup" aria-label={label} className="grid gap-2 sm:grid-cols-2 sm:gap-3">
       {options.map((option, index) => {
         const selected = option.value === value;
         return (
@@ -138,15 +138,15 @@ export function ChoiceGrid({
                 selectAndFocus(options.length - 1);
               }
             }}
-            className={`min-h-20 rounded-2xl border p-4 text-left transition-[border-color,background-color,transform] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 active:scale-[.99] ${
+            className={`min-h-14 rounded-xl border p-3 text-left transition-[border-color,background-color,transform] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 active:scale-[.99] sm:min-h-20 sm:rounded-2xl sm:p-4 ${
               selected ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white hover:border-brand-dark/35 hover:bg-bg-soft"
             }`}
           >
-            <span className="flex items-center justify-between gap-3 font-semibold">
+            <span className="flex items-center justify-between gap-3 text-sm font-semibold sm:text-base">
               {option.label}
               {selected && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
             </span>
-            {option.description && <span className={`mt-1 block text-sm leading-5 ${selected ? "text-white/70" : "text-text-muted"}`}>{option.description}</span>}
+            {option.description && <span className={`mt-1 hidden text-sm leading-5 sm:block ${selected ? "text-white/70" : "text-text-muted"}`}>{option.description}</span>}
           </button>
         );
       })}
@@ -195,13 +195,13 @@ export function ConfirmationPanel({
   restartLabel?: string;
 }) {
   return (
-    <div className="rounded-[1.75rem] border border-success/25 bg-success/5 p-5 sm:p-8" role="status">
-      <CheckCircle2 className="h-10 w-10 text-success" aria-hidden="true" />
-      {title && <h2 className="mt-5 font-display text-2xl font-semibold text-text-main">{title}</h2>}
-      <p className="mt-3 text-sm leading-6 text-text-muted">{children}</p>
-      <p className="mt-5 text-xs font-bold uppercase tracking-[.14em] text-text-muted">{referenceLabel}</p>
-      <p className="mt-2 break-all rounded-xl bg-white px-4 py-3 font-mono font-bold text-brand-dark shadow-e1">{reference}</p>
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+    <div className="rounded-2xl border border-success/25 bg-success/5 p-4 sm:rounded-[1.75rem] sm:p-8" role="status">
+      <CheckCircle2 className="h-8 w-8 text-success sm:h-10 sm:w-10" aria-hidden="true" />
+      {title && <h2 className="mt-4 font-display text-xl font-semibold text-text-main sm:mt-5 sm:text-2xl">{title}</h2>}
+      <p className="mt-2 text-sm leading-5 text-text-muted sm:mt-3 sm:leading-6">{children}</p>
+      <p className="mt-4 text-xs font-bold uppercase tracking-[.14em] text-text-muted sm:mt-5">{referenceLabel}</p>
+      <p className="mt-2 break-all rounded-xl bg-white px-3 py-3 font-mono text-sm font-bold text-brand-dark shadow-e1 sm:px-4 sm:text-base">{reference}</p>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:flex sm:flex-row sm:flex-wrap sm:gap-3">
         <CopyReferenceAction value={reference} />
         <button type="button" onClick={onTrack} className="public-button-primary min-h-12 justify-center">Consultar estado</button>
         <button type="button" onClick={() => window.print()} className="public-button-secondary min-h-12 justify-center print-hide">

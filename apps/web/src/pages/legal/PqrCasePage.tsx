@@ -183,22 +183,18 @@ export function PqrCasePage() {
   const isBusy = isSubmitting || submitMutation.isPending;
 
   return (
-    <section className="bg-[radial-gradient(circle_at_85%_0%,rgba(128,174,58,.13),transparent_28rem)] py-10 sm:py-14 lg:py-16">
+    <section className="bg-[radial-gradient(circle_at_85%_0%,rgba(128,174,58,.13),transparent_28rem)] py-7 sm:py-14 lg:py-16">
       <div className="mx-auto max-w-5xl px-5 sm:px-8">
         <p className="text-xs font-bold uppercase tracking-[.18em] text-brand-dark">Peticiones, quejas, reclamos y sugerencias</p>
-        <h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold tracking-[-.035em] text-text-main sm:text-5xl">Radica o consulta una PQR</h1>
-        <p className="mt-4 max-w-2xl leading-7 text-text-muted">Registra una petición, queja, reclamo o sugerencia y conserva el número para consultar su estado.</p>
+        <h1 className="mt-2 max-w-3xl font-display text-[2rem] font-semibold leading-tight tracking-[-.035em] text-text-main sm:mt-3 sm:text-5xl">Radica o consulta una PQR</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:mt-4 sm:text-base sm:leading-7">Registra el caso y conserva el número para consultar su estado.</p>
 
-        <Card className="mt-7 rounded-[1.75rem] p-4 sm:p-6">
+        <Card className="mt-5 rounded-2xl p-3 sm:mt-7 sm:rounded-[1.75rem] sm:p-6">
           <TransactionalTaskSwitcher mode={mode} createLabel="Radicar una PQR" trackLabel="Consultar un caso" onChange={chooseMode} />
         </Card>
 
-        {!mode && (
-          <p className="mt-6 rounded-2xl border border-brand-dark/10 bg-white p-5 text-sm leading-6 text-text-muted">Elige si quieres registrar un caso nuevo o consultar uno existente.</p>
-        )}
-
         {mode === "create" && (
-          <Card className="mt-6 rounded-[1.75rem] p-5 sm:p-8">
+          <Card className="mt-4 rounded-2xl p-4 sm:mt-6 sm:rounded-[1.75rem] sm:p-8">
             {trackingNumber ? (
               <ProgressiveStepShell step={4} total={TOTAL_STEPS} title="PQR registrada" description="El caso quedó radicado y ya puedes consultar su estado.">
                 <ConfirmationPanel
@@ -234,7 +230,7 @@ export function PqrCasePage() {
                   <ProgressiveStepShell step={step} total={TOTAL_STEPS} title="Describe lo ocurrido" description="Incluye la información necesaria para revisar el caso. La referencia de pago es opcional.">
                     <div className="grid gap-4">
                       <FormField label="Descripción del caso" error={errors.description?.message} required>
-                        {(controlProps) => <Textarea {...controlProps} rows={5} {...register("description")} />}
+                        {(controlProps) => <Textarea {...controlProps} rows={4} {...register("description")} />}
                       </FormField>
                       <FormField label="Referencia de pago (opcional)" error={errors.paymentReference?.message}>
                         {(controlProps) => <Input {...controlProps} autoComplete="off" {...register("paymentReference")} />}
@@ -256,7 +252,7 @@ export function PqrCasePage() {
                 )}
                 {step === 3 && (
                   <ProgressiveStepShell step={step} total={TOTAL_STEPS} title="Revisa y autoriza el envío" description="Confirma la categoría y acepta el tratamiento necesario para gestionar el caso.">
-                    <dl className="grid gap-4 rounded-2xl bg-bg-soft p-5 sm:grid-cols-2">
+                    <dl className="grid gap-3 rounded-xl bg-bg-soft p-4 sm:grid-cols-2 sm:gap-4 sm:rounded-2xl sm:p-5">
                       <div><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Categoría</dt><dd className="mt-1 font-semibold">{PQR_CATEGORY_LABELS[getValues("category")]}</dd></div>
                       <div><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Contacto</dt><dd className="mt-1 break-words font-semibold">{getValues("applicantContact")}</dd></div>
                       <div className="sm:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Descripción</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6">{getValues("description")}</dd></div>
@@ -275,15 +271,15 @@ export function PqrCasePage() {
         )}
 
         {mode === "track" && (
-          <Card className="mt-6 rounded-[1.75rem] p-5 sm:p-8">
-            <h2 className="font-display text-2xl font-semibold text-text-main">Consulta el estado</h2>
+          <Card className="mt-4 rounded-2xl p-4 sm:mt-6 sm:rounded-[1.75rem] sm:p-8">
+            <h2 className="font-display text-xl font-semibold text-text-main sm:text-2xl">Consulta el estado</h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">Ingresa únicamente el número de caso recibido al radicar.</p>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 setLookupCaseNumber(lookupInput.trim() || null);
               }}
-              className="mt-5 flex flex-col gap-3 sm:flex-row"
+              className="mt-4 flex flex-col gap-2 min-[390px]:flex-row sm:mt-5 sm:gap-3"
             >
               <Input aria-label="Número de caso" placeholder="Ejemplo: PQR-..." value={lookupInput} onChange={(event) => setLookupInput(event.target.value)} />
               <Button type="submit" disabled={!lookupInput.trim()} className="min-h-12">Consultar</Button>
@@ -291,7 +287,7 @@ export function PqrCasePage() {
             {lookupQuery.isPending && lookupCaseNumber && <p role="status" className="mt-5 text-sm text-text-muted">Consultando el caso…</p>}
             {lookupQuery.isError && <Alert variant="danger" className="mt-5">No encontramos un caso con ese número. Verifica el dato e intenta nuevamente.</Alert>}
             {lookupQuery.data && (
-              <div className="mt-5 rounded-2xl border border-border-soft p-5">
+              <div className="mt-4 rounded-xl border border-border-soft p-4 sm:mt-5 sm:rounded-2xl sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-xs font-bold uppercase tracking-wider text-text-muted">Categoría</p><p className="mt-1 font-semibold text-text-main">{PQR_CATEGORY_LABELS[lookupQuery.data.category] ?? lookupQuery.data.category}</p></div>
                   <StatusBadge tone={statusTone(lookupQuery.data.status)} label={PQR_STATUS_LABELS[lookupQuery.data.status] ?? lookupQuery.data.status} />
@@ -305,11 +301,11 @@ export function PqrCasePage() {
         )}
 
         {policyQuery.data && (
-          <details className="mt-6 rounded-2xl border border-brand-dark/10 bg-white/70 p-4">
+          <details className="mt-4 rounded-xl border border-brand-dark/10 bg-white/70 px-3 py-2 sm:mt-6 sm:rounded-2xl sm:p-4">
             <summary className="flex min-h-12 cursor-pointer items-center text-sm font-semibold text-brand-dark">
               Proceso y política aplicable <Badge variant="success" className="ml-2">Versión {policyQuery.data.version}</Badge>
             </summary>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">Selecciona la categoría, describe el caso y registra un medio de contacto. ASODEF asignará un número de seguimiento.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:mt-3">Selecciona la categoría, describe el caso y registra un medio de contacto. ASODEF asignará un número de seguimiento.</p>
             <Link to="/legal/pqr" className="mt-3 inline-flex min-h-12 items-center text-sm font-semibold text-brand-dark underline-offset-4 hover:underline">Consultar la política PQR vigente</Link>
           </details>
         )}

@@ -40,6 +40,7 @@ describe("PqrCasePage", () => {
     expect(screen.getByRole("button", { name: "Radicar una PQR" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Consultar un caso" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Descripción del caso")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Elige si quieres registrar un caso nuevo/)).not.toBeInTheDocument();
   });
 
   it("opens tracking when a connected route requests accion=consultar", () => {

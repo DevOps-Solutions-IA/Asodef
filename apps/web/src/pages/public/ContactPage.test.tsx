@@ -29,6 +29,8 @@ describe("ContactPage", () => {
     expect(screen.getByRole("link", { name: /Ejercer un derecho/ })).toHaveAttribute("href", "/solicitudes-de-datos?accion=crear");
     expect(screen.getByRole("link", { name: /Gestionar una empresa/ })).toHaveAttribute("href", "/comenzar?perfil=empresa");
     expect(screen.queryByRole("button", { name: "Enviar mensaje" })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Rutas de atención" })).toHaveClass("grid-cols-2");
+    expect(screen.getByText("Registra el caso y recibe un número para consultar su estado.")).toHaveClass("hidden");
   });
 
   it("reveals the real general contact form only for another matter", async () => {

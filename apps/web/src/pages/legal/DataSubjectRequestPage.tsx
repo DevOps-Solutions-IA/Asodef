@@ -190,20 +190,18 @@ export function DataSubjectRequestPage() {
   const isBusy = isSubmitting || submitMutation.isPending;
 
   return (
-    <section className="bg-[radial-gradient(circle_at_85%_0%,rgba(128,174,58,.13),transparent_28rem)] py-10 sm:py-14 lg:py-16">
+    <section className="bg-[radial-gradient(circle_at_85%_0%,rgba(128,174,58,.13),transparent_28rem)] py-7 sm:py-14 lg:py-16">
       <div className="mx-auto max-w-5xl px-5 sm:px-8">
         <p className="text-xs font-bold uppercase tracking-[.18em] text-brand-dark">Derechos de titulares</p>
-        <h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold tracking-[-.035em] text-text-main sm:text-5xl">Gestiona una solicitud sobre tus datos</h1>
-        <p className="mt-4 max-w-2xl leading-7 text-text-muted">Crea una solicitud para ejercer tus derechos o consulta una referencia ya registrada.</p>
+        <h1 className="mt-2 max-w-3xl font-display text-[2rem] font-semibold leading-tight tracking-[-.035em] text-text-main sm:mt-3 sm:text-5xl">Gestiona una solicitud sobre tus datos</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:mt-4 sm:text-base sm:leading-7">Crea una solicitud o consulta una referencia ya registrada.</p>
 
-        <Card className="mt-7 rounded-[1.75rem] p-4 sm:p-6">
+        <Card className="mt-5 rounded-2xl p-3 sm:mt-7 sm:rounded-[1.75rem] sm:p-6">
           <TransactionalTaskSwitcher mode={mode} createLabel="Crear solicitud" trackLabel="Consultar referencia" onChange={chooseMode} />
         </Card>
 
-        {!mode && <p className="mt-6 rounded-2xl border border-brand-dark/10 bg-white p-5 text-sm leading-6 text-text-muted">Elige si quieres registrar una solicitud nueva o consultar su estado.</p>}
-
         {mode === "create" && (
-          <Card className="mt-6 rounded-[1.75rem] p-5 sm:p-8">
+          <Card className="mt-4 rounded-2xl p-4 sm:mt-6 sm:rounded-[1.75rem] sm:p-8">
             {trackingReference ? (
               <ProgressiveStepShell step={4} total={TOTAL_STEPS} title="Solicitud registrada" description="La solicitud quedó radicada y ya puedes consultar su estado.">
                 <ConfirmationPanel
@@ -269,7 +267,7 @@ export function DataSubjectRequestPage() {
                 )}
                 {step === 3 && (
                   <ProgressiveStepShell step={step} total={TOTAL_STEPS} title="Revisa y autoriza el envío" description="Confirma la información antes de radicar la solicitud.">
-                    <dl className="grid gap-4 rounded-2xl bg-bg-soft p-5 sm:grid-cols-2">
+                    <dl className="grid gap-3 rounded-xl bg-bg-soft p-4 sm:grid-cols-2 sm:gap-4 sm:rounded-2xl sm:p-5">
                       <div><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Tipo de solicitud</dt><dd className="mt-1 font-semibold">{DATA_SUBJECT_REQUEST_TYPE_LABELS[getValues("type")]}</dd></div>
                       <div><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Correo</dt><dd className="mt-1 break-words font-semibold">{getValues("requesterEmail")}</dd></div>
                       <div className="sm:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-text-muted">Descripción</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6">{getValues("description")}</dd></div>
@@ -288,15 +286,15 @@ export function DataSubjectRequestPage() {
         )}
 
         {mode === "track" && (
-          <Card className="mt-6 rounded-[1.75rem] p-5 sm:p-8">
-            <h2 className="font-display text-2xl font-semibold text-text-main">Consulta una referencia</h2>
+          <Card className="mt-4 rounded-2xl p-4 sm:mt-6 sm:rounded-[1.75rem] sm:p-8">
+            <h2 className="font-display text-xl font-semibold text-text-main sm:text-2xl">Consulta una referencia</h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">Ingresa únicamente la referencia recibida al radicar.</p>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 setLookupReference(lookupInput.trim() || null);
               }}
-              className="mt-5 flex flex-col gap-3 sm:flex-row"
+              className="mt-4 flex flex-col gap-2 min-[390px]:flex-row sm:mt-5 sm:gap-3"
             >
               <Input aria-label="Referencia de seguimiento" placeholder="Referencia de seguimiento" value={lookupInput} onChange={(event) => setLookupInput(event.target.value)} />
               <Button type="submit" disabled={!lookupInput.trim()} className="min-h-12">Consultar</Button>
@@ -304,7 +302,7 @@ export function DataSubjectRequestPage() {
             {lookupQuery.isPending && lookupReference && <p role="status" className="mt-5 text-sm text-text-muted">Consultando la solicitud…</p>}
             {lookupQuery.isError && <Alert variant="danger" className="mt-5">No encontramos una solicitud con esa referencia. Verifica el dato e intenta nuevamente.</Alert>}
             {lookupQuery.data && (
-              <div className="mt-5 rounded-2xl border border-border-soft p-5">
+              <div className="mt-4 rounded-xl border border-border-soft p-4 sm:mt-5 sm:rounded-2xl sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-xs font-bold uppercase tracking-wider text-text-muted">Tipo de solicitud</p><p className="mt-1 font-semibold text-text-main">{DATA_SUBJECT_REQUEST_TYPE_LABELS[lookupQuery.data.type as DataSubjectRequestType] ?? lookupQuery.data.type}</p></div>
                   <StatusBadge tone={statusTone(lookupQuery.data.status)} label={DATA_SUBJECT_REQUEST_STATUS_LABELS[lookupQuery.data.status] ?? lookupQuery.data.status} />
@@ -317,9 +315,9 @@ export function DataSubjectRequestPage() {
           </Card>
         )}
 
-        <details className="mt-6 rounded-2xl border border-brand-dark/10 bg-white/70 p-4">
+        <details className="mt-4 rounded-xl border border-brand-dark/10 bg-white/70 px-3 py-2 sm:mt-6 sm:rounded-2xl sm:p-4">
           <summary className="flex min-h-12 cursor-pointer items-center text-sm font-semibold text-brand-dark">Cómo verificamos tu identidad</summary>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">ASODEF puede requerir información adicional para verificar la identidad antes de responder. El formulario solicita solo los datos necesarios para identificar y gestionar la petición.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:mt-3">ASODEF puede requerir información adicional para verificar la identidad antes de responder. El formulario solicita solo los datos necesarios para identificar y gestionar la petición.</p>
           <Link to="/legal/procedimiento-consultas-y-reclamos" className="mt-3 inline-flex min-h-12 items-center text-sm font-semibold text-brand-dark underline-offset-4 hover:underline">Consultar el procedimiento vigente</Link>
         </details>
       </div>

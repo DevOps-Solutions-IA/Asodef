@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ChoiceGrid, CompactStatusTimeline, CopyReferenceAction } from "./TransactionalFlow";
+import { ChoiceGrid, CompactStatusTimeline, CopyReferenceAction, ProgressiveStepShell, TransactionalTaskSwitcher } from "./TransactionalFlow";
 
 describe("transactional public actions", () => {
   it("provides visible manual-copy guidance when the clipboard API is unavailable", async () => {
@@ -33,5 +33,13 @@ describe("transactional public actions", () => {
 
     expect(onChange).toHaveBeenCalledWith("second");
     expect(screen.getByRole("radio", { name: "Segunda" })).toHaveFocus();
+  });
+
+  it("keeps the mobile task selector compact and progress independent from motion", () => {
+    const { container } = render(<><TransactionalTaskSwitcher mode={null} createLabel="Crear" trackLabel="Consultar" onChange={() => undefined} /><ProgressiveStepShell step={0} total={5} title="Categoría"><p>Contenido</p></ProgressiveStepShell></>);
+
+    expect(screen.getByRole("group", { name: /Selecciona la tarea/ })).toHaveClass("grid-cols-2");
+    expect(screen.getByRole("heading", { name: "Categoría" })).toHaveClass("text-xl");
+    expect(container.querySelector("[style='width: 20%;']")).toHaveClass("motion-reduce:transition-none");
   });
 });
