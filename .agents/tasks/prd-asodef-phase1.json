@@ -2980,7 +2980,7 @@
         "id": "US-110",
         "title": "Auditoría de arquitectura pública y contenido",
         "domain": "Q - Experiencia pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Auditar arquitectura, contenido, rutas, integraciones, SEO, accesibilidad, rendimiento y resultado servido antes de intervenir.",
         "businessValue": "Asegura una evolución basada en evidencia.",
         "dependsOn": [
@@ -3009,15 +3009,15 @@
         "outOfScope": [
           "Deploy y US-038–US-042"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "0c369a5",
+        "notes": "Auditoría factual, inventario ruta-contenido y baseline Git/DB/API/Docker/Chromium documentados."
       },
       {
         "id": "US-111",
         "title": "Nueva arquitectura de información y navegación",
         "domain": "Q - Experiencia pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Crear arquitectura pública, registries tipados, rutas canónicas y redirects compatibles.",
         "businessValue": "Mejora el descubrimiento por audiencia y necesidad.",
         "dependsOn": [
@@ -3047,15 +3047,15 @@
         "outOfScope": [
           "Cambiar rutas privadas"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "8fcbf4f",
+        "notes": "Registries tipados, rutas canónicas y redirects compatibles implementados; cobertura reforzada en 78397ec."
       },
       {
         "id": "US-112",
         "title": "Sistema editorial institucional",
         "domain": "Q - Experiencia pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Formalizar voz, vocabulario, microcopy, CTAs, títulos, consentimiento y terminología.",
         "businessValue": "Vuelve el contenido preciso y útil.",
         "dependsOn": [
@@ -3084,15 +3084,15 @@
         "outOfScope": [
           "Modificar fuentes autorizadas"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "176e05b",
+        "notes": "Sistema editorial institucional y reglas de terminología, microcopy, consentimiento y SEO documentados."
       },
       {
         "id": "US-113",
         "title": "Hero enterprise premium",
         "domain": "R - Narrativa pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Crear un hero asimétrico que represente el ecosistema real y conduzca al flujo guiado.",
         "businessValue": "Explica ASODEF desde el primer viewport.",
         "dependsOn": [
@@ -3121,15 +3121,15 @@
         "outOfScope": [
           "Screenshots falsos"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "191e1ea",
+        "notes": "Hero asimétrico del ecosistema real, CTAs funcionales, contenido visible y reduced motion implementados."
       },
       {
         "id": "US-114",
         "title": "Rediseño completo de Inicio",
         "domain": "R - Narrativa pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Reconstruir Inicio como narrativa empresarial completa con bloques distintos y rutas reales.",
         "businessValue": "Orienta y convierte sin repetición.",
         "dependsOn": [
@@ -3159,15 +3159,15 @@
         "outOfScope": [
           "Rediseñar Legal o pagos"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "3283728",
+        "notes": "Inicio reconstruido como narrativa enterprise con audiencias, portafolio, procesos, confianza y rutas reales."
       },
       {
         "id": "US-115",
         "title": "Página completa Quiénes somos",
         "domain": "R - Narrativa pública flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Crear página institucional con historia, propósito, misión, visión, principios, operación, gobierno, datos y canales.",
         "businessValue": "Consolida autoridad corporativa.",
         "dependsOn": [
@@ -3197,15 +3197,15 @@
         "outOfScope": [
           "Inventar hitos o reconocimientos"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "508a6ed",
+        "notes": "Página institucional completa verificada con datos corporativos soportados, gobierno, canales y enlaces legales."
       },
       {
         "id": "US-116",
         "title": "Hub de beneficios",
         "domain": "S - Descubrimiento y soluciones",
-        "status": "open",
+        "status": "complete",
         "description": "Crear registry canónico y hub filtrable por audiencia y necesidad con estado URL.",
         "businessValue": "Facilita descubrir valor con límites claros.",
         "dependsOn": [
@@ -3236,15 +3236,15 @@
         "outOfScope": [
           "Comparativas ficticias"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "1037ea4",
+        "notes": "Registry de ocho categorías documentadas y hub con filtros accesibles, URL persistente y empty state verificados."
       },
       {
         "id": "US-117",
         "title": "Páginas independientes de beneficios",
         "domain": "S - Descubrimiento y soluciones",
-        "status": "open",
+        "status": "complete",
         "description": "Crear una página de decisión por cada categoría verificada.",
         "businessValue": "Aporta contexto antes de solicitar orientación.",
         "dependsOn": [
@@ -3274,15 +3274,15 @@
         "outOfScope": [
           "Servicios no soportados"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "eb778a9",
+        "notes": "Ocho páginas de decisión con procesos, límites, FAQ, relacionados, links legales y metadata verificadas."
       },
       {
         "id": "US-118",
         "title": "Hub de soluciones por perfil",
         "domain": "S - Descubrimiento y soluciones",
-        "status": "open",
+        "status": "complete",
         "description": "Crear selector para personas, afiliados, empresas y aliados, distinto del portafolio.",
         "businessValue": "Traduce capacidades a caminos por perfil.",
         "dependsOn": [
@@ -3309,15 +3309,15 @@
         "outOfScope": [
           "Duplicar beneficios"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "28ad578",
+        "notes": "Hub de soluciones por perfil y diferenciación respecto del portafolio cubiertos por pruebas."
       },
       {
         "id": "US-119",
         "title": "Páginas para personas, afiliados, empresas y aliados",
         "domain": "S - Descubrimiento y soluciones",
-        "status": "open",
+        "status": "complete",
         "description": "Crear cuatro journeys conectados a beneficios, portales y workflows reales.",
         "businessValue": "Convierte orientación en acciones pertinentes.",
         "dependsOn": [
@@ -3344,15 +3344,15 @@
         "outOfScope": [
           "Programa de aliados inventado"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "23a6254",
+        "notes": "Journeys distintos para personas, afiliados, empresas y aliados; claims de aliados protegidos por prueba."
       },
       {
         "id": "US-120",
         "title": "Experiencia guiada tipo Typeform",
         "domain": "T - Conversión integrada",
-        "status": "open",
+        "status": "complete",
         "description": "Crear orientación por pasos, condicional, recuperable y con entrega real.",
         "businessValue": "Reduce fricción y deriva cada intención.",
         "dependsOn": [
@@ -3384,15 +3384,15 @@
         "outOfScope": [
           "Copiar Typeform"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "2bc6087",
+        "notes": "Orientador de ocho ramas con progreso, recuperación, foco, revisión, consentimiento y handoffs reales."
       },
       {
         "id": "US-121",
         "title": "Integración del funnel con CRM y consentimientos",
         "domain": "T - Conversión integrada",
-        "status": "open",
+        "status": "complete",
         "description": "Persistir leads guiados con clasificación, origen, ruta, campaña, idempotencia y consentimientos versionados.",
         "businessValue": "Crea evidencia CRM accionable y conforme.",
         "dependsOn": [
@@ -3423,15 +3423,15 @@
         "outOfScope": [
           "WhatsApp antes de persistir"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "45c98a0",
+        "notes": "Endpoint transaccional con CRM, UTM, idempotencia, antiabuso y consentimientos versionados; E2E real aprobado."
       },
       {
         "id": "US-122",
         "title": "Nuevo sistema de navegación pública",
         "domain": "U - Descubrimiento y autoridad",
-        "status": "open",
+        "status": "complete",
         "description": "Crear navegación enterprise desktop/tablet/móvil con agrupaciones, recursos y CTAs.",
         "businessValue": "Hace descubrible la arquitectura.",
         "dependsOn": [
@@ -3461,15 +3461,15 @@
         "outOfScope": [
           "Cambiar identidad"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "be8c74d",
+        "notes": "Navegación adaptativa enterprise, drawer agrupado, foco/Escape/restauración y footer consistente."
       },
       {
         "id": "US-123",
         "title": "Reescritura integral del contenido público",
         "domain": "U - Descubrimiento y autoridad",
-        "status": "open",
+        "status": "complete",
         "description": "Reescribir strings públicos con terminología consistente, precisión y CTAs claros.",
         "businessValue": "Mejora comprensión y credibilidad.",
         "dependsOn": [
@@ -3502,15 +3502,15 @@
         "outOfScope": [
           "Documentos legales"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "78397ec",
+        "notes": "Copy pública y rutas críticas normalizadas; precisión narrativa protegida adicionalmente en bd2f996."
       },
       {
         "id": "US-124",
         "title": "SEO, metadata y datos estructurados",
         "domain": "U - Descubrimiento y autoridad",
-        "status": "open",
+        "status": "complete",
         "description": "Implementar metadata por ruta, canonical, OG/Twitter, sitemap, robots y JSON-LD válido en SPA.",
         "businessValue": "Mejora descubrimiento sin fingir SSR.",
         "dependsOn": [
@@ -3544,15 +3544,15 @@
         "outOfScope": [
           "Ratings, precios o reviews falsos"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "0a38189",
+        "notes": "Metadata por ruta, canonical, OG/Twitter, sitemap, robots y JSON-LD válidos con límite SPA documentado."
       },
       {
         "id": "US-125",
         "title": "QA visual y funcional multirresolución",
         "domain": "V - Cierre flagship",
-        "status": "open",
+        "status": "complete",
         "description": "Verificar runtime, DB, suites y rutas públicas en seis resoluciones.",
         "businessValue": "Demuestra un resultado funcional e integrado.",
         "dependsOn": [
@@ -3586,9 +3586,9 @@
         "outOfScope": [
           "Deploy y US-038–US-042"
         ],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "2a6558c",
+        "notes": "Suites, migración, dos seeds, build Docker sin caché, health y Chromium multirresolución documentados; E2E 5c12cb7."
       }
   ]
 }
