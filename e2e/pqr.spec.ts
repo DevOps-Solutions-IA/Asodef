@@ -9,27 +9,31 @@ import { test, expect } from "@playwright/test";
  * against the exact current PUBLISHED tratamiento-de-datos version.
  */
 test.describe("PQR case submission (e2e)", () => {
-  test("submitting a PQR case returns a visible case number", async ({ page }) => {
-    await page.goto("/legal/pqr");
+  test("the canonical progressive flow submits and immediately tracks a real case", async ({ page }) => {
+    await page.goto("/pqr?accion=radicar");
     try {
       await page.getByRole("button", { name: "Rechazar opcionales" }).click({ timeout: 3000 });
     } catch {
       // Consent already decided in this browser context - fine either way.
     }
 
-    await page.getByLabel("Categoría", { exact: false }).selectOption({ label: "Reclamo" });
+    await page.getByRole("radio", { name: /Reclamo/ }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByLabel("Descripción del caso", { exact: false }).fill("Caso de prueba end-to-end generado por Playwright.");
+    await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByLabel("Nombre completo", { exact: false }).fill("Visitante E2E");
     await page.getByLabel("Correo o teléfono de contacto", { exact: false }).fill("visitante.e2e@example.com");
-    await page.getByLabel("Describe tu caso", { exact: false }).fill("Caso de prueba end-to-end generado por Playwright.");
+    await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByRole("checkbox", { name: /Acepto el tratamiento necesario/ }).check();
-    await page.getByRole("button", { name: "Enviar caso" }).click();
+    await page.getByRole("button", { name: "Confirmar y enviar" }).click();
 
-    await expect(page.getByText("Tu caso fue registrado. Guarda tu número de caso:")).toBeVisible();
-    // The tracking number itself renders inside a <strong> right after
-    // that sentence - assert something is actually there, not just the
-    // static wrapper text, so a regression that drops the real value
-    // (but keeps the label) still fails this test.
-    const trackingNumber = await page.locator("strong").last().textContent();
-    expect(trackingNumber?.trim().length).toBeGreaterThan(0);
+    await expect(page.getByRole("heading", { name: "PQR registrada" })).toBeVisible();
+    const copyLabel = await page.getByRole("button", { name: /^Copiar referencia:/ }).getAttribute("aria-label");
+    const trackingNumber = copyLabel?.replace(/^Copiar referencia:\s*/, "").trim();
+    expect(trackingNumber?.length).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Consultar estado" }).click();
+    await expect(page.getByText("Reclamo", { exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: /Estado actual:/ })).toBeVisible();
+    await expect(page.locator("main")).not.toContainText("Visitante E2E");
   });
 });

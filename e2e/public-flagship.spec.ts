@@ -38,8 +38,11 @@ const viewports = [
   { name: "desktop", width: 1280, height: 900 },
   { name: "compact", width: 1024, height: 820 },
   { name: "tablet", width: 768, height: 900 },
+  { name: "large-mobile", width: 430, height: 932 },
   { name: "mobile", width: 390, height: 844 },
+  { name: "compact-mobile", width: 375, height: 812 },
   { name: "small", width: 360, height: 800 },
+  { name: "minimum", width: 320, height: 720 },
 ];
 
 const isExpectedAnonymousSessionResponse = (url: string, status: number) =>
