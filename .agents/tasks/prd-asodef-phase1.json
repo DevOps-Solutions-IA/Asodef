@@ -3587,8 +3587,8 @@
           "Deploy y US-038–US-042"
         ],
         "completionStatus": "complete",
-        "commit": "2a6558c",
-        "notes": "Suites, migración, dos seeds, build Docker sin caché, health y Chromium multirresolución documentados; E2E 5c12cb7."
+        "commit": "b5e7ebe",
+        "notes": "Suites, 33 migraciones, dos seeds, build Docker sin caché, health y Chromium 30/30 verificados; 29 rutas en seis resoluciones, ocho beneficios, 404 semántico y CRM/consentimientos reales cubiertos."
       }
   ]
 }
