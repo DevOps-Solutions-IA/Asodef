@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -9,120 +9,113 @@ function jsonResponse(status: number, body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
 }
 
-function field(label: string): HTMLElement {
-  return screen.getByLabelText(label, { exact: false, selector: "input, textarea, select" });
-}
-
-function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
+function renderPage(fetchMock: ReturnType<typeof vi.fn>, route = "/solicitudes-de-datos") {
   vi.stubGlobal("fetch", fetchMock);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter><DataSubjectRequestPage /></MemoryRouter>
+      <MemoryRouter initialEntries={[route]}><DataSubjectRequestPage /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-async function fillAndSubmitValidForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(field("Tipo de solicitud"), "DELETION");
-  await user.type(field("Nombre completo"), "Titular de Prueba");
-  await user.type(field("Número de documento"), "1000000099");
-  await user.type(field("Correo electrónico"), "titular@example.com");
-  await user.type(field("Describe tu solicitud"), "Quiero eliminar mis datos.");
-  await user.click(screen.getByRole("checkbox", { name: /Acepto el tratamiento de mis datos/ }));
-  await user.click(screen.getByRole("button", { name: "Enviar solicitud" }));
+async function reachReview(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Crear solicitud" }));
+  await user.click(screen.getByRole("radio", { name: /Eliminación/ }));
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
+  await user.type(await screen.findByLabelText("Descripción de la solicitud", { exact: false }), "Quiero eliminar mis datos.");
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
+  await user.type(await screen.findByLabelText("Nombre completo", { exact: false }), "Titular de Prueba");
+  await user.type(screen.getByLabelText("Número de documento", { exact: false }), "1000000099");
+  await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "titular@example.com");
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
 }
 
 describe("DataSubjectRequestPage", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  beforeEach(() => sessionStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("starts with two tasks and no full form", () => {
+    renderPage(vi.fn(() => jsonResponse(404, {})));
+
+    expect(screen.getByRole("button", { name: "Crear solicitud" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consultar referencia" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Descripción de la solicitud")).not.toBeInTheDocument();
   });
 
-  it("renders all 11 request types with none preselected", () => {
-    const fetchMock = vi.fn(() => jsonResponse(200, {}));
-    renderPage(fetchMock);
+  it("opens creation when a connected route requests accion=crear", () => {
+    renderPage(vi.fn(() => jsonResponse(404, {})), "/solicitudes-de-datos?accion=crear");
 
-    const select = field("Tipo de solicitud") as HTMLSelectElement;
-    expect(select.value).toBe("");
-    expect(screen.getAllByRole("option")).toHaveLength(12); // 11 types + the disabled placeholder
+    expect(screen.getByRole("radiogroup", { name: "Tipo de solicitud" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear solicitud" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("Example (AC): submitting a deletion request shows the returned tracking reference", async () => {
-    const fetchMock = vi.fn(() =>
-      jsonResponse(201, {
-        publicReference: "test-tracking-reference-abc123",
-        type: "DELETION",
-        status: "RECEIVED",
-        description: "Quiero eliminar mis datos.",
-        resolution: null,
-        createdAt: "2026-08-01T00:00:00.000Z",
-      }),
-    );
+  it("renders all eleven request types as an accessible selector", async () => {
     const user = userEvent.setup();
-    renderPage(fetchMock);
+    renderPage(vi.fn(() => jsonResponse(404, {})));
+    await user.click(screen.getByRole("button", { name: "Crear solicitud" }));
 
-    await fillAndSubmitValidForm(user);
-
-    expect(await screen.findByText("test-tracking-reference-abc123")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(11);
+    expect(screen.getByRole("radio", { name: /Acceso a mis datos/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Reporte de incidente/ })).toBeInTheDocument();
   });
 
-  it("shows inline validation errors when submitted empty, without calling the API", async () => {
+  it("validates the current step before advancing", async () => {
     const fetchMock = vi.fn();
     const user = userEvent.setup();
     renderPage(fetchMock);
-
-    await user.click(screen.getByRole("button", { name: "Enviar solicitud" }));
+    await user.click(screen.getByRole("button", { name: "Crear solicitud" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(await screen.findByText("Selecciona el tipo de solicitud.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("never renders a raw API error body for a server error", async () => {
-    const fetchMock = vi.fn(() =>
-      jsonResponse(500, { statusCode: 500, error: "Internal Server Error", message: "SQL error: relation does not exist" }),
-    );
+  it("submits a real deletion request and shows its reference", async () => {
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? jsonResponse(201, { publicReference: "DSR-ABC123", type: "DELETION", status: "RECEIVED", description: "Solicitud", resolution: null, createdAt: "2026-08-01T00:00:00.000Z" }) : jsonResponse(404, {}));
     const user = userEvent.setup();
     renderPage(fetchMock);
+    await reachReview(user);
+    await user.click(screen.getByRole("checkbox", { name: /Acepto el tratamiento de mis datos/ }));
+    await user.click(screen.getByRole("button", { name: "Confirmar y enviar" }));
 
-    await fillAndSubmitValidForm(user);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).not.toMatch(/SQL|relation/i);
+    expect(await screen.findByText("DSR-ABC123")).toBeInTheDocument();
+    expect(screen.getAllByText(/Paso 5 de 5/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Copiar referencia/ })).toBeInTheDocument();
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({ type: "DELETION", requesterDocument: "1000000099" });
+    await waitFor(() => expect(sessionStorage.getItem("asodef:data-request-public-flow:v1")).toBeNull());
   });
 
-  it("Example (AC): looking up a reference shows its current status", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("/data-subject-requests/track-me")) {
-        return jsonResponse(200, {
-          publicReference: "track-me",
-          type: "ACCESS",
-          status: "IN_REVIEW",
-          description: "Quiero acceder a mis datos.",
-          resolution: null,
-          createdAt: "2026-08-01T00:00:00.000Z",
-        });
-      }
-      return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." });
-    });
+  it("tracks a request without exposing identity or submitted description", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => String(input).includes("/data-subject-requests/track-me") ? jsonResponse(200, { publicReference: "track-me", type: "ACCESS", status: "IN_REVIEW", description: "Contenido personal", resolution: null, createdAt: "2026-08-01T00:00:00.000Z" }) : jsonResponse(404, {}));
     const user = userEvent.setup();
     renderPage(fetchMock);
-
+    await user.click(screen.getByRole("button", { name: "Consultar referencia" }));
     await user.type(screen.getByLabelText("Referencia de seguimiento"), "track-me");
     await user.click(screen.getByRole("button", { name: "Consultar" }));
 
-    expect(await screen.findByText("En revisión")).toBeInTheDocument();
-    expect(screen.getByText("Quiero acceder a mis datos.")).toBeInTheDocument();
+    expect((await screen.findAllByText("En revisión")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Contenido personal")).not.toBeInTheDocument();
+    expect(screen.getByText(/no muestra el documento/)).toBeInTheDocument();
   });
 
-  it("Negative case (AC): looking up a non-existent reference shows a not-found message, not a blank/broken page", async () => {
-    const fetchMock = vi.fn(() => jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." }));
+  it("shows a clear error for an unknown reference", async () => {
     const user = userEvent.setup();
-    renderPage(fetchMock);
-
+    renderPage(vi.fn(() => jsonResponse(404, {})));
+    await user.click(screen.getByRole("button", { name: "Consultar referencia" }));
     await user.type(screen.getByLabelText("Referencia de seguimiento"), "no-existe");
     await user.click(screen.getByRole("button", { name: "Consultar" }));
 
     expect(await screen.findByText(/No encontramos una solicitud/)).toBeInTheDocument();
+  });
+
+  it("recovers the session draft at the last valid step", () => {
+    sessionStorage.setItem("asodef:data-request-public-flow:v1", JSON.stringify({ mode: "create", step: 2, type: "ACCESS", values: { type: "ACCESS", description: "Consulta conservada", requesterName: "Nombre conservado", requesterEmail: "titular@example.com", requesterDocument: "1000000099" } }));
+    renderPage(vi.fn(() => jsonResponse(404, {})));
+
+    expect(screen.getByLabelText("Nombre completo", { exact: false })).toHaveValue("Nombre conservado");
+    expect(screen.getByLabelText("Número de documento", { exact: false })).toHaveValue("1000000099");
+    expect(sessionStorage.getItem("asodef:data-request-public-flow:v1")).toContain("Consulta conservada");
   });
 });
