@@ -11,6 +11,7 @@ describe("Cookie consent endpoint (integration, real HTTP via the exact configur
   let app: NestExpressApplication;
   let prisma: PrismaService;
   let cookiesHandle: PublishedForTestHandle | null = null;
+  let preservedConsentIds: string[] = [];
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
@@ -22,11 +23,12 @@ describe("Cookie consent endpoint (integration, real HTTP via the exact configur
     // PUBLISHED politica-de-cookies version - see publishDraftForTest's
     // own doc comment (test-only, reverted in afterAll).
     cookiesHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "politica-de-cookies");
+    preservedConsentIds = (await prisma.consentRecord.findMany({ where: { source: "cookie_banner" }, select: { id: true } })).map((record) => record.id);
   });
 
   afterAll(async () => {
     if (cookiesHandle) {
-      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: cookiesHandle.versionId } });
+      await prisma.consentRecord.deleteMany({ where: { source: "cookie_banner", id: { notIn: preservedConsentIds } } });
       await cookiesHandle.restore();
     }
     await app.close();

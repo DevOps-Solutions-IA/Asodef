@@ -62,6 +62,8 @@ describe("Leads endpoints (integration, real HTTP via the exact configureApp() s
       await tratamientoHandle.restore();
     }
     if (createdEmails.length > 0) {
+      const leads = await prisma.leadSubmission.findMany({ where: { email: { in: createdEmails } }, select: { id: true } });
+      await prisma.consentRecord.deleteMany({ where: { leadSubmissionId: { in: leads.map((lead) => lead.id) } } });
       await prisma.leadSubmission.deleteMany({ where: { email: { in: createdEmails } } });
     }
     await app.close();

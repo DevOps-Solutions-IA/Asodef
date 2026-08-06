@@ -30,6 +30,7 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
   let passwordService: PasswordService;
   const createdUserIds: string[] = [];
   const createdRequestIds: string[] = [];
+  let preservedConsentIds: string[] = [];
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
@@ -61,6 +62,7 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
     // tratamiento-de-datos version - see publishDraftForTest's own doc
     // comment (test-only, reverted in afterAll).
     dataProcessingHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "tratamiento-de-datos");
+    preservedConsentIds = (await prisma.consentRecord.findMany({ where: { source: "web_data_subject_request_form" }, select: { id: true } })).map((record) => record.id);
   });
 
   beforeEach(async () => {
@@ -78,7 +80,7 @@ describe("Data-subject-requests endpoints (integration, real HTTP)", () => {
 
   afterAll(async () => {
     if (dataProcessingHandle) {
-      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: dataProcessingHandle.versionId } });
+      await prisma.consentRecord.deleteMany({ where: { source: "web_data_subject_request_form", id: { notIn: preservedConsentIds } } });
       await dataProcessingHandle.restore();
     }
     if (createdRequestIds.length > 0) {

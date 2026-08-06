@@ -33,6 +33,7 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
   const createdCustomerIds: string[] = [];
   const createdOrderIds: string[] = [];
   const createdObligationIds: string[] = [];
+  let preservedConsentIds: string[] = [];
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
@@ -59,6 +60,7 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
     // tratamiento-de-datos version - see publishDraftForTest's own doc
     // comment (test-only, reverted in afterAll).
     dataProcessingHandle = await publishDraftForTest(prisma as unknown as PrismaClient, "tratamiento-de-datos");
+    preservedConsentIds = (await prisma.consentRecord.findMany({ where: { source: "web_pqr_form" }, select: { id: true } })).map((record) => record.id);
   });
 
   beforeEach(async () => {
@@ -71,7 +73,7 @@ describe("PQR case endpoints (integration, real HTTP)", () => {
 
   afterAll(async () => {
     if (dataProcessingHandle) {
-      await prisma.consentRecord.deleteMany({ where: { legalDocumentVersionId: dataProcessingHandle.versionId } });
+      await prisma.consentRecord.deleteMany({ where: { source: "web_pqr_form", id: { notIn: preservedConsentIds } } });
       await dataProcessingHandle.restore();
     }
     // pqr_cases holds a Restrict FK into payment_orders

@@ -9,13 +9,10 @@ import { Prisma, PrismaClient } from "@prisma/client";
  * "temporarily publish the real seeded DRAFT, then restore it" dance in
  * every spec file, it lives here once.
  *
- * Publishes directly via Prisma (bypassing the real approve/publish
- * workflow, already covered by
- * legal-documents.controller.integration.spec.ts) and always restores
- * the document to its exact prior state via the returned `restore()` -
- * this runs against the same database the live review environment uses,
- * and must never leave a real seeded document looking like real legal
- * review happened when it didn't.
+ * Reuses a real current PUBLISHED version when one exists. The legacy
+ * temporary-draft path remains only for isolated test databases seeded
+ * without corrective publication. `restore()` always returns the pointer
+ * and version to their exact prior state.
  */
 export interface PublishedForTestHandle {
   documentId: string;
@@ -31,12 +28,27 @@ export interface PublishedForTestHandle {
 
 export async function publishDraftForTest(prisma: PrismaClient, slug: string): Promise<PublishedForTestHandle | null> {
   const document = await prisma.legalDocument.findUnique({ where: { slug }, include: { currentVersion: true } });
-  if (!document || document.currentVersion) {
-    // Already published (by something else, or a prior unclean run) -
-    // nothing safe to change here without risking a permanent side
-    // effect; callers must treat a null return as "could not set up".
+  if (!document) {
     return null;
   }
+
+  if (document.currentVersion?.status === "PUBLISHED") {
+    const currentVersionId = document.currentVersion.id;
+    return {
+      documentId: document.id,
+      versionId: currentVersionId,
+      unpublish: async () => {
+        await prisma.legalDocument.update({ where: { id: document.id }, data: { currentVersionId: null } });
+      },
+      republish: async () => {
+        await prisma.legalDocument.update({ where: { id: document.id }, data: { currentVersionId } });
+      },
+      restore: async () => {
+        await prisma.legalDocument.update({ where: { id: document.id }, data: { currentVersionId } });
+      },
+    };
+  }
+  if (document.currentVersion) return null;
 
   const draftVersion = await prisma.legalDocumentVersion.findFirst({
     where: { legalDocumentId: document.id, status: "DRAFT" },
