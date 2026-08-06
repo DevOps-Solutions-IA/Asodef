@@ -15,10 +15,12 @@ describe("flagship homepage",()=>{
   it("offers only the five transactional mobile quick actions as real links", () => {
     render(<MemoryRouter><HomePage/></MemoryRouter>);
     const actions = screen.getByLabelText("Acciones rápidas", { selector: "nav" });
+    expect(within(actions).getByRole("list")).toHaveClass("grid", "grid-cols-2");
     expect(within(actions).getAllByRole("link")).toHaveLength(5);
     expect(within(actions).queryByRole("link", { name: /consultar beneficios|recibir orientación/i })).not.toBeInTheDocument();
     expect(within(actions).getByRole("link", { name: /^pagar$/i })).toHaveAttribute("href", "/pagos");
     expect(within(actions).getByRole("link", { name: /^pagar$/i })).toHaveClass("bg-brand-dark");
+    expect(within(actions).getByRole("link", { name: /^pagar$/i }).closest("li")).toHaveClass("col-span-2");
     expect(within(actions).getByRole("link", { name: /radicar pqr/i })).toHaveAttribute("href", "/pqr?accion=radicar");
     expect(within(actions).getByRole("link", { name: /consultar caso/i })).toHaveAttribute("href", "/pqr?accion=consultar");
     expect(within(actions).getByRole("link", { name: /solicitudes de datos/i })).toHaveAttribute("href", "/solicitudes-de-datos");

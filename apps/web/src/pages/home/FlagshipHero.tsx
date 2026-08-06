@@ -88,8 +88,8 @@ export function FlagshipHero() {
       </div>
 
       <nav className="mx-auto mt-7 max-w-7xl px-5 sm:hidden" aria-label="Acciones rápidas">
-        <ul className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {quickActions.map(({ label, to, icon: Icon, primary }) => <li key={label} className="snap-start"><Link to={to} className={`flex min-h-12 min-w-max items-center gap-2 rounded-full border px-4 text-sm font-semibold shadow-e1 transition active:scale-[.98] motion-reduce:transform-none motion-reduce:transition-none ${primary ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white text-brand-dark"}`}><Icon aria-hidden className={`h-4 w-4 ${primary ? "text-brand-orange-light" : "text-brand-orange"}`} />{label}</Link></li>)}
+        <ul className="grid grid-cols-2 gap-2">
+          {quickActions.map(({ label, to, icon: Icon, primary }) => <li key={label} className={primary ? "col-span-2" : undefined}><Link to={to} className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border px-3 text-center text-sm font-semibold leading-tight shadow-e1 transition active:scale-[.98] motion-reduce:transform-none motion-reduce:transition-none ${primary ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/15 bg-white text-brand-dark"}`}><Icon aria-hidden className={`h-4 w-4 shrink-0 ${primary ? "text-brand-orange-light" : "text-brand-orange"}`} />{label}</Link></li>)}
         </ul>
       </nav>
     </section>
