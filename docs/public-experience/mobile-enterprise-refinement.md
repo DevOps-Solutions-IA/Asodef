@@ -52,3 +52,49 @@ Los 13 hashes de archivos legales base coinciden con la fase anterior. Se añade
 | Legal | solo regresión | idéntico al baseline | hashes, DB, 21 URL y screenshots |
 
 Resoluciones obligatorias: 1440, 1280, 1024, 768, 430, 390, 375, 360 y 320 px. Cualquier diferencia legal o pérdida funcional bloquea el release.
+
+## Resultado implementado
+
+Estado: `COMPLETE` para US-138–US-145.
+
+- Home usa el titular “Beneficios, pagos y solicitudes en un solo lugar.” y una sola frase de apoyo. El chip de audiencias no se renderiza visualmente en móvil.
+- El hero conserva `Recibir orientación` y `Consultar beneficios`. El grid móvil separado contiene, sin duplicados ni clipping: `Pagar`, `Radicar PQR`, `Consultar caso`, `Solicitudes de datos` e `Ingresar`; `Pagar` ocupa la primera fila transaccional.
+- Desktop y drawer presentan `Pagar`, `Ingresar`, `Recibir orientación`, en ese orden. Resources contiene únicamente PQR y Solicitudes de datos. El Drawer conserva un solo cierre, Escape, bloqueo de scroll y restauración de foco.
+- Home dejó de promover conteos internos 8/21/4. Muestra un solo dato temporal (`13 años como ASODEF S.A.S.` al 2026-08-06) calculado desde `ASODEF_COMPANY.registrationDate = 2012-09-10`, más domicilio y forma jurídica registrados. El contador termina una vez y reduced motion muestra el valor final de inmediato.
+- Beneficios conserva sus ocho categorías y fuentes; el hub compacta copy, filtros persistentes de 48 px y conteo. Cada detalle prioriza `Encontrar mi ruta` y mantiene `Volver al portafolio` como acción secundaria.
+- Contacto conserva las ocho intenciones y solo revela el formulario CRM para `Otro asunto`. PQR y solicitudes de datos conservan sus cinco pasos, API, consentimiento versionado, estado recuperable, copia/impresión y tracking público sin PII.
+- Las transiciones usan transform/opacity ya existentes, feedback de presión y profundidad sobria; no hay loops, parallax, animación legal ni contenido condicionado a motion.
+
+## Rondas de calidad
+
+Se cerraron ocho loops de historia (implementación, revisión especialista, navegador y regresión) y tres loops globales:
+
+1. **Funcional:** CTA, redirects, drawer, filtros, contacto, PQR, DSR, pagos, guided funnel, CRM, UTM, idempotencia, consentimientos, auth/RBAC y tracking.
+2. **Visual/móvil:** 29 rutas en 1440, 1280, 1024, 768, 430, 390, 375, 360 y 320 px; revisión manual de Home, Beneficios, Contacto, PQR y DSR; una acción parcialmente visible detectada en 390 px fue sustituida por un grid completo y se repitió la matriz.
+3. **Release:** suites, lint, TypeScript, build, migraciones, seeds, Docker, health, bundle servido, legal y Git.
+
+Resultados finales:
+
+| Gate | Resultado |
+|---|---|
+| Frontend | 75 archivos / 416 pruebas |
+| Backend | 83 suites / 773 pruebas |
+| UI compartida | 8 archivos / 46 pruebas |
+| Chromium E2E | 38/38 |
+| TypeScript y lint | monorepo aprobado |
+| Migraciones | 33 encontradas; esquema actualizado |
+| Seed | dos ejecuciones consecutivas aprobadas |
+| Docker | API y web reconstruidos sin caché; volúmenes preservados |
+| Runtime | web `:8080`; API health `:3200/api/v1/health` = `ok` |
+
+El entry anterior documentado era 194,08 kB minificado. El final es 194,60 kB (55,52 kB gzip), sin advertencia de 500 kB. Se mantienen chunks separados: routing 207,29 kB, motion 103,87 kB, forms 82,39 kB, query 46,49 kB e icons 30,20 kB; las rutas modificadas siguen diferidas por feature cuando corresponde.
+
+## Prueba final del Centro Legal congelado
+
+- `git diff c38fef8 -- <16 archivos protegidos>` no produce diferencias; catálogo, seed, validador, tipos, API, layout, clientes, catálogo web, páginas, copias Legacy y bloque de router son byte a byte iguales.
+- Los hashes SHA-256 registrados al inicio continúan iguales; en particular Legal Center `91c53520…`, documento editorial `d694dd82…`, Legacy PQR `5320bf9e…`, Legacy DSR `0d166838…` y router `905c965f…`.
+- Estado DB final: `21` current versions `PUBLISHED`; digest de slugs `8b0c9e087020ded401a53cb1f826acda`; digest JSONB de slug, versión, estado, relaciones y body aprobado `9bfa2bfc61494bb672c1bb7925f874c4`, exactos al baseline.
+- Chromium confirmó `/legal` en desktop, tablet y móvil y las 21 URL institucionales; cero placeholders, fixtures sintéticos u overflow.
+- No se aplicó motion, copy, layout, responsive, metadata ni modificación de datos a `/legal` o `/legal/*`.
+
+No hubo deploy, DNS, cambios productivos, cambio de Bold, reset de base de datos ni borrado de volúmenes.

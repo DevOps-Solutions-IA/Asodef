@@ -4068,7 +4068,7 @@
         "id": "US-138",
         "title": "Mobile enterprise baseline and protected boundaries",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Fijar el baseline sincronizado, la matriz de archivos y la protección determinística del Centro Legal antes de la evolución móvil.",
         "businessValue": "Permite mejorar la experiencia pública con trazabilidad y sin riesgo de alterar contenido legal vigente.",
         "dependsOn": ["US-137"],
@@ -4079,15 +4079,15 @@
         "auditRequirements": ["Documento de baseline con hashes, digest de DB y propiedad"],
         "testingRequirements": ["JSON válido, Git limpio y evidencia legal reproducible"],
         "outOfScope": ["Cambiar /legal, desplegar o modificar producción"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "c2f63ba",
+        "notes": "Baseline c38fef8, ownership disjunto, matriz 9 resoluciones, hashes legales, digest DB y evidencia visual ignorada registrados antes de implementar."
       },
       {
         "id": "US-139",
         "title": "Mobile homepage hero simplification",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Simplificar el hero móvil para priorizar headline, apoyo breve, dos CTA y accesos funcionales sin etiquetas repetidas.",
         "businessValue": "Hace visible la propuesta y la primera acción útil dentro del viewport inicial.",
         "dependsOn": ["US-138"],
@@ -4098,15 +4098,15 @@
         "auditRequirements": ["Evidencia Chromium desktop y móvil"],
         "testingRequirements": ["Pruebas de copy, chip, CTA, quick actions y viewports"],
         "outOfScope": ["Rediseño visual total o cambios legales"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "ba05615",
+        "notes": "Hero conciso, chip oculto en móvil, CTA balanceadas y soporte concreto; corrección visual final de acciones completas en 3fca6a2."
       },
       {
         "id": "US-140",
         "title": "Public navigation and payment-action hierarchy",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Elevar la jerarquía pública de navegación y colocar Pagar inmediatamente antes de Ingresar en desktop y drawer.",
         "businessValue": "Reduce fricción para la transacción principal sin sobrecargar el header.",
         "dependsOn": ["US-138"],
@@ -4117,15 +4117,15 @@
         "auditRequirements": ["Jerarquía y estructura comprobadas en DOM y Chromium"],
         "testingRequirements": ["Pruebas de orden, entries, cierre, foco, active state y overflow"],
         "outOfScope": ["Modificar Payment Center o Centro Legal"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "ddf02ae",
+        "notes": "Pagar precede a Ingresar en desktop y drawer; Resources contiene solo PQR y Solicitudes de datos; un cierre con restauración de foco."
       },
       {
         "id": "US-141",
         "title": "Homepage CTA deduplication and quick-action refinement",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Eliminar CTA repetidas y convertir los accesos móviles en una jerarquía transaccional clara y completamente alcanzable.",
         "businessValue": "Permite actuar con una mano sin competir con acciones duplicadas.",
         "dependsOn": ["US-139", "US-140"],
@@ -4136,15 +4136,15 @@
         "auditRequirements": ["Prueba de deduplicación y orden"],
         "testingRequirements": ["Unitarias de acciones y E2E móvil"],
         "outOfScope": ["Duplicar formularios especializados"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "ba05615",
+        "notes": "Cinco acciones no duplicadas y rutas canónicas; 3fca6a2 sustituyó el rail parcialmente visible por grid completo con Pagar destacado."
       },
       {
         "id": "US-142",
         "title": "Institutional metrics replacement and counter refinement",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Retirar métricas internas del inicio y presentar evidencia institucional verificable mediante un dato temporal y capacidades concretas.",
         "businessValue": "Sustituye cifras técnicas de bajo valor por autoridad y capacidad comprensibles.",
         "dependsOn": ["US-139"],
@@ -4155,15 +4155,15 @@
         "auditRequirements": ["Documento de métricas actualizado con altas, bajas y fundamento"],
         "testingRequirements": ["Fuente, valor, estado final y reduced motion"],
         "outOfScope": ["Totales de usuarios, empresas, pagos, cobertura o satisfacción"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "ba05615",
+        "notes": "Se retiraron 8/21/4 del inicio; se publicó una cifra temporal registral y dos indicadores cualitativos, con cálculo, fuente y reduced motion probados."
       },
       {
         "id": "US-143",
         "title": "Mobile benefits and benefit-detail polish",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Compactar filtros, copy y CTA del hub y detalle de beneficios sin alterar el portafolio aprobado.",
         "businessValue": "Reduce desplazamiento y mejora la comparación y continuación desde móvil.",
         "dependsOn": ["US-138"],
@@ -4174,15 +4174,15 @@
         "auditRequirements": ["Comparación móvil hub/detalle"],
         "testingRequirements": ["Filtros, URL, empty state, CTA y matriz móvil"],
         "outOfScope": ["Cambiar contenido legal o arquitectura del portafolio"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "372201c",
+        "notes": "Hub y ocho detalles compactados; filtros de 48 px, URL, empty state, contenido verificado y jerarquía de CTA preservados."
       },
       {
         "id": "US-144",
         "title": "Mobile contact, PQR and data-request polish",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Compactar las entradas y pasos de contacto, PQR y derechos de datos preservando endpoints, tracking y evidencia de consentimiento.",
         "businessValue": "Hace que tres gestiones críticas comiencen con intención y avancen sin formularios largos en el primer viewport.",
         "dependsOn": ["US-138", "US-140"],
@@ -4193,15 +4193,15 @@
         "auditRequirements": ["E2E de envío, tracking y ausencia de PII"],
         "testingRequirements": ["Contacto, PQR, DSR, recuperación, reduced motion y E2E real"],
         "outOfScope": ["Endpoints nuevos, cambios legales o datos públicos adicionales"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "3a16851",
+        "notes": "Contacto, PQR y DSR muestran intención primero y preservan cinco pasos, API real, CRM/UTM, idempotencia, consentimiento, tracking, copia e impresión segura."
       },
       {
         "id": "US-145",
         "title": "Motion, accessibility, regression and final synchronization",
         "domain": "AB - Refinamiento móvil enterprise",
-        "status": "open",
+        "status": "complete",
         "description": "Cerrar motion sobrio, accesibilidad, matriz multirresolución, regresión legal y sincronización de main.",
         "businessValue": "Entrega una experiencia verificable y reproducible en el repositorio privado.",
         "dependsOn": ["US-139", "US-140", "US-141", "US-142", "US-143", "US-144"],
@@ -4212,9 +4212,9 @@
         "auditRequirements": ["Tres loops globales, hashes/DB legal, Git status y SHA remoto"],
         "testingRequirements": ["Frontend, backend, UI, E2E, lint, typecheck, build, migraciones, seeds, Docker, health y Chromium"],
         "outOfScope": ["Centro Legal, despliegue y producción"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": null
+        "completionStatus": "complete",
+        "commit": "1461178",
+        "notes": "Frontend 416, backend 773, UI 46 y E2E Chromium 38 aprobados; lint, TypeScript, build, 33 migraciones, seeds x2, Docker sin caché, health y legal 21/21 aprobados."
       }
   ]
 }
