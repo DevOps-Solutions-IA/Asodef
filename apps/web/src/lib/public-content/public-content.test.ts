@@ -4,6 +4,8 @@ import { BENEFITS, getBenefit } from "./benefits";
 import { LEGACY_REDIRECTS, PUBLIC_ROUTE_LIST } from "./public-routes";
 
 describe("public content registries", () => {
+  const prohibitedFiller = /información para decidir con claridad|contenido verificable|experiencia verificable|gestión correcta|ruta clara|canales institucionales|soluciones integrales|acompañamiento integral/i;
+
   it("keeps routes and canonical metadata unique", () => {
     expect(new Set(PUBLIC_ROUTE_LIST.map(route => route.path)).size).toBe(PUBLIC_ROUTE_LIST.length);
     expect(new Set(PUBLIC_ROUTE_LIST.map(route => route.seo.title)).size).toBe(PUBLIC_ROUTE_LIST.length);
@@ -23,5 +25,12 @@ describe("public content registries", () => {
   it("defines all four audience journeys and safe legacy redirects", () => {
     expect(AUDIENCES.map(audience => audience.slug)).toEqual(["personas", "afiliados", "empresas", "aliados"]);
     expect(LEGACY_REDIRECTS.every(redirect => String(redirect.from) !== String(redirect.to))).toBe(true);
+  });
+
+  it("keeps non-legal registries free from prohibited filler", () => {
+    expect(JSON.stringify(AUDIENCES)).not.toMatch(prohibitedFiller);
+    expect(JSON.stringify(BENEFITS)).not.toMatch(prohibitedFiller);
+    const nonLegalRoutes = PUBLIC_ROUTE_LIST.filter(route => route.path !== "/legal");
+    expect(JSON.stringify(nonLegalRoutes)).not.toMatch(prohibitedFiller);
   });
 });

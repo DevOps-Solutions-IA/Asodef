@@ -7,6 +7,8 @@ describe("public solutions", () => {
   it("lists the four distinct audience journeys", () => {
     render(<MemoryRouter><SolutionsPage /></MemoryRouter>);
     for (const label of ["Personas y familias", "Afiliados y usuarios", "Empresas", "Potenciales aliados"]) expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/elige cómo te relacionas/i);
+    expect(document.body).not.toHaveTextContent(/información para decidir con claridad|contenido verificable|experiencia verificable/i);
   });
   it("connects companies to real portal and guided routes", () => {
     render(<MemoryRouter initialEntries={["/soluciones/empresas"]}><Routes><Route path="/soluciones/:audience" element={<AudiencePage/>}/></Routes></MemoryRouter>);
