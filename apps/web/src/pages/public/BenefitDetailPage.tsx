@@ -1,0 +1,20 @@
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { BENEFITS, getBenefit } from "../../lib/public-content/benefits";
+import { EditorialSection, FaqList, NumberedProcess, OutcomeList, PageCta, PublicHero, SectionIntro } from "../../components/public/PublicPage";
+import { NotFoundPage } from "../errors/NotFoundPage";
+import { Seo } from "../../lib/seo/Seo";
+
+export function BenefitDetailPage() {
+  const benefit = getBenefit(useParams().slug ?? "");
+  if (!benefit) return <NotFoundPage />;
+  const relatedSlugs: readonly string[] = benefit.relatedSlugs;
+  const related = BENEFITS.filter(item => relatedSlugs.includes(item.slug));
+  return <><Seo custom={{ ...benefit.seo, path: `/beneficios/${benefit.slug}` }} breadcrumbs={[{ name: "Inicio", path: "/" }, { name: "Beneficios", path: "/beneficios" }, { name: benefit.title, path: `/beneficios/${benefit.slug}` }]} service={{ name: benefit.title, description: benefit.summary }} faq={benefit.faq} />
+    <PublicHero eyebrow="Categoría de beneficio" title={benefit.title} description={benefit.summary} actions={[{ label: "Encontrar mi ruta", to: `/comenzar?beneficio=${benefit.slug}`, primary: true }, { label: "Volver al portafolio", to: "/beneficios" }]} />
+    <EditorialSection><div className="grid gap-12 lg:grid-cols-2"><div><SectionIntro eyebrow="Necesidad" title="El problema que aborda" description={benefit.problem}/></div><div className="rounded-3xl bg-brand-deep p-8 text-white"><p className="text-xs font-bold uppercase tracking-wider text-brand-orange-light">Resultado esperado</p><p className="mt-5 font-display text-3xl font-semibold leading-tight">{benefit.outcome}</p></div></div><div className="mt-16 grid gap-10 lg:grid-cols-2"><div><h2 className="font-display text-2xl font-semibold">Qué permite esta ruta</h2><div className="mt-6"><OutcomeList items={benefit.capabilities}/></div></div><div><h2 className="font-display text-2xl font-semibold">Quién puede consultarla</h2><p className="mt-5 leading-7 text-text-muted">{benefit.eligibility}</p><p className="mt-5 text-sm font-semibold text-brand-dark">Audiencias: {benefit.audience.join(", ")}.</p></div></div></EditorialSection>
+    <EditorialSection tone="soft"><SectionIntro eyebrow="Proceso" title="Cómo avanzar" description="El recorrido evita asumir una condición antes de verificar la relación específica."/><div className="mt-10"><NumberedProcess items={benefit.process}/></div><div className="mt-14 rounded-3xl border border-brand-dark/10 bg-white p-7"><h3 className="font-display text-2xl font-semibold">Información que puede ser necesaria</h3><div className="mt-5"><OutcomeList items={benefit.requiredInformation}/></div></div></EditorialSection>
+    <EditorialSection><SectionIntro eyebrow="Preguntas frecuentes" title={`Antes de gestionar ${benefit.title.toLowerCase()}`} description="Respuestas limitadas a lo que ASODEF puede afirmar con las fuentes y los flujos actuales."/><div className="mt-10"><FaqList items={benefit.faq}/></div><div className="mt-14 flex flex-wrap gap-3">{benefit.legalSlugs.map(slug=><Link key={slug} className="public-button-secondary" to={`/legal/${slug}`}>Documento legal relacionado<ArrowRight className="h-4 w-4"/></Link>)}</div>{related.length > 0 && <div className="mt-16"><h2 className="font-display text-2xl font-semibold">Beneficios relacionados</h2><div className="mt-6 grid gap-4 sm:grid-cols-2">{related.map(item=><Link className="rounded-2xl border border-brand-dark/10 bg-white p-6 font-semibold text-brand-dark shadow-e1 hover:shadow-e2" key={item.slug} to={`/beneficios/${item.slug}`}>{item.title}<span className="mt-2 block text-sm font-normal leading-6 text-text-muted">{item.summary}</span></Link>)}</div></div>}<Link className="mt-12 inline-flex items-center gap-2 font-semibold text-brand-dark" to="/beneficios"><ArrowLeft className="h-4 w-4"/>Todos los beneficios</Link></EditorialSection>
+    <PageCta title="Continúa por el canal adecuado" description="El orientador usa tu perfil y necesidad para dirigir la gestión sin pedir datos que no corresponden." />
+  </>;
+}

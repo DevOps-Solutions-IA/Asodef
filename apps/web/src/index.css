@@ -170,6 +170,27 @@ body {
 }
 
 @layer components {
+  .public-button-primary,
+  .public-button-secondary,
+  .public-button-light {
+    display: inline-flex;
+    min-height: 3rem;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    border-radius: 9999px;
+    padding-inline: 1.35rem;
+    font-size: .875rem;
+    font-weight: 650;
+    transition: transform var(--motion-fast), background-color var(--motion-fast), box-shadow var(--motion-fast);
+  }
+  .public-button-primary { background: var(--color-brand-dark); color: white; box-shadow: var(--shadow-e2); }
+  .public-button-primary:hover { background: var(--color-brand-dark-600); transform: translateY(-1px); box-shadow: var(--shadow-e3); }
+  .public-button-secondary { border: 1px solid var(--border-strong); background: rgba(255,255,255,.76); color: var(--color-brand-dark); }
+  .public-button-secondary:hover { background: white; transform: translateY(-1px); }
+  .public-button-light { background: white; color: var(--color-brand-dark); box-shadow: var(--shadow-e2); }
+  .public-button-light:hover { background: var(--color-brand-orange-50); transform: translateY(-1px); }
+
   .workspace-canvas {
     background:
       radial-gradient(circle at 82% 4%, rgba(67, 139, 52, 0.08), transparent 30rem),
