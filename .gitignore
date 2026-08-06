@@ -4,14 +4,26 @@ build/
 .turbo/
 *.tsbuildinfo
 .env
-.env.local
-.env.production
+.env.*
 !.env.example
+!**/.env.example
 *.log
+*.pid
 .DS_Store
+.idea/
+.vscode/
 coverage/
 playwright-report/
 test-results/
 apps/api/generated/
 apps/api/storage/
 .pnpm-store/
+.cache/
+.docker-data/
+docker-data/
+
+# Local AI-agent state
+.claude/
+
+# Private ASODEF source documents
+docs/source/
