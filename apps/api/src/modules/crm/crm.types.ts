@@ -143,6 +143,10 @@ export interface AdminLeadSubmissionResponse {
   status: string;
   prospectId: string | null;
   createdAt: Date;
+  source: string | null;
+  audience: string | null;
+  need: string | null;
+  campaign: unknown;
 }
 
 export function toAdminLeadSubmissionResponse(lead: LeadSubmission): AdminLeadSubmissionResponse {
@@ -159,6 +163,10 @@ export function toAdminLeadSubmissionResponse(lead: LeadSubmission): AdminLeadSu
     status: lead.status,
     prospectId: lead.prospectId,
     createdAt: lead.createdAt,
+    source: lead.source,
+    audience: lead.audience,
+    need: lead.need,
+    campaign: lead.campaign,
   };
 }
 

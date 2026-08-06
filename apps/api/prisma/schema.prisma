@@ -410,6 +410,15 @@ model LeadSubmission {
   sector          String
   message         String
   consentAccepted Boolean    @map("consent_accepted")
+  publicReference   String?    @unique @map("public_reference")
+  source            String?
+  entryRoute        String?    @map("entry_route")
+  audience          String?
+  need              String?
+  preferredContact  String?    @map("preferred_contact")
+  campaign          Json?
+  funnelPayload     Json?      @map("funnel_payload")
+  idempotencyKey    String?    @unique @map("idempotency_key")
   status          LeadStatus @default(PENDING)
   // US-051: set once this lead is promoted into a Prospect via the
   // admin endpoint - nullable, never set at creation.
@@ -422,6 +431,7 @@ model LeadSubmission {
   prospect       Prospect?         @relation(fields: [prospectId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([source, audience, need])
   @@map("lead_submissions")
 }
 

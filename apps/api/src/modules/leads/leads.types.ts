@@ -31,3 +31,13 @@ export function toLeadSubmissionResponse(lead: LeadSubmission): LeadSubmissionRe
     createdAt: lead.createdAt,
   };
 }
+
+export interface GuidedLeadResponse {
+  reference: string;
+  createdAt: Date;
+  status: "received";
+}
+
+export function toGuidedLeadResponse(lead: LeadSubmission): GuidedLeadResponse {
+  return { reference: lead.publicReference ?? "", createdAt: lead.createdAt, status: "received" };
+}

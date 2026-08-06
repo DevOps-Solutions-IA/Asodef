@@ -5,6 +5,7 @@ import { buildRequestContext } from "../../common/http/request-context.util";
 import type { AuthenticatedRequest } from "../auth/types/request-user.type";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
+import { CreateGuidedLeadDto } from "./dto/create-guided-lead.dto";
 
 @ApiTags("leads")
 @Controller("leads")
@@ -16,5 +17,12 @@ export class LeadsController {
   @HttpCode(HttpStatus.CREATED)
   createLead(@Body() dto: CreateLeadDto, @Req() request: AuthenticatedRequest) {
     return this.leadsService.create(dto, buildRequestContext(request));
+  }
+
+  @Public()
+  @Post("guided")
+  @HttpCode(HttpStatus.CREATED)
+  createGuidedLead(@Body() dto: CreateGuidedLeadDto, @Req() request: AuthenticatedRequest) {
+    return this.leadsService.createGuided(dto, buildRequestContext(request));
   }
 }
