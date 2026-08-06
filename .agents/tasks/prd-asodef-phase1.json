@@ -2973,7 +2973,7 @@
       "testingRequirements": ["Frontend y backend completos, E2E, lint, typecheck, build y revisión visual real"],
       "outOfScope": ["US-038 a US-042 y cualquier despliegue"],
       "completionStatus": "complete",
-      "commit": "e93b379",
+      "commit": "70d4bc2",
       "notes": "Lint/typecheck/build globales, frontend 409/409, UI 46/46, backend completo, migraciones, dos seeds, Docker sin caché, health y E2E Chromium 22/22 (incluye auditoría visual 1440/768/390) verificados."
     }
   ]
