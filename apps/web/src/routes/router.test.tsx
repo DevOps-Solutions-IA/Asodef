@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { isValidElement } from "react";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -18,6 +19,12 @@ function renderAtPath(
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+function isLazyRouteElement(element: unknown): boolean {
+  if (!isValidElement(element)) return false;
+  const elementType = element.type as { $$typeof?: symbol };
+  return elementType.$$typeof === Symbol.for("react.lazy");
 }
 
 /** A stateful fetch mock (mirrors LoginPage.test.tsx's mockLoginFlow): GET
@@ -62,34 +69,43 @@ describe("router", () => {
 
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Encontrar mi ruta" })[0]).toHaveAttribute("href", "/comenzar");
+    expect(screen.getAllByRole("link", { name: "Recibir orientación" })[0]).toHaveAttribute("href", "/comenzar");
   });
 
-  it("renders each top-level public marketing route inside PublicLayout", () => {
+  it("loads secondary public and transactional features through route-level lazy boundaries", () => {
+    const publicChildren = routeConfig[0]?.children ?? [];
+    for (const path of ["quienes-somos", "beneficios", "contacto", "comenzar", "pqr", "solicitudes-de-datos"]) {
+      const route = publicChildren.find((candidate) => candidate.path === path);
+      expect(route, `missing route ${path}`).toBeDefined();
+      expect(isLazyRouteElement(route?.element), `${path} should be lazy`).toBe(true);
+    }
+  });
+
+  it("renders each top-level public marketing route inside PublicLayout", async () => {
     renderAtPath("/quienes-somos");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/organización con historia/i);
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/ASODEF conecta personas/i);
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
   // Canonical public pages and preserved legacy redirects all land on
   // substantive editorial experiences inside the public shell.
   it.each([
-    ["/quienes-somos", /organización con historia/i],
-    ["/beneficios", /valor disponible/i],
-    ["/portafolio?utm_source=legacy", /valor disponible/i],
-    ["/cobertura", /organización con historia/i],
-    ["/contacto", /solicitud registrada/i],
-  ])("renders or safely redirects %s to substantive content", (path, expectedHeading) => {
+    ["/quienes-somos", /ASODEF conecta personas/i],
+    ["/beneficios", /Encuentra opciones/i],
+    ["/portafolio?utm_source=legacy", /Encuentra opciones/i],
+    ["/cobertura", /ASODEF conecta personas/i],
+    ["/contacto", /Qué necesitas hacer/i],
+  ])("renders or safely redirects %s to substantive content", async (path, expectedHeading) => {
     renderAtPath(path);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(expectedHeading);
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(expectedHeading);
     expect(screen.queryByText("Servicio no disponible")).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("renders the complete public company journey at /empresas", () => {
+  it("renders the complete public company journey at /empresas", async () => {
     renderAtPath("/empresas");
-    expect(screen.getByRole("heading", { level: 1, name: "Empresas" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Empresas" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /portal empresarial/i })).toHaveAttribute("href", "/empresa");
   });
 
@@ -284,8 +300,9 @@ describe("router", () => {
       if (url.includes("/legal-documents/")) return jsonResponse(404, { statusCode: 404, error: "Not Found", message: "No encontrado." });
       return undefined;
     });
-    expect(await screen.findByRole("heading", { name: "PQR" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enviar caso" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Radica o consulta una PQR" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Radicar una PQR" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
   it("renders the 404 page (inside PublicLayout) for any unmatched path", async () => {

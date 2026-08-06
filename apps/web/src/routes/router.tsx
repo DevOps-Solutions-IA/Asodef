@@ -13,46 +13,11 @@ import { GuestOnlyRoute } from "../lib/auth/route-guards/GuestOnlyRoute";
 import { AuthenticatedRoute } from "../lib/auth/route-guards/AuthenticatedRoute";
 import { RoleRoute } from "../lib/auth/route-guards/RoleRoute";
 import { PermissionRoute } from "../lib/auth/route-guards/PermissionRoute";
-import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
-import { UserListPage } from "../pages/admin/UserListPage";
-import { CreateUserPage } from "../pages/admin/CreateUserPage";
-import { UserDetailPage } from "../pages/admin/UserDetailPage";
-import { EditUserPage } from "../pages/admin/EditUserPage";
-import { UserRolesPage } from "../pages/admin/UserRolesPage";
-import { UserSessionsPage } from "../pages/admin/UserSessionsPage";
-import { UserSecurityPage } from "../pages/admin/UserSecurityPage";
-import { CrmLayout } from "../pages/admin/crm/CrmLayout";
-import { ProspectsListPage } from "../pages/admin/crm/ProspectsListPage";
-import { OpportunitiesBoardPage } from "../pages/admin/crm/OpportunitiesBoardPage";
-import { OpportunityDetailPage } from "../pages/admin/crm/OpportunityDetailPage";
-import { CrmCompaniesPage } from "../pages/admin/crm/CrmCompaniesPage";
-import { CompanyDetailPage } from "../pages/admin/crm/CompanyDetailPage";
-import { BusinessPartnerDetailPage } from "../pages/admin/crm/BusinessPartnerDetailPage";
-import { AdminLegalPage } from "../pages/admin/legal/AdminLegalPage";
-import { ConsentSearchPage } from "../pages/admin/legal/ConsentSearchPage";
-import { DataSubjectRequestQueuePage } from "../pages/admin/legal/DataSubjectRequestQueuePage";
-import { PqrQueuePage } from "../pages/admin/legal/PqrQueuePage";
-import { AdminPaymentsPage } from "../pages/admin/payments/AdminPaymentsPage";
-import { PaymentOrderDetailPage } from "../pages/admin/payments/PaymentOrderDetailPage";
-import { AdminReconciliationPage } from "../pages/admin/payments/AdminReconciliationPage";
-import { AdminReportsPage } from "../pages/admin/reports/AdminReportsPage";
-import { PaymentLookupPage } from "../pages/payments/PaymentLookupPage";
-import { OrderSummaryPage } from "../pages/payments/OrderSummaryPage";
-import { PaymentProcessPage } from "../pages/payments/PaymentProcessPage";
-import { PaymentResultPage } from "../pages/payments/PaymentResultPage";
-import { ReceiptViewPage } from "../pages/payments/ReceiptViewPage";
+import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
 import { LegalCenterPage } from "../pages/legal/LegalCenterPage";
 import { LegalDocumentPage } from "../pages/legal/LegalDocumentPage";
-import { DataSubjectRequestPage } from "../pages/legal/DataSubjectRequestPage";
-import { PqrCasePage } from "../pages/legal/PqrCasePage";
-import { LEGAL_CATALOG } from "../lib/legal/legal-catalog";
-import { AboutPage } from "../pages/public/AboutPage";
-import { BenefitsPage } from "../pages/public/BenefitsPage";
-import { BenefitDetailPage } from "../pages/public/BenefitDetailPage";
-import { AudiencePage, CompaniesPage, SolutionsPage } from "../pages/public/SolutionsPage";
-import { FaqPage, ResourcesPage } from "../pages/public/ResourcesPage";
-import { ContactPage } from "../pages/public/ContactPage";
-import { GuidedStartPage } from "../pages/public/GuidedStartPage";
+import { PqrCasePage as LegacyPqrCasePage } from "../pages/legal/LegacyPqrCasePage";
+import { DataSubjectRequestPage as LegacyDataSubjectRequestPage } from "../pages/legal/LegacyDataSubjectRequestPage";
 import { PreserveRedirect } from "./PreserveRedirect";
 
 // US-048: solicitudes-de-datos is a real submission workflow, not a
@@ -77,6 +42,55 @@ const CompanyLayout = lazy(() => import("../layouts/CompanyLayout").then((m) => 
 const AdminLayout = lazy(() => import("../layouts/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LegalLayout = lazy(() => import("../layouts/LegalLayout").then((m) => ({ default: m.LegalLayout })));
 
+// Route-level feature splitting keeps first paint focused on Home. These
+// components retain their existing route objects and Suspense fallback, so
+// navigation semantics stay stable while infrequently used features move to
+// independent chunks.
+const AboutPage = lazy(() => import("../pages/public/AboutPage").then((m) => ({ default: m.AboutPage })));
+const BenefitsPage = lazy(() => import("../pages/public/BenefitsPage").then((m) => ({ default: m.BenefitsPage })));
+const BenefitDetailPage = lazy(() => import("../pages/public/BenefitDetailPage").then((m) => ({ default: m.BenefitDetailPage })));
+const SolutionsPage = lazy(() => import("../pages/public/SolutionsPage").then((m) => ({ default: m.SolutionsPage })));
+const AudiencePage = lazy(() => import("../pages/public/SolutionsPage").then((m) => ({ default: m.AudiencePage })));
+const CompaniesPage = lazy(() => import("../pages/public/SolutionsPage").then((m) => ({ default: m.CompaniesPage })));
+const ResourcesPage = lazy(() => import("../pages/public/ResourcesPage").then((m) => ({ default: m.ResourcesPage })));
+const FaqPage = lazy(() => import("../pages/public/ResourcesPage").then((m) => ({ default: m.FaqPage })));
+const ContactPage = lazy(() => import("../pages/public/ContactPage").then((m) => ({ default: m.ContactPage })));
+const GuidedStartPage = lazy(() => import("../pages/public/GuidedStartPage").then((m) => ({ default: m.GuidedStartPage })));
+const PqrCasePage = lazy(() => import("../pages/legal/PqrCasePage").then((m) => ({ default: m.PqrCasePage })));
+const DataSubjectRequestPage = lazy(() => import("../pages/legal/DataSubjectRequestPage").then((m) => ({ default: m.DataSubjectRequestPage })));
+
+// Frozen /legal special-case routes render byte-for-byte baseline components;
+// the canonical public workflows can evolve without changing Legal Center.
+const PaymentLookupPage = lazy(() => import("../pages/payments/PaymentLookupPage").then((m) => ({ default: m.PaymentLookupPage })));
+const OrderSummaryPage = lazy(() => import("../pages/payments/OrderSummaryPage").then((m) => ({ default: m.OrderSummaryPage })));
+const PaymentProcessPage = lazy(() => import("../pages/payments/PaymentProcessPage").then((m) => ({ default: m.PaymentProcessPage })));
+const PaymentResultPage = lazy(() => import("../pages/payments/PaymentResultPage").then((m) => ({ default: m.PaymentResultPage })));
+const ReceiptViewPage = lazy(() => import("../pages/payments/ReceiptViewPage").then((m) => ({ default: m.ReceiptViewPage })));
+
+const AdminDashboardPage = lazy(() => import("../pages/admin/AdminDashboardPage").then((m) => ({ default: m.AdminDashboardPage })));
+const UserListPage = lazy(() => import("../pages/admin/UserListPage").then((m) => ({ default: m.UserListPage })));
+const CreateUserPage = lazy(() => import("../pages/admin/CreateUserPage").then((m) => ({ default: m.CreateUserPage })));
+const UserDetailPage = lazy(() => import("../pages/admin/UserDetailPage").then((m) => ({ default: m.UserDetailPage })));
+const EditUserPage = lazy(() => import("../pages/admin/EditUserPage").then((m) => ({ default: m.EditUserPage })));
+const UserRolesPage = lazy(() => import("../pages/admin/UserRolesPage").then((m) => ({ default: m.UserRolesPage })));
+const UserSessionsPage = lazy(() => import("../pages/admin/UserSessionsPage").then((m) => ({ default: m.UserSessionsPage })));
+const UserSecurityPage = lazy(() => import("../pages/admin/UserSecurityPage").then((m) => ({ default: m.UserSecurityPage })));
+const CrmLayout = lazy(() => import("../pages/admin/crm/CrmLayout").then((m) => ({ default: m.CrmLayout })));
+const ProspectsListPage = lazy(() => import("../pages/admin/crm/ProspectsListPage").then((m) => ({ default: m.ProspectsListPage })));
+const OpportunitiesBoardPage = lazy(() => import("../pages/admin/crm/OpportunitiesBoardPage").then((m) => ({ default: m.OpportunitiesBoardPage })));
+const OpportunityDetailPage = lazy(() => import("../pages/admin/crm/OpportunityDetailPage").then((m) => ({ default: m.OpportunityDetailPage })));
+const CrmCompaniesPage = lazy(() => import("../pages/admin/crm/CrmCompaniesPage").then((m) => ({ default: m.CrmCompaniesPage })));
+const CompanyDetailPage = lazy(() => import("../pages/admin/crm/CompanyDetailPage").then((m) => ({ default: m.CompanyDetailPage })));
+const BusinessPartnerDetailPage = lazy(() => import("../pages/admin/crm/BusinessPartnerDetailPage").then((m) => ({ default: m.BusinessPartnerDetailPage })));
+const AdminLegalPage = lazy(() => import("../pages/admin/legal/AdminLegalPage").then((m) => ({ default: m.AdminLegalPage })));
+const ConsentSearchPage = lazy(() => import("../pages/admin/legal/ConsentSearchPage").then((m) => ({ default: m.ConsentSearchPage })));
+const DataSubjectRequestQueuePage = lazy(() => import("../pages/admin/legal/DataSubjectRequestQueuePage").then((m) => ({ default: m.DataSubjectRequestQueuePage })));
+const PqrQueuePage = lazy(() => import("../pages/admin/legal/PqrQueuePage").then((m) => ({ default: m.PqrQueuePage })));
+const AdminPaymentsPage = lazy(() => import("../pages/admin/payments/AdminPaymentsPage").then((m) => ({ default: m.AdminPaymentsPage })));
+const PaymentOrderDetailPage = lazy(() => import("../pages/admin/payments/PaymentOrderDetailPage").then((m) => ({ default: m.PaymentOrderDetailPage })));
+const AdminReconciliationPage = lazy(() => import("../pages/admin/payments/AdminReconciliationPage").then((m) => ({ default: m.AdminReconciliationPage })));
+const AdminReportsPage = lazy(() => import("../pages/admin/reports/AdminReportsPage").then((m) => ({ default: m.AdminReportsPage })));
+
 /**
  * Exported separately (not just the built router) so tests can build a
  * createMemoryRouter from the exact same route tree instead of duplicating
@@ -99,6 +113,8 @@ export const routeConfig: RouteObject[] = [
       { path: "recursos/preguntas-frecuentes", element: <FaqPage /> },
       { path: "contacto", element: <ContactPage /> },
       { path: "comenzar", element: <GuidedStartPage /> },
+      { path: "pqr", element: <PqrCasePage /> },
+      { path: "solicitudes-de-datos", element: <DataSubjectRequestPage /> },
       { path: "portafolio", element: <PreserveRedirect to="/beneficios" /> },
       { path: "cobertura", element: <PreserveRedirect to="/quienes-somos#operacion" /> },
       // Global catch-all: React Router ranks routes by specificity across
@@ -345,12 +361,10 @@ export const routeConfig: RouteObject[] = [
         path: entry.slug,
         element: <LegalDocumentPage slug={entry.slug} title={entry.title} />,
       })),
-      { path: DATA_SUBJECT_REQUEST_SLUG, element: <DataSubjectRequestPage /> },
-      { path: PQR_SLUG, element: <PqrCasePage /> },
+      { path: DATA_SUBJECT_REQUEST_SLUG, element: <LegacyDataSubjectRequestPage /> },
+      { path: PQR_SLUG, element: <LegacyPqrCasePage /> },
     ],
   },
-  { path: "pqr", element: <PqrCasePage /> },
-  { path: "solicitudes-de-datos", element: <DataSubjectRequestPage /> },
 ];
 
 // Opt into React Router v7's behavior now (still on v6) so this codebase
