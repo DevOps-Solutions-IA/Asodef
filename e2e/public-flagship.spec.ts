@@ -49,6 +49,64 @@ const isExpectedAnonymousSessionResponse = (url: string, status: number) =>
   status === 401 && (url.includes("/auth/me") || url.includes("/auth/refresh"));
 
 test.describe("flagship public experience", () => {
+  test("mobile home and drawer expose one deliberate action hierarchy", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    await expect(page.getByText("Personas · afiliados · empresas · aliados")).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Beneficios, pagos y solicitudes");
+    await expect(page.getByRole("link", { name: "Recibir orientación" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Consultar beneficios" }).first()).toBeVisible();
+
+    const quickActions = page.getByRole("navigation", { name: "Acciones rápidas" });
+    await expect(quickActions.getByRole("link")).toHaveCount(5);
+    await expect(quickActions.getByRole("link")).toHaveText(["Pagar", "Radicar PQR", "Consultar caso", "Solicitudes de datos", "Ingresar"]);
+    await expect(quickActions.getByRole("link", { name: /Consultar beneficios|Recibir orientación/ })).toHaveCount(0);
+
+    const openMenu = page.getByRole("button", { name: "Abrir menú de navegación" });
+    await openMenu.click();
+    const drawer = page.getByRole("dialog", { name: "Navegación" });
+    await expect(drawer.getByRole("button", { name: "Cerrar" })).toHaveCount(1);
+    const resources = drawer.getByRole("navigation", { name: "Principal móvil" });
+    await expect(resources.getByText("Recursos", { exact: true })).toBeVisible();
+    await expect(resources.getByRole("link", { name: "PQR" })).toBeVisible();
+    await expect(resources.getByRole("link", { name: "Solicitudes de datos" })).toBeVisible();
+    await expect(resources.getByRole("link", { name: "Contacto" })).toHaveCount(0);
+    const drawerActions = drawer.locator('[aria-label="Acciones principales"] a');
+    await expect(drawerActions).toHaveText(["Pagar", "Ingresar", "Recibir orientación"]);
+    await drawer.getByRole("button", { name: "Cerrar" }).click();
+    await expect(openMenu).toBeFocused();
+  });
+
+  test("mobile benefits keep compact filters and ordered detail actions", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/beneficios");
+    const filters = page.getByRole("region", { name: "Filtra por perfil y necesidad" });
+    const profileFilter = filters.getByRole("combobox", { name: /Perfil/ });
+    const needFilter = filters.getByRole("combobox", { name: /Necesidad/ });
+    await expect(profileFilter).toHaveCSS("min-height", "48px");
+    await expect(needFilter).toHaveCSS("min-height", "48px");
+    await profileFilter.selectOption("afiliados");
+    await expect(page).toHaveURL(/audiencia=afiliados/);
+    await expect(page.getByText(/categorías encontradas|categoría encontrada/)).toBeVisible();
+
+    await page.goto("/beneficios/plan-exequial-familiar");
+    const heroActions = page.locator("main section").first().getByRole("link");
+    await expect(heroActions.first()).toHaveText("Encontrar mi ruta");
+    await expect(heroActions.nth(1)).toHaveText("Volver al portafolio");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  });
+
+  test("verified counter resolves immediately when reduced motion is requested", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const indicators = page.getByRole("region", { name: "Información institucional verificada" });
+    await expect(indicators.locator('[aria-hidden="true"]', { hasText: "13" })).toBeVisible();
+    await expect(indicators).not.toContainText("categorías de beneficios");
+    await expect(indicators).not.toContainText("documentos institucionales publicados");
+  });
+
   for (const viewport of viewports) {
     test(`${viewport.name}: routes are visible without horizontal overflow`, async ({ page }, testInfo) => {
       await page.setViewportSize(viewport);
