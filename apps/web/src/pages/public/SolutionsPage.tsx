@@ -17,7 +17,8 @@ export function SolutionsPage() {
 }
 
 export function AudiencePage({ fixedAudience }: { fixedAudience?: "empresas" } = {}) {
-  const audience = getAudience(fixedAudience ?? useParams().audience ?? "");
+  const params = useParams();
+  const audience = getAudience(fixedAudience ?? params.audience ?? "");
   if (!audience) return <NotFoundPage />;
   return <><Seo custom={{ path: `/soluciones/${audience.slug}`, title: `${audience.title} | ASODEF`, description: audience.summary }} breadcrumbs={[{ name: "Inicio", path: "/" }, { name: "Soluciones", path: "/soluciones" }, { name: audience.title, path: `/soluciones/${audience.slug}` }]} faq={audience.faq}/>
     <PublicHero eyebrow="Solución por perfil" title={audience.title} description={audience.summary} actions={[{ label: "Iniciar recorrido", to: `/comenzar?perfil=${audience.slug === "empresas" ? "empresa" : audience.slug === "aliados" ? "aliado" : audience.slug}`, primary: true }, { label: "Ver beneficios", to: `/beneficios?audiencia=${audience.slug}` }]} />

@@ -22,7 +22,7 @@ export function GuidedStartPage() {
   const [search] = useSearchParams(); const location = useLocation();
   const initialProfile = ({ personas:"person", afiliados:"affiliate", empresa:"company", aliado:"ally" } as Record<string,Profile>)[search.get("perfil")??""];
   const [state,setState]=useState<FunnelState>(()=>({ ...loadState(), ...(initialProfile?{profile:initialProfile}:{}), ...(search.get("beneficio")?{need:`Beneficio: ${search.get("beneficio")}`}:{}) }));
-  const [step,setStep]=useState(initialProfile?1:0); const [error,setError]=useState(""); const [idempotencyKey,setIdempotencyKey]=useState(createKey); const headingRef=useRef<HTMLHeadingElement>(null);
+  const [step,setStep]=useState(initialProfile?1:0); const [error,setError]=useState(""); const [idempotencyKey]=useState(createKey); const headingRef=useRef<HTMLHeadingElement>(null);
   const mutation=useMutation({mutationFn:submitGuidedLead});
   const isOrg=state.profile==="company"||state.profile==="ally"; const directRoute=state.profile && state.profile in direct ? direct[state.profile as DirectProfile] : null;
   const total=directRoute?2:6; const progress=Math.min(100,((step+1)/total)*100);

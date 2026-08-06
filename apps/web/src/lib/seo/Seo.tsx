@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { PUBLIC_ROUTES } from "../public-content/public-routes";
 
 const BASE_URL = "https://asodef.com.co";
@@ -13,7 +13,7 @@ function setMeta(selector: string, attribute: "name" | "property", key: string, 
 }
 
 export function Seo({ routeKey, custom, breadcrumbs, faq, service }: { routeKey?: keyof typeof PUBLIC_ROUTES; custom?: SeoDefinition; breadcrumbs?: Breadcrumb[]; faq?: readonly { question: string; answer: string }[]; service?: { name: string; description: string } }) {
-  const route = custom ?? (routeKey ? { path: PUBLIC_ROUTES[routeKey].path, ...PUBLIC_ROUTES[routeKey].seo } : null);
+  const route = useMemo(() => custom ?? (routeKey ? { path: PUBLIC_ROUTES[routeKey].path, ...PUBLIC_ROUTES[routeKey].seo } : null), [custom, routeKey]);
   useEffect(() => {
     if (!route) return;
     const canonical = `${BASE_URL}${route.path === "/" ? "" : route.path}`;
@@ -37,6 +37,6 @@ export function Seo({ routeKey, custom, breadcrumbs, faq, service }: { routeKey?
     document.getElementById(id)?.remove();
     if (graph.length) { const script = document.createElement("script"); script.id = id; script.type = "application/ld+json"; script.text = JSON.stringify({ "@context": "https://schema.org", "@graph": graph }); document.head.append(script); }
     return () => document.getElementById(id)?.remove();
-  }, [route?.path, route?.title, route?.description, breadcrumbs, faq, service]);
+  }, [route, breadcrumbs, faq, service]);
   return null;
 }
