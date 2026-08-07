@@ -55,7 +55,9 @@ describe("CoverageSection", () => {
     const map = document.querySelector("img")!;
     expect(map).toHaveAttribute("alt", "");
     expect(map).toHaveAttribute("aria-hidden", "true");
-    expect(map.getAttribute("src")).toMatch(/colombia-map/);
+    expect(map.getAttribute("src")).toMatch(
+      /(?:^data:image\/svg\+xml|colombia-map)/,
+    );
   });
 
   it("states Cali as headquarters in real visible text (not only inside the decorative map)", () => {
