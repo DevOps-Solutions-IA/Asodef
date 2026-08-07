@@ -133,7 +133,32 @@ run_quiet() {
   log_file="$(mktemp -t asodef-ci-db-check.XXXXXX)"
   work_files+=("$log_file")
   if ! "$@" >"$log_file" 2>&1; then
-    fail "$label (command output suppressed to protect connection details)"
+    printf 'Sanitized command diagnostics (last 120 lines):\n' >&2
+    node - "$log_file" <<'NODE' >&2
+const fs = require('node:fs');
+
+const logPath = process.argv[2];
+let output = fs.readFileSync(logPath, 'utf8');
+const sensitiveVariables = [
+  'DATABASE_URL',
+  'CI_POSTGRES_PASSWORD',
+  'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
+  'ENCRYPTION_KEY',
+  'PASSWORD_RESET_TOKEN_SECRET',
+  'CONTRACT_DOWNLOAD_TOKEN_SECRET',
+];
+
+for (const variable of sensitiveVariables) {
+  const value = process.env[variable];
+  if (value && value.length >= 4) output = output.split(value).join('[REDACTED]');
+}
+
+output = output.replace(/postgres(?:ql)?:\/\/[^\s]+/giu, '[REDACTED_DATABASE_URL]');
+const lines = output.trimEnd().split(/\r?\n/u).slice(-120);
+process.stderr.write(`${lines.join('\n')}\n`);
+NODE
+    fail "$label"
   fi
 }
 
