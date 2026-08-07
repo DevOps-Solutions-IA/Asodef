@@ -71,6 +71,7 @@ function renderLoginPage(initialEntries: MemoryEntry[] = ["/iniciar-sesion"]) {
     { path: "/iniciar-sesion", element: <LoginPage /> },
     { path: "/mi-cuenta", element: <div>Contenido de mi cuenta</div> },
     { path: "/admin", element: <div>Contenido de administración</div> },
+    { path: "/admin/reportes", element: <div>Reportes administrativos</div> },
     { path: "/empresa", element: <div>Contenido de empresa</div> },
     { path: "/mi-cuenta/pagos", element: <div>Contenido de pagos</div> },
   ];
@@ -87,7 +88,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     renderLoginPage();
 
-    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceso administrativo" })).toBeInTheDocument();
     expect(screen.getByLabelText("Correo electrónico", { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText("Contraseña", { exact: false, selector: "input" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Iniciar sesión" })).toBeInTheDocument();
@@ -98,7 +99,7 @@ describe("LoginPage", () => {
     const fetchMock = mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
     fetchMock.mockClear();
 
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
@@ -112,7 +113,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
@@ -123,7 +124,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "not-an-email");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "whatever");
@@ -136,7 +137,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "wrong-password");
@@ -153,7 +154,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "unknown@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "whatever");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
@@ -166,7 +167,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "rate-limited" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "whatever");
@@ -196,7 +197,7 @@ describe("LoginPage", () => {
 
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "whatever");
@@ -217,7 +218,7 @@ describe("LoginPage", () => {
     mockLoginFlow({ loginOutcome: "success", roles: ["ADMIN"] });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "admin@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
@@ -227,36 +228,36 @@ describe("LoginPage", () => {
   });
 
   it("redirects to a safe preserved return location after login instead of the default landing page", async () => {
-    mockLoginFlow({ loginOutcome: "success", roles: ["CUSTOMER"] });
+    mockLoginFlow({ loginOutcome: "success", roles: ["ADMIN"] });
     const user = userEvent.setup();
-    renderLoginPage([{ pathname: "/iniciar-sesion", state: { from: "/mi-cuenta/pagos" } }]);
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    renderLoginPage([{ pathname: "/iniciar-sesion", state: { from: "/admin/reportes" } }]);
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
-    expect(await screen.findByText("Contenido de pagos")).toBeInTheDocument();
+    expect(await screen.findByText("Reportes administrativos")).toBeInTheDocument();
   });
 
   it("rejects an unsafe external redirect target and falls back to the role-based landing page", async () => {
-    mockLoginFlow({ loginOutcome: "success", roles: ["CUSTOMER"] });
+    mockLoginFlow({ loginOutcome: "success", roles: ["ADMIN"] });
     const user = userEvent.setup();
     renderLoginPage([{ pathname: "/iniciar-sesion", state: { from: "https://evil.example.com" } }]);
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
-    expect(await screen.findByText("Contenido de mi cuenta")).toBeInTheDocument();
+    expect(await screen.findByText("Contenido de administración")).toBeInTheDocument();
   });
 
   it("supports full keyboard-only completion of the form", async () => {
-    mockLoginFlow({ loginOutcome: "success", roles: ["CUSTOMER"] });
+    mockLoginFlow({ loginOutcome: "success", roles: ["ADMIN"] });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.tab();
     expect(screen.getByLabelText("Correo electrónico", { exact: false })).toHaveFocus();
@@ -275,14 +276,28 @@ describe("LoginPage", () => {
     expect(screen.getByRole("button", { name: "Iniciar sesión" })).toHaveFocus();
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByText("Contenido de mi cuenta")).toBeInTheDocument();
+    expect(await screen.findByText("Contenido de administración")).toBeInTheDocument();
+  });
+
+  it("rejects a legacy external role from the administrative entry point", async () => {
+    mockLoginFlow({ loginOutcome: "success", roles: ["AFFILIATE"] });
+    const user = userEvent.setup();
+    renderLoginPage();
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
+
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "affiliate@example.com");
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "legacy-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/reservado para el equipo administrativo/i);
+    expect(screen.queryByText("Contenido de mi cuenta")).not.toBeInTheDocument();
   });
 
   it("announces the error message via an accessible alert region", async () => {
     mockLoginFlow({ loginOutcome: "invalid" });
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "wrong");
@@ -302,7 +317,7 @@ describe("LoginPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     renderLoginPage();
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
 
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "user@example.com");
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "whatever");

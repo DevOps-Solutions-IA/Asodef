@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLandingPath } from "./role-routing";
+import { hasAdministrativeRole, resolveLandingPath } from "./role-routing";
 
 describe("resolveLandingPath", () => {
   it("sends SUPER_ADMIN to /admin", () => {
@@ -10,27 +10,26 @@ describe("resolveLandingPath", () => {
     expect(resolveLandingPath(["ADMIN"])).toBe("/admin");
   });
 
-  it("sends COMPANY_PARTNER to /empresa", () => {
-    expect(resolveLandingPath(["COMPANY_PARTNER"])).toBe("/empresa");
+  it.each(["FINANCE", "COMMERCIAL", "CUSTOMER_SERVICE", "AUDITOR"])("sends internal role %s to /admin", (role) => {
+    expect(resolveLandingPath([role])).toBe("/admin");
   });
 
-  it("sends CUSTOMER to /mi-cuenta", () => {
-    expect(resolveLandingPath(["CUSTOMER"])).toBe("/mi-cuenta");
+  it("does not route legacy external roles into self-service portals", () => {
+    expect(resolveLandingPath(["COMPANY_PARTNER"])).toBe("/");
+    expect(resolveLandingPath(["CUSTOMER"])).toBe("/");
+    expect(resolveLandingPath(["AFFILIATE"])).toBe("/");
+    expect(hasAdministrativeRole(["AFFILIATE"])).toBe(false);
   });
 
-  it("sends AFFILIATE to /mi-cuenta", () => {
-    expect(resolveLandingPath(["AFFILIATE"])).toBe("/mi-cuenta");
-  });
-
-  it("falls back to /mi-cuenta for a user with no recognized roles", () => {
-    expect(resolveLandingPath([])).toBe("/mi-cuenta");
-    expect(resolveLandingPath(["SOME_UNKNOWN_ROLE"])).toBe("/mi-cuenta");
-  });
-
-  it("uses one deterministic priority when a user holds multiple roles - highest privilege wins", () => {
+  it("uses one deterministic internal priority when a user holds multiple roles", () => {
     expect(resolveLandingPath(["CUSTOMER", "ADMIN"])).toBe("/admin");
     expect(resolveLandingPath(["COMPANY_PARTNER", "SUPER_ADMIN"])).toBe("/admin");
-    expect(resolveLandingPath(["AFFILIATE", "COMPANY_PARTNER"])).toBe("/empresa");
+    expect(resolveLandingPath(["AFFILIATE", "COMPANY_PARTNER"])).toBe("/");
+  });
+
+  it("falls back to the public home for unknown or empty roles", () => {
+    expect(resolveLandingPath([])).toBe("/");
+    expect(resolveLandingPath(["SOME_UNKNOWN_ROLE"])).toBe("/");
   });
 
   it("is stable and repeatable for the same input (deterministic)", () => {

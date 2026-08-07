@@ -17,7 +17,7 @@ export function PublicLayout() {
   const mainRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const { openPreferences } = useCookieConsent();
-  useFocusMainOnRouteChange(mainRef); useScrollToHash();
+  useFocusMainOnRouteChange(mainRef, { preventScroll: true }); useScrollToHash();
   return <div className="flex min-h-screen flex-col overflow-x-clip bg-bg-base"><SkipToContent targetId="main-content"/>
     <PublicHeader />
     <main id="main-content" ref={mainRef} tabIndex={-1} className="w-full flex-1 focus:outline-none"><RouteTransition routeKey={location.pathname}><Outlet/></RouteTransition></main>

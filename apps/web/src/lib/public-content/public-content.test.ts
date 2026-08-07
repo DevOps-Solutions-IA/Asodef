@@ -24,7 +24,21 @@ describe("public content registries", () => {
 
   it("defines all four audience journeys and safe legacy redirects", () => {
     expect(AUDIENCES.map(audience => audience.slug)).toEqual(["personas", "afiliados", "empresas", "aliados"]);
+    expect(AUDIENCES.find(audience => audience.slug === "afiliados")?.heroActions[0]).toEqual({ label: "Consultar mi afiliación", to: "/mi-cuenta/acceso", primary: true });
+    expect(AUDIENCES.find(audience => audience.slug === "empresas")?.heroActions).toEqual([
+      { label: "Acceso de empresas", to: "/empresa/acceso", primary: true },
+      { label: "Solicitar orientación", to: "/comenzar?perfil=empresa" },
+    ]);
     expect(LEGACY_REDIRECTS.every(redirect => String(redirect.from) !== String(redirect.to))).toBe(true);
+  });
+
+  it("maps the exequial page to the exact published service channel without inventing eligibility", () => {
+    const exequial = getBenefit("plan-exequial-familiar");
+    expect(exequial?.verifiedNotice?.channelLabel).toBe("Marcar #523");
+    expect(exequial?.verifiedNotice?.channelHref).toBe("tel:%23523");
+    expect(exequial?.verifiedNotice?.facts.join(" ")).toMatch(/hasta \$3\.000\.000 sin costo adicional, sujeto/i);
+    expect(exequial?.eligibility).toMatch(/no se presenta como universal/i);
+    expect(exequial?.audience).toEqual(["afiliados"]);
   });
 
   it("keeps non-legal registries free from prohibited filler", () => {

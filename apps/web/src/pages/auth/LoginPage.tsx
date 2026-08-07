@@ -8,7 +8,7 @@ import { Alert, Button, FormField, Input, PasswordInput } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
 import { login } from "../../lib/auth/auth-api";
 import { useAuth } from "../../lib/auth/auth-context";
-import { resolveLandingPath } from "../../lib/auth/role-routing";
+import { hasAdministrativeRole, resolveLandingPath } from "../../lib/auth/role-routing";
 import { isSafeInternalPath } from "../../lib/auth/safe-redirect";
 import { getLoginErrorMessage } from "../../lib/auth/auth-error-messages";
 
@@ -31,7 +31,7 @@ interface LocationState {
 }
 
 export function LoginPage() {
-  const { notifyLoggedIn } = useAuth();
+  const { notifyLoggedIn, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const errorRef = useRef<HTMLDivElement>(null);
@@ -67,11 +67,18 @@ export function LoginPage() {
     onSuccess: async () => {
       const currentUser = await notifyLoggedIn();
       const roles = currentUser?.roles ?? [];
+      if (!hasAdministrativeRole(roles)) {
+        await logout();
+        setFormError("Este acceso está reservado para el equipo administrativo de ASODEF.");
+        return;
+      }
       const fromState = (location.state as LocationState | null)?.from;
       // Only ever navigate to a validated internal path - never trust
       // location.state blindly, even though it is not URL-exposed
       // (US-010: "reject unsafe external redirect targets").
-      const target = isSafeInternalPath(fromState) ? fromState : resolveLandingPath(roles);
+      const target = isSafeInternalPath(fromState) && fromState.startsWith("/admin")
+        ? fromState
+        : resolveLandingPath(roles);
       navigate(target, { replace: true });
     },
     onError: (error) => {
@@ -101,8 +108,8 @@ export function LoginPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-brand-dark">Iniciar sesión</h1>
-      <p className="mt-1 text-sm text-text-muted">Ingresa tus credenciales para continuar.</p>
+      <h1 className="font-display text-2xl font-semibold text-brand-dark">Acceso administrativo</h1>
+      <p className="mt-1 text-sm text-text-muted">Ingresa con las credenciales asignadas para gestionar la operación interna de ASODEF.</p>
 
       {formError && (
         <div ref={errorRef} tabIndex={-1} className="mt-4 focus:outline-none">

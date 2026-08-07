@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { SlidersHorizontal } from "lucide-react";
 import { CompactPublicHero } from "../../components/public/mobile";
 import { PageCta } from "../../components/public/PublicPage";
+import { PublicActionCard } from "../../components/public/PublicActionCard";
 import { BENEFITS, type BenefitAudience, type BenefitNeed } from "../../lib/public-content/benefits";
 import { Seo } from "../../lib/seo/Seo";
 
@@ -79,18 +80,20 @@ export function BenefitsPage() {
         </p>
 
         {filtered.length ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((item, index) => <article key={item.slug} className="group flex flex-col rounded-2xl border border-brand-dark/10 bg-white p-5 shadow-e1 transition hover:-translate-y-1 hover:shadow-e3 motion-reduce:transform-none motion-reduce:transition-none sm:p-6 md:min-h-[19rem]">
-              <span className="text-xs font-bold tracking-[.18em] text-brand-orange">{String(index + 1).padStart(2, "0")}</span>
-              <h2 className="mt-4 font-display text-xl font-semibold tracking-tight sm:text-2xl">{item.title}</h2>
-              <p className="mt-3 flex-1 text-sm leading-6 text-text-muted sm:text-base sm:leading-7">{item.summary}</p>
-              <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-brand-dark">{item.needs.join(" · ")}</p>
-              <Link className="mt-5 inline-flex min-h-12 items-center gap-2 font-semibold text-brand-dark" to={`/beneficios/${item.slug}`}>
-                Ver condiciones y proceso
-                <ArrowRight aria-hidden className="h-4 w-4 transition group-hover:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
-              </Link>
-            </article>)}
-          </div>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((item, index) => <li key={item.slug} className="h-full">
+              <PublicActionCard
+                to={`/beneficios/${item.slug}`}
+                title={item.title}
+                description={item.summary}
+                eyebrow={String(index + 1).padStart(2, "0")}
+                headingLevel={2}
+                actionLabel="Ver condiciones y proceso"
+                footer={<span className="text-xs font-semibold uppercase tracking-wider text-brand-dark">{item.needs.join(" · ")}</span>}
+                className="md:min-h-[19rem]"
+              />
+            </li>)}
+          </ul>
         ) : (
           <div className="mt-4 rounded-2xl border border-dashed border-brand-dark/20 p-6 text-center sm:p-8">
             <h2 className="font-display text-xl font-semibold sm:text-2xl">No hay resultados con estos filtros</h2>

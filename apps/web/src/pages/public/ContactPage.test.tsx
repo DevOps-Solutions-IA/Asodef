@@ -27,10 +27,15 @@ describe("ContactPage", () => {
     expect(screen.getByRole("link", { name: /Consultar un pago/ })).toHaveAttribute("href", "/pagos");
     expect(screen.getByRole("link", { name: /Radicar una PQR/ })).toHaveAttribute("href", "/pqr?accion=radicar");
     expect(screen.getByRole("link", { name: /Ejercer un derecho/ })).toHaveAttribute("href", "/solicitudes-de-datos?accion=crear");
-    expect(screen.getByRole("link", { name: /Gestionar una empresa/ })).toHaveAttribute("href", "/comenzar?perfil=empresa");
+    expect(screen.getByRole("link", { name: /Consultar mi afiliación/ })).toHaveAttribute("href", "/mi-cuenta/acceso");
+    expect(screen.getByRole("link", { name: /Acceso de empresas/ })).toHaveAttribute("href", "/empresa/acceso");
+    expect(screen.getByRole("link", { name: "Acceso administrativo" })).toHaveAttribute("href", "/iniciar-sesion");
     expect(screen.queryByRole("button", { name: "Enviar mensaje" })).not.toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Rutas de atención" })).toHaveClass("grid-cols-2");
-    expect(screen.getByText("Registra el caso y recibe un número para consultar su estado.")).toHaveClass("hidden");
+    const routeList = screen.getByRole("list", { name: "Rutas de atención" });
+    expect(routeList).toHaveClass("grid-cols-2");
+    expect(routeList.querySelectorAll(":scope > li")).toHaveLength(8);
+    expect(routeList).not.toContainElement(screen.getByRole("link", { name: "Acceso administrativo" }));
+    expect(screen.getByText("Registra el caso y recibe un número para consultar su estado.")).not.toHaveClass("hidden");
   });
 
   it("reveals the real general contact form only for another matter", async () => {

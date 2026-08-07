@@ -5,7 +5,6 @@ import {
   CreditCard,
   FileCheck2,
   HeartHandshake,
-  LogIn,
   MessageSquareText,
   ShieldCheck,
   UserRound,
@@ -27,7 +26,7 @@ const quickActions = [
   { label: "Radicar PQR", to: "/pqr?accion=radicar", icon: MessageSquareText, primary: false },
   { label: "Consultar caso", to: "/pqr?accion=consultar", icon: MessageSquareText, primary: false },
   { label: "Solicitudes de datos", to: "/solicitudes-de-datos", icon: FileCheck2, primary: false },
-  { label: "Ingresar", to: "/iniciar-sesion", icon: LogIn, primary: false },
+  { label: "Mi cuenta", to: "/mi-cuenta/acceso", icon: UserRound, primary: false },
 ] as const;
 
 export function FlagshipHero() {

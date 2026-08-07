@@ -10,16 +10,17 @@ import { useLocation } from "react-router-dom";
  * it. The target must be focusable (tabIndex={-1} on <main>) since it
  * isn't naturally an interactive element.
  */
-export function useFocusMainOnRouteChange(mainRef: RefObject<HTMLElement>): void {
+export function useFocusMainOnRouteChange(mainRef: RefObject<HTMLElement>, options: { preventScroll?: boolean } = {}): void {
   const location = useLocation();
   const isFirstRender = useRef(true);
+  const preventScroll = options.preventScroll ?? false;
 
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    mainRef.current?.focus();
+    mainRef.current?.focus({ preventScroll });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on pathname, mainRef is stable
-  }, [location.pathname]);
+  }, [location.pathname, preventScroll]);
 }

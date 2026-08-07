@@ -9,22 +9,24 @@
  * Order matters: a user holding multiple roles resolves to the first
  * matching entry, highest-privilege first.
  */
-const ROLE_LANDING_PRIORITY: ReadonlyArray<{ roles: readonly string[]; path: string }> = [
-  { roles: ["SUPER_ADMIN", "ADMIN"], path: "/admin" },
-  { roles: ["COMPANY_PARTNER"], path: "/empresa" },
-  { roles: ["CUSTOMER", "AFFILIATE"], path: "/mi-cuenta" },
-];
+export const ADMINISTRATIVE_ROLES = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "FINANCE",
+  "COMMERCIAL",
+  "CUSTOMER_SERVICE",
+  "AUDITOR",
+] as const;
 
 /** Safe fallback for a user with no roles at all (or a role this table
  * doesn't recognize yet) - still an existing, real, authenticated area
  * rather than an error state. */
-const DEFAULT_LANDING_PATH = "/mi-cuenta";
+const DEFAULT_LANDING_PATH = "/";
+
+export function hasAdministrativeRole(roles: readonly string[]): boolean {
+  return ADMINISTRATIVE_ROLES.some((role) => roles.includes(role));
+}
 
 export function resolveLandingPath(roles: readonly string[]): string {
-  for (const entry of ROLE_LANDING_PRIORITY) {
-    if (entry.roles.some((role) => roles.includes(role))) {
-      return entry.path;
-    }
-  }
-  return DEFAULT_LANDING_PATH;
+  return hasAdministrativeRole(roles) ? "/admin" : DEFAULT_LANDING_PATH;
 }

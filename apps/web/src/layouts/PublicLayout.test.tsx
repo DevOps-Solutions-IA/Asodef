@@ -20,10 +20,16 @@ describe("premium public navigation", () => {
     const nav=screen.getByRole("navigation",{name:"Principal"});
     for(const label of ["Inicio","Quiénes somos","Beneficios","Soluciones","Empresas"]) expect(within(nav).getByRole("link",{name:label})).toBeInTheDocument();
     const pagar=screen.getByRole("link",{name:"Pagar"});
-    const ingresar=screen.getByRole("link",{name:"Ingresar"});
     expect(pagar).toHaveAttribute("href","/pagos");
-    expect(pagar.compareDocumentPosition(ingresar)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("link",{name:"Recibir orientación"})).toHaveAttribute("href","/comenzar");
+  });
+
+  it("separates affiliate, company and administrative access", async()=>{
+    const user=userEvent.setup();renderLayout();await user.click(screen.getByRole("button",{name:"Accesos"}));
+    const panel=document.getElementById("access-menu");expect(panel).not.toBeNull();
+    expect(within(panel!).getByRole("link",{name:/Mi cuenta/})).toHaveAttribute("href","/mi-cuenta/acceso");
+    expect(within(panel!).getByRole("link",{name:/Acceso de empresas/})).toHaveAttribute("href","/empresa/acceso");
+    expect(within(panel!).getByRole("link",{name:/Acceso administrativo/})).toHaveAttribute("href","/iniciar-sesion");
   });
 
   it("opens a focused resources panel containing only PQR and data requests", async()=>{
@@ -42,7 +48,8 @@ describe("premium public navigation", () => {
     const dialog=await screen.findByRole("dialog");
     for(const group of ["Conocer ASODEF","Recursos"])expect(within(dialog).getByText(group)).toBeInTheDocument();
     expect(within(dialog).getAllByRole("button",{name:"Cerrar"})).toHaveLength(1);
-    expect(within(dialog).getByRole("link",{name:"Ingresar"})).toHaveAttribute("href","/iniciar-sesion");
+    expect(within(dialog).getByRole("link",{name:"Acceso administrativo"})).toHaveAttribute("href","/iniciar-sesion");
+    expect(within(dialog).getByRole("link",{name:"Mi cuenta"})).toHaveAttribute("href","/mi-cuenta/acceso");
     await user.keyboard("{Escape}");await waitFor(()=>expect(screen.queryByRole("dialog")).not.toBeInTheDocument());expect(trigger).toHaveFocus();
   });
 
@@ -50,13 +57,13 @@ describe("premium public navigation", () => {
     const user=userEvent.setup();renderLayout();await user.click(screen.getByRole("button",{name:"Abrir menú de navegación"}));
     const dialog=await screen.findByRole("dialog");
     const mobileNav=within(dialog).getByRole("navigation",{name:"Principal móvil"});
-    expect(within(mobileNav).getAllByRole("link")).toHaveLength(6);
+    expect(within(mobileNav).getAllByRole("link")).toHaveLength(9);
     expect(within(mobileNav).getByRole("link",{name:"PQR"})).toHaveClass("min-h-14");
     expect(within(mobileNav).getByRole("link",{name:"Solicitudes de datos"})).toBeInTheDocument();
     expect(within(mobileNav).queryByRole("link",{name:"Contacto"})).not.toBeInTheDocument();
     const actions=within(dialog).getByLabelText("Acciones principales");
     const links=within(actions).getAllByRole("link");
-    expect(links.map(link=>link.textContent?.trim())).toEqual(["Pagar","Ingresar","Recibir orientación"]);
+    expect(links.map(link=>link.textContent?.trim())).toEqual(["Pagar","Recibir orientación"]);
     expect(links.every(link=>link.className.includes("w-full"))).toBe(true);
   });
 

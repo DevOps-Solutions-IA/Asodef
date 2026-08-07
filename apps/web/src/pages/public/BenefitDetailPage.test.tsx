@@ -36,4 +36,17 @@ describe("BenefitDetailPage", () => {
     expect(terms).toHaveClass("min-h-12");
     expect(screen.queryByRole("link", { name: "Documento legal relacionado" })).not.toBeInTheDocument();
   });
+
+  it("publishes the sourced Plan Preferencial facts and #523 without inventing eligibility", () => {
+    render(<MemoryRouter initialEntries={["/beneficios/plan-exequial-familiar"]}><Routes><Route path="/beneficios/:slug" element={<BenefitDetailPage/>}/></Routes></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "Plan preferencial para mayor acompañamiento familiar" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Sala VIP: comodidad y privacidad/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/Dos buses: transporte para acompañantes/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/hasta \$3\.000\.000 sin costo adicional, sujeto/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("ATENCIÓN RÁPIDA")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Marca #523 gratis desde tu celular/i })).toHaveAttribute("href", "tel:%23523");
+    expect(screen.getAllByRole("link", { name: "Consultar mi plan" })[0]).toHaveAttribute("href", "/mi-cuenta/acceso");
+    expect(screen.getByRole("link", { name: "Solicitar orientación" })).toHaveAttribute("href", "/comenzar?beneficio=plan-exequial-familiar");
+    expect(document.body).not.toHaveTextContent(/incluido automáticamente|cobertura garantizada/i);
+  });
 });

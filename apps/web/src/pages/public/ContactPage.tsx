@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowRight,
   Building2,
   CircleHelp,
   CreditCard,
   Database,
   Gift,
-  LogIn,
   MessageSquareText,
   Route,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Seo } from "../../lib/seo/Seo";
 import { GeneralContactForm } from "../../components/transactional-public/GeneralContactForm";
+import { PublicActionCard } from "../../components/public/PublicActionCard";
 
 interface ContactRoute {
   id: string;
@@ -26,34 +26,13 @@ interface ContactRoute {
 const CONTACT_ROUTES: readonly ContactRoute[] = [
   { id: "benefits", label: "Conocer beneficios", description: "Compara categorías, requisitos, proceso y canal de acceso.", to: "/beneficios", icon: Gift },
   { id: "orientation", label: "Solicitar orientación", description: "Responde unas preguntas para llegar al canal adecuado.", to: "/comenzar", icon: Route },
+  { id: "affiliate", label: "Consultar mi afiliación", description: "Inicia con número de titular o documento y verifica tu identidad.", to: "/mi-cuenta/acceso", icon: UserRound },
   { id: "payment", label: "Consultar un pago", description: "Busca una obligación, revisa el estado o accede al comprobante.", to: "/pagos", icon: CreditCard },
   { id: "pqr", label: "Radicar una PQR", description: "Registra el caso y recibe un número para consultar su estado.", to: "/pqr?accion=radicar", icon: MessageSquareText },
   { id: "data", label: "Ejercer un derecho sobre mis datos", description: "Solicita acceso, corrección, actualización, eliminación u otra gestión permitida.", to: "/solicitudes-de-datos?accion=crear", icon: Database },
-  { id: "company", label: "Gestionar una empresa", description: "Describe la necesidad de tu organización para recibir orientación.", to: "/comenzar?perfil=empresa", icon: Building2 },
-  { id: "portal", label: "Ingresar al portal", description: "Accede con tu cuenta a los servicios disponibles para tu perfil.", to: "/iniciar-sesion", icon: LogIn },
+  { id: "company", label: "Acceso de empresas", description: "Inicia con el NIT registrado y completa la verificación requerida.", to: "/empresa/acceso", icon: Building2 },
   { id: "other", label: "Otro asunto", description: "Registra un mensaje cuando ninguna ruta anterior corresponde.", icon: CircleHelp },
 ];
-
-function RouteCard({ route, selected, onSelect }: { route: ContactRoute; selected: boolean; onSelect: () => void }) {
-  const Icon = route.icon;
-  const className = `group flex min-h-24 flex-col items-start gap-2 rounded-xl border p-3 text-left transition-[border-color,background-color,transform] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 active:scale-[.99] sm:flex-row sm:gap-4 sm:rounded-2xl sm:p-4 ${
-    selected ? "border-brand-dark bg-brand-dark text-white" : "border-brand-dark/12 bg-white hover:border-brand-dark/35 hover:bg-bg-soft"
-  }`;
-  const content = (
-    <>
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 sm:rounded-xl ${selected ? "bg-white/12" : "bg-brand-dark-50 text-brand-dark"}`}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold leading-5 sm:text-base">{route.label}</span>
-        <span className={`mt-1 hidden text-sm leading-5 sm:block ${selected ? "text-white/70" : "text-text-muted"}`}>{route.description}</span>
-      </span>
-      {route.to && <ArrowRight className="mt-1 hidden h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none sm:block" aria-hidden="true" />}
-    </>
-  );
-
-  return <li>{route.to ? <Link to={route.to} className={className}>{content}</Link> : <button type="button" aria-pressed={selected} aria-expanded={selected} aria-controls="otro-asunto" onClick={onSelect} className={className}>{content}</button>}</li>;
-}
 
 export function ContactPage() {
   const [showGeneralForm, setShowGeneralForm] = useState(false);
@@ -74,9 +53,19 @@ export function ContactPage() {
 
           <ul className="mt-5 grid grid-cols-2 gap-2 sm:mt-8 sm:gap-3 lg:grid-cols-4" aria-label="Rutas de atención">
             {CONTACT_ROUTES.map((route) => (
-              <RouteCard key={route.id} route={route} selected={route.id === "other" && showGeneralForm} onSelect={() => setShowGeneralForm(true)} />
+              <li key={route.id} className="h-full">
+                {route.to ? (
+                  <PublicActionCard to={route.to} title={route.label} description={route.description} icon={route.icon} density="compact" />
+                ) : (
+                  <PublicActionCard onClick={() => setShowGeneralForm(true)} title={route.label} description={route.description} icon={route.icon} density="compact" selected={showGeneralForm} ariaPressed={showGeneralForm} ariaExpanded={showGeneralForm} ariaControls="otro-asunto" />
+                )}
+              </li>
             ))}
           </ul>
+
+          <p className="mt-5 text-sm text-text-muted">
+            ¿Eres parte del equipo autorizado? <Link className="font-semibold text-brand-dark underline decoration-brand-orange/50 underline-offset-4" to="/iniciar-sesion">Acceso administrativo</Link>
+          </p>
 
           {showGeneralForm && (
             <div ref={generalFormRef} tabIndex={-1} className="mt-6 focus:outline-none sm:mt-10" id="otro-asunto">

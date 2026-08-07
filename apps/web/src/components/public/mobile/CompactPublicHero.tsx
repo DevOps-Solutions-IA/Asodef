@@ -2,11 +2,15 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
-export interface CompactPublicHeroAction {
+interface CompactPublicHeroActionBase {
   label: string;
-  to: string;
   primary?: boolean;
 }
+
+export type CompactPublicHeroAction = CompactPublicHeroActionBase & (
+  | { to: string }
+  | { href: string }
+);
 
 export interface CompactPublicHeroProps {
   eyebrow: string;
@@ -32,10 +36,17 @@ export function CompactPublicHero({ eyebrow, title, description, actions, visual
           <p className="mt-5 max-w-2xl text-base leading-7 text-text-muted sm:text-lg sm:leading-8">{description}</p>
           <div className="mt-7 grid gap-2 min-[390px]:grid-cols-2 sm:flex sm:flex-wrap">
             {actions.slice(0, 2).map((action) => (
-              <Link key={`${action.to}-${action.label}`} to={action.to} className={action.primary ? "public-button-primary" : "public-button-secondary"}>
-                {action.label}
-                <ArrowRight aria-hidden="true" className="h-4 w-4" />
-              </Link>
+              "href" in action ? (
+                <a key={`${action.href}-${action.label}`} href={action.href} className={action.primary ? "public-button-primary" : "public-button-secondary"}>
+                  {action.label}
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </a>
+              ) : (
+                <Link key={`${action.to}-${action.label}`} to={action.to} className={action.primary ? "public-button-primary" : "public-button-secondary"}>
+                  {action.label}
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              )
             ))}
           </div>
         </div>

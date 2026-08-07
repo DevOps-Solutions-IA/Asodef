@@ -39,7 +39,7 @@ describe("BenefitsPage", () => {
     render(<MemoryRouter><BenefitsPage /></MemoryRouter>);
     const count = screen.getByText("8 categorías encontradas");
     expect(count).toHaveClass("inline-flex", "min-h-8");
-    const firstCard = screen.getByRole("heading", { name: "Plan exequial familiar" }).closest("article");
-    expect(firstCard).toHaveClass("p-5", "md:min-h-[19rem]");
+    const firstCard = screen.getByRole("heading", { name: "Plan exequial familiar" }).closest("a");
+    expect(firstCard).toHaveClass("p-5", "md:min-h-[19rem]", "h-full");
   });
 });

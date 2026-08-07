@@ -5,6 +5,7 @@ import { FaqList, OutcomeList, PageCta } from "../../components/public/PublicPag
 import { BENEFITS, getBenefit } from "../../lib/public-content/benefits";
 import { Seo } from "../../lib/seo/Seo";
 import { NotFoundPage } from "../errors/NotFoundPage";
+import { PublicActionCard } from "../../components/public/PublicActionCard";
 
 const legalLabels: Record<string, string> = {
   "terminos-y-condiciones": "Términos y condiciones",
@@ -28,11 +29,28 @@ export function BenefitDetailPage() {
       eyebrow="Beneficio"
       title={benefit.title}
       description={benefit.summary}
-      actions={[{ label: "Encontrar mi ruta", to: `/comenzar?beneficio=${benefit.slug}`, primary: true }, { label: "Volver al portafolio", to: "/beneficios" }]}
+      actions={benefit.verifiedNotice
+        ? [{ label: "Consultar mi plan", to: "/mi-cuenta/acceso", primary: true }, { label: "Solicitar orientación", to: "/comenzar?beneficio=plan-exequial-familiar" }]
+        : [{ label: "Encontrar mi ruta", to: `/comenzar?beneficio=${benefit.slug}`, primary: true }, { label: "Volver al portafolio", to: "/beneficios" }]}
     />
 
     <section className="py-10 sm:py-16 lg:py-20" aria-labelledby="benefit-need-heading">
       <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-12">
+        {benefit.verifiedNotice && (
+          <aside className="mb-8 rounded-2xl border border-brand-orange/25 bg-brand-orange/5 p-5 sm:mb-12 sm:p-7" aria-labelledby="verified-benefit-heading">
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-brand-dark">Opción informada por ASODEF</p>
+            <h2 id="verified-benefit-heading" className="mt-2 font-display text-2xl font-semibold tracking-[-.03em] sm:text-3xl">{benefit.verifiedNotice.heading}</h2>
+            <p className="mt-3 text-sm leading-6 text-text-muted sm:text-base">{benefit.verifiedNotice.statement}</p>
+            <ul className="mt-5 grid gap-2 sm:grid-cols-2" aria-label="Elementos informados para el plan">
+              {benefit.verifiedNotice.facts.map((fact) => <li key={fact} className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-text-main shadow-e1">{fact}</li>)}
+            </ul>
+            <div className="mt-5 rounded-2xl bg-brand-deep p-5 text-white shadow-e2">
+              <p className="text-xs font-bold uppercase tracking-[.18em] text-brand-orange-light">ATENCIÓN RÁPIDA</p>
+              <a className="mt-2 inline-flex min-h-12 items-center gap-2 font-display text-xl font-semibold text-white underline decoration-brand-orange underline-offset-4" href={benefit.verifiedNotice.channelHref}>Marca #523 gratis desde tu celular.<ArrowRight aria-hidden className="h-4 w-4" /></a>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-text-muted">Confirma disponibilidad, requisitos y condiciones antes de solicitar esta opción.</p>
+          </aside>
+        )}
         <div className="grid gap-3 min-[390px]:grid-cols-2 lg:gap-6">
           <article className="flex min-h-48 flex-col rounded-2xl border border-brand-dark/10 bg-white p-5 shadow-e1 sm:p-7">
             <p className="text-xs font-bold uppercase tracking-[.16em] text-brand-dark">Necesidad</p>
@@ -93,18 +111,17 @@ export function BenefitDetailPage() {
 
         {related.length > 0 && <div className="mt-10 sm:mt-14">
           <h2 className="font-display text-xl font-semibold sm:text-2xl">Beneficios relacionados</h2>
-          <div className="mt-4 grid gap-3 min-[390px]:grid-cols-2">
-            {related.map((item) => <Link className="flex min-h-32 flex-col rounded-2xl border border-brand-dark/10 bg-white p-5 font-semibold text-brand-dark shadow-e1 transition hover:shadow-e2 motion-reduce:transition-none" key={item.slug} to={`/beneficios/${item.slug}`}>
-              {item.title}
-              <span className="mt-2 block text-sm font-normal leading-6 text-text-muted">{item.summary}</span>
-            </Link>)}
-          </div>
+          <ul className="mt-4 grid gap-3 min-[390px]:grid-cols-2">
+            {related.map((item) => <li className="h-full" key={item.slug}><PublicActionCard density="compact" headingLevel={3} title={item.title} description={item.summary} to={`/beneficios/${item.slug}`} actionLabel="Consultar" /></li>)}
+          </ul>
         </div>}
 
         <Link className="mt-8 inline-flex min-h-12 items-center gap-2 font-semibold text-brand-dark sm:mt-10" to="/beneficios"><ArrowLeft aria-hidden className="h-4 w-4" />Todos los beneficios</Link>
       </div>
     </section>
 
-    <PageCta title="¿Quieres continuar con este beneficio?" description="Indica tu perfil para abrir el acceso o canal de atención correspondiente." label="Encontrar mi ruta" />
+    {benefit.verifiedNotice
+      ? <PageCta title="Consulta la opción aplicable a tu vinculación" description="Inicia la verificación de afiliado o solicita orientación antes de continuar." label="Consultar mi plan" to="/mi-cuenta/acceso" />
+      : <PageCta title="¿Quieres continuar con este beneficio?" description="Indica tu perfil para abrir el acceso o canal de atención correspondiente." label="Encontrar mi ruta" />}
   </>;
 }

@@ -24,7 +24,7 @@ describe("flagship homepage",()=>{
     expect(within(actions).getByRole("link", { name: /radicar pqr/i })).toHaveAttribute("href", "/pqr?accion=radicar");
     expect(within(actions).getByRole("link", { name: /consultar caso/i })).toHaveAttribute("href", "/pqr?accion=consultar");
     expect(within(actions).getByRole("link", { name: /solicitudes de datos/i })).toHaveAttribute("href", "/solicitudes-de-datos");
-    expect(within(actions).getByRole("link", { name: /ingresar/i })).toHaveAttribute("href", "/iniciar-sesion");
+    expect(within(actions).getByRole("link", { name: /mi cuenta/i })).toHaveAttribute("href", "/mi-cuenta/acceso");
   });
   it("uses one sourced temporal figure and two qualitative indicators",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
@@ -46,7 +46,7 @@ describe("flagship homepage",()=>{
   });
   it("presents all audience paths and a substantive benefit preview",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
-    for(const audience of ["Personas y familias","Afiliados y usuarios","Empresas","Potenciales aliados"])expect(screen.getByRole("heading",{name:audience})).toBeInTheDocument();
+    for(const audience of ["Personas y familias","Afiliados y titulares","Empresas","Potenciales aliados"])expect(screen.getByRole("heading",{name:audience})).toBeInTheDocument();
     const portfolio=screen.getByRole("heading",{name:"Consulta el portafolio por necesidad"}).closest("section");expect(portfolio).not.toBeNull();expect(within(portfolio!).getAllByRole("link").length).toBeGreaterThanOrEqual(6);
   });
   it("contains no generic legacy claims or fake testimonial content",()=>{
