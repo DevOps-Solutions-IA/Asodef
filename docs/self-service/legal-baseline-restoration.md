@@ -41,3 +41,11 @@ El cierre de US-157 debe repetir las ocho huellas, el digest de base de datos,
 la disponibilidad HTTP de las 21 rutas y una comparación Chromium representativa.
 Los artefactos desechables se almacenan únicamente en `test-results/`, que está
 ignorado por Git.
+
+## Verificación de cierre
+
+- Huella concatenada final de los ocho archivos protegidos: `ec8fd836cd092570cf2708afbab6d92f7298677f575f4b304fa6f5e9a7f5d547`, idéntica a `f642d44`.
+- Digest final de los 21 documentos vigentes: `1655c18339f6e6a432b59ded4ad404a4`, idéntico al inicial.
+- Estado final: 21 documentos institucionales con `currentVersionId`, versión 2 y estado `PUBLISHED`.
+- Chromium: `/legal` sin overflow en escritorio, tableta y móvil; 21/21 documentos públicos legibles; fixtures sintéticos ausentes.
+- El menú público común se aplica a las demás páginas públicas. El Centro Legal conserva deliberadamente su cabecera protegida y no recibió motion, copy ni cambios responsive.

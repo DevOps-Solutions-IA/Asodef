@@ -4220,7 +4220,7 @@
         "id": "US-146",
         "title": "Current-head audit and Legal Center baseline restoration",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "in_progress",
+        "status": "complete",
         "description": "Verificar f3c854f y restaurar exclusivamente la presentación protegida del Centro Legal a la huella congelada de f642d44.",
         "businessValue": "Elimina una regresión visual sin perder las mejoras legítimas de navegación pública.",
         "dependsOn": ["US-145"],
@@ -4231,15 +4231,15 @@
         "testingRequirements": ["Hashes, digest de base de datos, API, 21 rutas y Chromium representativo"],
         "auditRequirements": ["Documento con SHA inicial, archivos, huellas y evidencia"],
         "outOfScope": ["Rediseño, copy, motion o navegación común en /legal"],
-        "completionStatus": "in_progress",
-        "commit": null,
-        "notes": "Regresión localizada en LegalLayout; restauración y evidencia en ejecución."
+        "completionStatus": "complete",
+        "commit": "186a3ea",
+        "notes": "LegalLayout restaurado byte a byte; ocho huellas y digest DB idénticos a f642d44; 21/21 rutas verificadas en Chromium."
       },
       {
         "id": "US-147",
         "title": "Independent self-service authentication architecture",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Separar autenticación administrativa, sesión de afiliado y sesión empresarial mediante contextos, cookies y guardias independientes.",
         "businessValue": "Evita usar credenciales internas o roles administrativos como identidad de autoservicio.",
         "dependsOn": ["US-146"],
@@ -4250,15 +4250,15 @@
         "testingRequirements": ["Aislamiento cruzado, expiración, cookies y provider unavailable"],
         "auditRequirements": ["Eventos sin identificadores completos ni OTP"],
         "outOfScope": ["Sustituir la autenticación administrativa vigente"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "238edb6",
+        "notes": "Tres dominios independientes con cookies opacas, CSRF rotatorio, scopes, assurance OTP y guardias frontend; actualización sensible completada en 81a7708."
       },
       {
         "id": "US-148",
         "title": "Affiliate identifier access gateway",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Crear /mi-cuenta/acceso por número de titular o documento, descubrimiento de canal y OTP ASODEF sin correo/contraseña.",
         "businessValue": "Ofrece un inicio de autoservicio coherente con el sistema de registro y protege datos sensibles.",
         "dependsOn": ["US-147", "US-156"],
@@ -4269,15 +4269,15 @@
         "testingRequirements": ["Sin email/password, formatos, challenge, bloqueo y no configurado"],
         "auditRequirements": ["Lookup, challenge y verificación correlacionados sin PII completa"],
         "outOfScope": ["Datos ficticios o autenticación administrativa"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "7fa9080",
+        "notes": "Gateway por titular/documento sin email o contraseña, canales enmascarados, OTP provider-ready y estado NOT_CONFIGURED comprobado en navegador."
       },
       {
         "id": "US-149",
         "title": "Affiliate self-service portal and beneficiary management shell",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Completar /mi-cuenta con navegación y estados provider-ready, incluida gestión de solicitudes de beneficiarios.",
         "businessValue": "Prepara autoservicio funcional sin alterar directamente el registro maestro ni inventar datos.",
         "dependsOn": ["US-147", "US-148", "US-156"],
@@ -4288,15 +4288,15 @@
         "testingRequirements": ["Guardia, estados, operaciones, documentos y transiciones"],
         "auditRequirements": ["Toda solicitud conserva correlación, actor, estado y evidencia"],
         "outOfScope": ["Mutación directa de beneficiarios maestros"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "7fa9080",
+        "notes": "Diez rutas provider-ready, navegación completa y solicitudes ADD/UPDATE/REMOVE con documentos, borrador, envío, estado, cancelación y distinción APPROVED/APPLIED."
       },
       {
         "id": "US-150",
         "title": "Company NIT access gateway and company self-service portal",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Crear acceso empresarial por NIT y completar /empresa con sesión propia e interfaces provider-ready.",
         "businessValue": "Permite a empresas iniciar por el identificador registrado sin credenciales internas.",
         "dependsOn": ["US-147", "US-156"],
@@ -4307,15 +4307,15 @@
         "testingRequirements": ["Gateway, guardia, estados, rutas y aislamiento admin"],
         "auditRequirements": ["Lookups, challenges y acceso empresarial correlacionados"],
         "outOfScope": ["Inventar contratos, pagos, reportes o empresas"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "7fa9080",
+        "notes": "Gateway NIT y ocho rutas empresariales usan sesión propia; el runtime sin proveedor muestra estados controlados y nunca fabrica datos."
       },
       {
         "id": "US-151",
         "title": "Administrative-login isolation and route corrections",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Reservar /iniciar-sesion para operación interna y corregir destinos públicos hacia gateways de afiliado y empresa.",
         "businessValue": "Reduce confusión y evita que usuarios externos intenten usar credenciales administrativas.",
         "dependsOn": ["US-147", "US-148", "US-150"],
@@ -4326,15 +4326,15 @@
         "testingRequirements": ["Copy, roles permitidos y ausencia de desvío externo"],
         "auditRequirements": ["Límite de compatibilidad legado documentado"],
         "outOfScope": ["Eliminar usuarios o roles históricos"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "03a7f8d",
+        "notes": "Login renombrado Acceso administrativo, copy exacto y aterrizaje limitado a seis roles internos; accesos públicos separados."
       },
       {
         "id": "US-152",
         "title": "Audience pages and contact-routing realignment",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Alinear afiliados, empresas y contacto con los gateways por identificador y los flujos especializados reales.",
         "businessValue": "Cada visitante llega al canal correcto sin pasar por login administrativo.",
         "dependsOn": ["US-148", "US-150", "US-151"],
@@ -4345,15 +4345,15 @@
         "testingRequirements": ["Contenido, destinos y regresión de contacto"],
         "auditRequirements": ["Matriz de destinos públicos actualizada"],
         "outOfScope": ["Rediseñar Centro Legal"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "03a7f8d",
+        "notes": "Afiliados, empresas y contacto enlazan gateways canónicos; PublicHeader uniforme en páginas públicas no legales."
       },
       {
         "id": "US-153",
         "title": "Route scroll restoration and page-entry behavior",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Implementar entrada superior para PUSH/REPLACE, destino hash e historial POP con posición restaurada.",
         "businessValue": "Cada navegación empieza en el contexto correcto en móvil y escritorio.",
         "dependsOn": ["US-152"],
@@ -4364,15 +4364,15 @@
         "testingRequirements": ["PUSH, REPLACE, hash, POP, query y rutas lazy"],
         "auditRequirements": ["Evidencia de seis handoffs críticos"],
         "outOfScope": ["Cambiar scroll del Centro Legal"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "03a7f8d",
+        "notes": "PUSH/REPLACE, hash, POP, carga inicial, query y foco accesible cubiertos por hook compartido y pruebas."
       },
       {
         "id": "US-154",
         "title": "Uniform responsive cards and mobile visual alignment",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Uniformar tarjetas de contacto y acciones de audiencia con un componente compartido compacto.",
         "businessValue": "Mejora exploración, jerarquía y alcance táctil en 320–390 px.",
         "dependsOn": ["US-152"],
@@ -4383,15 +4383,15 @@
         "testingRequirements": ["Clases uniformes, copy móvil y matriz responsive"],
         "auditRequirements": ["Chromium en nueve viewports"],
         "outOfScope": ["Tarjetas del Centro Legal"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "03a7f8d",
+        "notes": "Tarjeta pública compartida con auto-rows, h-full, acción inferior, foco visible y matriz Chromium de 320 a 1440 px."
       },
       {
         "id": "US-155",
         "title": "Plan exequial familiar verified content enhancement",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Incorporar el plan preferencial y #523 en el detalle no legal con condiciones limitadas y CTA de autoservicio.",
         "businessValue": "Presenta información institucional útil sin prometer elegibilidad o cobertura universal.",
         "dependsOn": ["US-148", "US-154"],
@@ -4402,15 +4402,15 @@
         "testingRequirements": ["Copy, #523, rutas y ausencia de elegibilidad garantizada"],
         "auditRequirements": ["Fuente promocional identificada como base autorizada"],
         "outOfScope": ["Editar documentos legales"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "03a7f8d",
+        "notes": "Copy autorizado, cinco beneficios, límites de elegibilidad, bloque ATENCIÓN RÁPIDA #523 y CTA al gateway/orientación verificados."
       },
       {
         "id": "US-156",
         "title": "External system-of-record provider contracts",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Crear BFF, contratos del core, OTP administrado por ASODEF y adaptador NOT_CONFIGURED sin datos ficticios.",
         "businessValue": "Desacopla la plataforma del futuro proveedor y deja contratos seguros, verificables e integrables.",
         "dependsOn": ["US-147"],
@@ -4421,15 +4421,15 @@
         "testingRequirements": ["Contratos, OTP, cooldown, intentos, sesiones, scopes, errores y ausencia de datos falsos"],
         "auditRequirements": ["Eventos de lookup, delivery, verify, sesión y mutación con correlación segura"],
         "outOfScope": ["Configurar URL, credenciales o proveedor productivo inexistente"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "238edb6",
+        "notes": "BFF, provider registry/health, DTOs, NOT_CONFIGURED, OTP ASODEF, cookies, scopes, idempotencia y auditoría implementados; contacto sensible en 81a7708."
       },
       {
         "id": "US-157",
         "title": "Security, accessibility, testing and release synchronization",
         "domain": "AC - Arquitectura de autoservicio",
-        "status": "open",
+        "status": "complete",
         "description": "Cerrar seguridad, accesibilidad, pruebas, Docker, Chromium, PRD y sincronización normal a GitHub.",
         "businessValue": "Entrega un baseline integrado y reproducible listo para configurar proveedores reales, sin sandbox ni datos simulados.",
         "dependsOn": ["US-146", "US-147", "US-148", "US-149", "US-150", "US-151", "US-152", "US-153", "US-154", "US-155", "US-156"],
@@ -4440,9 +4440,9 @@
         "testingRequirements": ["Frontend, backend, UI, E2E, lint, typecheck, build, migraciones, seeds x2 y runtime"],
         "auditRequirements": ["Commits, evidencia browser, hashes, DB, estado remoto y árbol limpio"],
         "outOfScope": ["Deploy, DNS e infraestructura de producción"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "061988e",
+        "notes": "Frontend 445, backend 801, UI 46 y E2E 39 aprobados; lint, TypeScript, build, 34 migraciones, seeds x2, Docker sin caché, health, nueve viewports y legal 21/21 aprobados."
       }
   ]
 }
