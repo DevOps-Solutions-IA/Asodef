@@ -118,7 +118,7 @@ describe("router", () => {
     expect(screen.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
   });
 
-  it.each(["/", "/iniciar-sesion", "/pagos", "/legal"])("uses the same principal menu on public route %s", async (path) => {
+  it.each(["/", "/iniciar-sesion", "/pagos"])("uses the same principal menu on non-legal public route %s", async (path) => {
     renderAtPath(path);
 
     const nav = await screen.findByRole("navigation", { name: "Principal" });
@@ -127,6 +127,14 @@ describe("router", () => {
     }
     const actions = screen.getByLabelText("Acciones de navegación");
     expect(actions).toHaveTextContent(/Pagar.*Ingresar.*Recibir orientación/);
+  });
+
+  it("keeps the frozen institutional header on /legal", async () => {
+    renderAtPath("/legal");
+
+    expect(await screen.findByText("Información institucional")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver al sitio/i })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
   });
 
   it("redirects an already-authenticated visitor away from /iniciar-sesion (GuestOnlyRoute)", async () => {

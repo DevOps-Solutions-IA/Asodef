@@ -129,7 +129,9 @@ test.describe("flagship public experience", () => {
       for (const route of routes) {
         await page.goto(route);
         await expect(page.locator("h1").first()).toBeVisible();
-        if (viewport.width >= 1024) {
+        if (route.startsWith("/legal")) {
+          await expect(page.getByText("Información institucional")).toBeVisible();
+        } else if (viewport.width >= 1024) {
           await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
         } else {
           await expect(page.getByRole("button", { name: "Abrir menú de navegación" })).toBeVisible();
