@@ -17,10 +17,9 @@ const TEST_PASSWORD = "correct-horse-battery-staple-123";
  * as private methods on ReportsService by design (no public API needs
  * them) - these tests drive them the only way a real crash scenario
  * would: seed an ExportJob row directly via Prisma in the state a
- * crashed worker would leave it in, then trigger the same sweep points
- * production traffic triggers (ReportsService.run() for a background-
- * sized report), and observe the outcome through the same public
- * surface the API controller uses (getJobStatus/GET .../exports/:id).
+ * crashed worker would leave it in, then await the exact recovery,
+ * retry, and processing operations used by the production sweep. This
+ * keeps queue assertions deterministic without timing-based polling.
  */
 describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
   let app: NestExpressApplication;
@@ -28,7 +27,6 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
   let passwordService: PasswordService;
   let reportsService: ReportsService;
   const createdUserIds: string[] = [];
-  const createdSecurityEventIds: string[] = [];
   const createdJobIds: string[] = [];
 
   let finance: { user: User; cookies: string[] };
@@ -53,9 +51,6 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
   afterAll(async () => {
     if (createdJobIds.length > 0) {
       await prisma.exportJob.deleteMany({ where: { id: { in: createdJobIds } } });
-    }
-    if (createdSecurityEventIds.length > 0) {
-      await prisma.securityEvent.deleteMany({ where: { id: { in: createdSecurityEventIds } } });
     }
     if (createdUserIds.length > 0) {
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -95,27 +90,16 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
     return { user, cookies };
   }
 
-  async function seedEnoughRowsForBackgroundJob(): Promise<void> {
-    const events = Array.from({ length: 1001 }, () => ({
-      id: randomUUID(),
-      type: "LOGIN_SUCCEEDED" as const,
-      userId: null,
-      sessionId: null,
-      ipAddress: "203.0.113.1",
-    }));
-    await prisma.securityEvent.createMany({ data: events });
-    createdSecurityEventIds.push(...events.map((e) => e.id));
-  }
-
-  async function pollUntil(jobId: string, predicate: (status: string) => boolean, maxAttempts = 30): Promise<string> {
-    let status = "";
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const poll = await request(app.getHttpServer()).get(`/api/v1/admin/reports/exports/${jobId}`).set("Cookie", finance.cookies);
-      status = poll.body.status;
-      if (predicate(status)) return status;
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    return status;
+  function queueHarness(): {
+    recoverStaleJobs(): Promise<void>;
+    retryDueJobs(): Promise<void>;
+    processExportJob(jobId: string): Promise<void>;
+  } {
+    return reportsService as unknown as {
+      recoverStaleJobs(): Promise<void>;
+      retryDueJobs(): Promise<void>;
+      processExportJob(jobId: string): Promise<void>;
+    };
   }
 
   it("recovers a job left PROCESSING by a crashed worker (expired lease) back to PENDING with attemptCount incremented and a future nextAttemptAt (backoff) - not retried immediately", async () => {
@@ -133,17 +117,10 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
     });
     createdJobIds.push(staleJob.id);
 
-    // Any real background-sized report request sweeps for stale jobs -
-    // this is the actual production trigger point, not a test-only hook.
-    await seedEnoughRowsForBackgroundJob();
-    const triggerResponse = await request(app.getHttpServer()).get("/api/v1/admin/reports/user_activity").set("Cookie", finance.cookies);
-    expect(triggerResponse.status).toBe(202);
-    createdJobIds.push(triggerResponse.body.jobId);
+    await queueHarness().recoverStaleJobs();
 
-    // Give the fire-and-forget sweep a moment to run, then confirm the
-    // recovered state directly - it must NOT jump straight to READY,
-    // since the backoff has not elapsed yet.
-    await new Promise((r) => setTimeout(r, 500));
+    // It must NOT jump straight to READY: the recovery operation only
+    // requeues it and the calculated backoff has not elapsed yet.
     const recovered = await prisma.exportJob.findUniqueOrThrow({ where: { id: staleJob.id } });
     expect(recovered.status).toBe("PENDING");
     expect(recovered.attemptCount).toBe(1);
@@ -170,13 +147,11 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
     });
     createdJobIds.push(dueJob.id);
 
-    await seedEnoughRowsForBackgroundJob();
-    const triggerResponse = await request(app.getHttpServer()).get("/api/v1/admin/reports/user_activity").set("Cookie", finance.cookies);
-    expect(triggerResponse.status).toBe(202);
-    createdJobIds.push(triggerResponse.body.jobId);
+    await queueHarness().retryDueJobs();
 
-    const finalStatus = await pollUntil(dueJob.id, (s) => s === "READY" || s === "FAILED");
-    expect(finalStatus).toBe("READY");
+    const final = await prisma.exportJob.findUniqueOrThrow({ where: { id: dueJob.id } });
+    expect(final.status).toBe("READY");
+    expect(final.filePath).toBeTruthy();
   }, 15000);
 
   it("marks a stale job permanently FAILED once maxAttempts is exhausted, without retrying further", async () => {
@@ -194,12 +169,7 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
     });
     createdJobIds.push(exhaustedJob.id);
 
-    await seedEnoughRowsForBackgroundJob();
-    const triggerResponse = await request(app.getHttpServer()).get("/api/v1/admin/reports/user_activity").set("Cookie", finance.cookies);
-    expect(triggerResponse.status).toBe(202);
-    createdJobIds.push(triggerResponse.body.jobId);
-
-    await pollUntil(triggerResponse.body.jobId, (s) => s === "READY" || s === "FAILED");
+    await queueHarness().recoverStaleJobs();
 
     const final = await prisma.exportJob.findUniqueOrThrow({ where: { id: exhaustedJob.id } });
     expect(final.status).toBe("FAILED");
@@ -214,23 +184,19 @@ describe("ExportJob durable queue (US-076, integration, real Postgres)", () => {
     });
     createdJobIds.push(job.id);
 
-    await seedEnoughRowsForBackgroundJob();
-
     // Directly exercises the same private processExportJob() two real
     // concurrent HTTP-triggered background jobs would each separately
     // invoke on this one row - accessed via bracket notation since it's
     // intentionally private (no public API needs to trigger a specific
     // job's processing directly).
-    const service = reportsService as unknown as { processExportJob(jobId: string): Promise<void> };
+    const service = queueHarness();
     await Promise.all([service.processExportJob(job.id), service.processExportJob(job.id)]);
-
-    const finalStatus = await pollUntil(job.id, (s) => s === "READY" || s === "FAILED");
-    expect(finalStatus).toBe("READY");
 
     // Only one real processing pass ever happened - completedAt/filePath
     // are set exactly once, never overwritten by a second concurrent
     // "winner" (there wasn't one - claimJob() only lets one through).
     const final = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.status).toBe("READY");
     expect(final.filePath).toBeTruthy();
   }, 15000);
 });

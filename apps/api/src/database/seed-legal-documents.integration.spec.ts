@@ -138,17 +138,26 @@ describe("Legal documents seed (integration, real Postgres)", () => {
     });
 
     const reviewedContent = { sections: [{ heading: "Contenido revisado manualmente", body: "Texto ya en revisión legal real." }] };
-    await prisma.legalDocumentVersion.update({
-      where: { id: version.id },
-      data: { status: "DRAFT", draftContent: reviewedContent },
-    });
+    try {
+      await prisma.legalDocumentVersion.update({
+        where: { id: version.id },
+        data: { status: "DRAFT", draftContent: reviewedContent },
+      });
 
-    await seedLegalDocuments(prisma);
+      await seedLegalDocuments(prisma);
 
-    const afterReseed = await prisma.legalDocumentVersion.findUniqueOrThrow({ where: { id: version.id } });
-    expect(afterReseed.status).toBe("DRAFT");
-    expect(afterReseed.draftContent).toEqual(reviewedContent);
-
-    await prisma.legalDocumentVersion.update({ where: { id: version.id }, data: { status: "DRAFT", draftContent: version.draftContent as object } });
+      const afterReseed = await prisma.legalDocumentVersion.findUniqueOrThrow({ where: { id: version.id } });
+      expect(afterReseed.status).toBe("DRAFT");
+      expect(afterReseed.draftContent).toEqual(reviewedContent);
+    } finally {
+      // Restore the exact historical state. The developer/runtime database
+      // commonly contains a REPLACED v1 after the audited v2 publication;
+      // forcing DRAFT here made this test order-dependent and silently
+      // mutated protected legal history after every complete suite run.
+      await prisma.legalDocumentVersion.update({
+        where: { id: version.id },
+        data: { status: version.status, draftContent: version.draftContent as object },
+      });
+    }
   });
 });

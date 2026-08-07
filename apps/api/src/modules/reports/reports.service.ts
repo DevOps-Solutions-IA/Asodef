@@ -56,8 +56,8 @@ export type ReportRunResult = SyncReportResult | { kind: "job"; jobId: string; r
  *    becomes reclaimable once its lease expires - no external heartbeat
  *    process needed, the lease is just "claimed at + LEASE_DURATION_MS".
  *  - recoverStaleJobs(): swept opportunistically at the start of every
- *    new export request and before claiming a job, rather than on a
- *    timer - this app has no @nestjs/schedule/cron infrastructure today,
+ *    new background export request, rather than on a timer - this app
+ *    has no @nestjs/schedule/cron infrastructure today,
  *    and adding one purely to poll for stale jobs would be exactly the
  *    kind of unrequested new infrastructure this decision avoids. Any
  *    real usage of the reports feature (which is the only way stale
@@ -97,12 +97,16 @@ export class ReportsService {
     const total = await definition.count(this.prisma, filters);
 
     if (total > BACKGROUND_JOB_ROW_THRESHOLD) {
-      void this.recoverStaleJobs().then(() => this.retryDueJobs());
+      // Recovery is part of the request-side sweep and is awaited so the
+      // durable state transition is complete when this trigger returns. Due
+      // jobs and the newly-created export still run outside the request.
+      await this.recoverStaleJobs();
 
       const job = await this.prisma.exportJob.create({
         data: { reportKey, filters: filters as object, rowCount: total, requestedByUserId: actorUserId },
       });
-      void this.processExportJob(job.id);
+      this.dispatchInBackground(this.retryDueJobs(), "retrying due export jobs");
+      this.dispatchInBackground(this.processExportJob(job.id), `processing export job ${job.id}`);
       return { kind: "job", jobId: job.id, rowCount: total };
     }
 
@@ -194,19 +198,14 @@ export class ReportsService {
       where: { status: "PENDING", nextAttemptAt: { lte: now } },
       select: { id: true },
     });
-    for (const job of dueJobs) {
-      void this.processExportJob(job.id);
-    }
+    await Promise.all(dueJobs.map((job) => this.processExportJob(job.id)));
   }
 
-  /** Runs off the request lifecycle (fire-and-forget from run()). Always
-   * attempts recovery first (cheap no-op when nothing is stale), then
-   * only proceeds past the atomic claim - a second concurrent call for
-   * the same jobId (e.g. a duplicate dispatch) safely no-ops here. */
+  /** Runs off the request lifecycle (fire-and-forget from run()). The
+   * request-side sweep owns recovery/retry dispatch. This method only
+   * processes the requested job, preventing a worker from recursively
+   * redispatching the entire due queue before it has claimed its own row. */
   private async processExportJob(jobId: string): Promise<void> {
-    await this.recoverStaleJobs();
-    void this.retryDueJobs();
-
     const claimed = await this.claimJob(jobId);
     if (!claimed) {
       return;
@@ -245,6 +244,13 @@ export class ReportsService {
     } catch (error) {
       await this.handleAttemptFailure(jobId, error instanceof Error ? error.message : "Error desconocido");
     }
+  }
+
+  private dispatchInBackground(operation: Promise<void>, context: string): void {
+    void operation.catch((error: unknown) => {
+      const detail = error instanceof Error ? error.stack ?? error.message : String(error);
+      this.logger.error(`Background export queue failure while ${context}`, detail);
+    });
   }
 
   /** A genuine processing failure (not a crashed worker - the process
