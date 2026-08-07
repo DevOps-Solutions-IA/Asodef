@@ -15,7 +15,10 @@ export function formatBogotaTime(date: Date, options?: Intl.DateTimeFormatOption
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false,
+    // h23 is deterministic across the ICU versions bundled with Node 20
+    // and Node 22. `hour12: false` may render midnight as 24:00 under
+    // Node 20, which makes the same instant differ between CI and local.
+    hourCycle: "h23",
     ...options,
   }).format(date);
 }
