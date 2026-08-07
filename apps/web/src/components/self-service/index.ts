@@ -4,3 +4,4 @@ export * from "./SelfServiceCollectionSection";
 export * from "./SelfServiceResourcePage";
 export * from "./SelfServiceShell";
 export * from "./SelfServiceStatePanel";
+export * from "./ContactUpdatePanel";

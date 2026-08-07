@@ -14,6 +14,7 @@ import type {
   ProviderPayload,
   ProviderResult,
   ResourceResult,
+  SelfServiceChannelKind,
   SelfServiceScope,
   SessionResult,
 } from "./types";
@@ -71,6 +72,15 @@ async function mutateResource<T>(method: "POST" | "PATCH", path: string, csrfTok
   const result = method === "POST"
     ? await apiClient.post<ProviderResult<T>>(path, body, options)
     : await apiClient.patch<ProviderResult<T>>(path, body, options);
+  return normalizeResource(result);
+}
+
+async function mutateDirect<T>(path: string, body: ProviderPayload, csrfToken: string, idempotencyKey: string): Promise<ResourceResult<T>> {
+  const result = await apiClient.post<ProviderResult<T>>(path, body, {
+    headers: mutationHeaders(path, csrfToken, idempotencyKey),
+    skipAuthRefresh: true,
+    onResponse: (response) => captureRotatedCsrf(path, response),
+  });
   return normalizeResource(result);
 }
 
@@ -149,4 +159,8 @@ export const selfServiceApi = {
   },
   submitBeneficiaryRequest: (requestId: string, csrfToken: string, idempotencyKey: string) => mutateResource<ProviderPayload>("POST", `${base("affiliate")}/beneficiary-change-requests/${encodeURIComponent(requestId)}/submit`, csrfToken, idempotencyKey),
   cancelBeneficiaryRequest: (requestId: string, csrfToken: string, idempotencyKey: string) => mutateResource<ProviderPayload>("POST", `${base("affiliate")}/beneficiary-change-requests/${encodeURIComponent(requestId)}/cancel`, csrfToken, idempotencyKey),
+  startContactUpdate: (channel: SelfServiceChannelKind, newDestination: string, csrfToken: string, idempotencyKey: string) => mutateDirect<ProviderPayload>(`${base("affiliate")}/contact-updates/start`, { channel, newDestination }, csrfToken, idempotencyKey),
+  requestContactUpdateCode: (requestId: string, csrfToken: string, idempotencyKey: string) => mutateDirect<ProviderPayload>(`${base("affiliate")}/contact-updates/request-code`, { requestId }, csrfToken, idempotencyKey),
+  verifyContactUpdate: (requestId: string, code: string, csrfToken: string, idempotencyKey: string) => mutateDirect<ProviderPayload>(`${base("affiliate")}/contact-updates/verify`, { requestId, code }, csrfToken, idempotencyKey),
+  getContactUpdateStatus: (requestId: string, signal?: AbortSignal) => getResource<ProviderPayload>(`${base("affiliate")}/contact-updates/${encodeURIComponent(requestId)}/status`, signal),
 };
