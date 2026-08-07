@@ -1,30 +1,47 @@
 import { randomUUID } from "node:crypto";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { RedisService } from "../../common/redis/redis.service";
 import { PrismaService } from "../../database/prisma.service";
+import { publishDraftForTest, type PublishedForTestHandle } from "../../database/publish-legal-document-for-test";
 
 describe("guided public funnel", () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   const keys: string[] = [];
+  const legalHandles: PublishedForTestHandle[] = [];
 
   beforeAll(async () => {
     app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
     configureApp(app); await app.init(); prisma = app.get(PrismaService);
+    for (const slug of [
+      "tratamiento-de-datos",
+      "consentimiento-comunicaciones-comerciales",
+      "consentimiento-correo-electronico",
+      "consentimiento-whatsapp",
+    ]) {
+      const handle = await publishDraftForTest(prisma as unknown as PrismaClient, slug);
+      if (!handle) throw new Error(`The guided-lead integration fixture could not publish ${slug}.`);
+      legalHandles.push(handle);
+    }
     const redis = app.get(RedisService).getClient();
     const rateKeys = await redis.keys("ratelimit:guided-leads:*");
     if (rateKeys.length) await redis.del(...rateKeys);
   });
 
   afterAll(async () => {
-    const leads = await prisma.leadSubmission.findMany({ where: { idempotencyKey: { in: keys } }, select: { id: true } });
-    await prisma.consentRecord.deleteMany({ where: { leadSubmissionId: { in: leads.map(item => item.id) } } });
-    await prisma.leadSubmission.deleteMany({ where: { idempotencyKey: { in: keys } } });
-    await app.close();
+    try {
+      const leads = await prisma.leadSubmission.findMany({ where: { idempotencyKey: { in: keys } }, select: { id: true } });
+      await prisma.consentRecord.deleteMany({ where: { leadSubmissionId: { in: leads.map(item => item.id) } } });
+      await prisma.leadSubmission.deleteMany({ where: { idempotencyKey: { in: keys } } });
+    } finally {
+      for (const handle of legalHandles.reverse()) await handle.restore();
+      await app.close();
+    }
   });
 
   function payload(overrides: Record<string, unknown> = {}) {
