@@ -22,8 +22,13 @@ Plataforma institucional de ASODEF S.A.S. para experiencia pública, beneficios,
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm prepare:generated
 cp .env.example .env
 ```
+
+La generación explícita es obligatoria en un checkout limpio: el schema
+Prisma vive en `apps/api/prisma/schema.prisma` y no se debe depender del
+cliente stub que puede dejar el postinstall ejecutado desde la raíz.
 
 Los valores de `.env.example` son plantillas o valores exclusivos de desarrollo. No se deben reutilizar en producción. Los archivos `.env*`, salvo las plantillas `.env.example`, están excluidos de Git.
 
@@ -52,6 +57,18 @@ pnpm test
 pnpm build
 pnpm test:e2e
 ```
+
+El contrato canónico que reproduce GitHub Actions localmente es:
+
+```bash
+pnpm ci:verify
+```
+
+Usa PostgreSQL y Redis efímeros con nombre y puertos aislados, aplica las
+migraciones desde cero, ejecuta el seed tres veces, reconstruye sin reutilizar
+la caché del desarrollador y prueba el API compilado y el preview construido
+en Chromium. Requiere Docker, pero no toca el proyecto Compose ni los
+volúmenes de desarrollo.
 
 Comandos de base de datos:
 
