@@ -14,7 +14,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed": "pnpm --filter @asodef/config build && ts-node prisma/seed.ts",
     "ci:prepare-e2e": "ts-node src/database/prepare-e2e-runtime.ts",
     "legal:publish-corrections": "ts-node src/database/publish-legal-corrections.ts",
     "prisma:studio": "prisma studio"
