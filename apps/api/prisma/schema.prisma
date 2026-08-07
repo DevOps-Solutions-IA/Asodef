@@ -51,29 +51,29 @@ model User {
   // otherwise-stateless access token without a per-request session lookup).
   passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
 
-  roles                         UserRole[]
-  sessions                      Session[]
-  passwordResets                PasswordReset[]
-  passwordHistory               PasswordHistoryEntry[]
-  loginAttempts                 LoginAttempt[]
-  securityEvents                SecurityEvent[]
-  notificationJobs              NotificationJob[]
-  approvedLegalDocumentVersions LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
-  auditLogActions               AuditLog[]                 @relation("AuditLogActor")
-  consentRecords                ConsentRecord[]
-  assignedDataSubjectRequests   DataSubjectRequest[]       @relation("DataSubjectRequestAssignee")
-  anonymizationLogActions       AnonymizationLog[]
-  assignedProspects             Prospect[]                 @relation("ProspectAssignee")
-  assignedOpportunities         Opportunity[]              @relation("OpportunityAssignee")
-  opportunityStageChanges       OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
-  assignedCommercialActivities  CommercialActivity[]       @relation("CommercialActivityAssignee")
-  uploadedContractVersions      ContractVersion[]          @relation("ContractVersionUploader")
-  issuedContractDownloadTokens  ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
-  approvedRefunds               Refund[]                   @relation("RefundApprover")
-  reconciliationRuns            Reconciliation[]
+  roles                             UserRole[]
+  sessions                          Session[]
+  passwordResets                    PasswordReset[]
+  passwordHistory                   PasswordHistoryEntry[]
+  loginAttempts                     LoginAttempt[]
+  securityEvents                    SecurityEvent[]
+  notificationJobs                  NotificationJob[]
+  approvedLegalDocumentVersions     LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
+  auditLogActions                   AuditLog[]                 @relation("AuditLogActor")
+  consentRecords                    ConsentRecord[]
+  assignedDataSubjectRequests       DataSubjectRequest[]       @relation("DataSubjectRequestAssignee")
+  anonymizationLogActions           AnonymizationLog[]
+  assignedProspects                 Prospect[]                 @relation("ProspectAssignee")
+  assignedOpportunities             Opportunity[]              @relation("OpportunityAssignee")
+  opportunityStageChanges           OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
+  assignedCommercialActivities      CommercialActivity[]       @relation("CommercialActivityAssignee")
+  uploadedContractVersions          ContractVersion[]          @relation("ContractVersionUploader")
+  issuedContractDownloadTokens      ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
+  approvedRefunds                   Refund[]                   @relation("RefundApprover")
+  reconciliationRuns                Reconciliation[]
   resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
-  requestedExportJobs            ExportJob[]
-  approvedApprovalGates         ApprovalGate[]
+  requestedExportJobs               ExportJob[]
+  approvedApprovalGates             ApprovalGate[]
 
   @@map("users")
 }
@@ -400,31 +400,31 @@ enum LeadNotificationStatus {
 // exactly what the visitor typed - never trusted for anything beyond
 // display/follow-up (no role, permission, or internal linkage implied).
 model LeadSubmission {
-  id              String     @id @default(uuid()) @db.Uuid
-  fullName        String     @map("full_name")
-  company         String
-  position        String
-  city            String
-  phone           String
-  email           String
-  sector          String
-  message         String
-  consentAccepted Boolean    @map("consent_accepted")
-  publicReference   String?    @unique @map("public_reference")
-  source            String?
-  entryRoute        String?    @map("entry_route")
-  audience          String?
-  need              String?
-  preferredContact  String?    @map("preferred_contact")
-  campaign          Json?
-  funnelPayload     Json?      @map("funnel_payload")
-  idempotencyKey    String?    @unique @map("idempotency_key")
-  status          LeadStatus @default(PENDING)
+  id               String     @id @default(uuid()) @db.Uuid
+  fullName         String     @map("full_name")
+  company          String
+  position         String
+  city             String
+  phone            String
+  email            String
+  sector           String
+  message          String
+  consentAccepted  Boolean    @map("consent_accepted")
+  publicReference  String?    @unique @map("public_reference")
+  source           String?
+  entryRoute       String?    @map("entry_route")
+  audience         String?
+  need             String?
+  preferredContact String?    @map("preferred_contact")
+  campaign         Json?
+  funnelPayload    Json?      @map("funnel_payload")
+  idempotencyKey   String?    @unique @map("idempotency_key")
+  status           LeadStatus @default(PENDING)
   // US-051: set once this lead is promoted into a Prospect via the
   // admin endpoint - nullable, never set at creation.
-  prospectId      String?    @map("prospect_id") @db.Uuid
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  prospectId       String?    @map("prospect_id") @db.Uuid
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   notification   LeadNotification?
   consentRecords ConsentRecord[]
@@ -929,30 +929,30 @@ model LegalDocument {
 }
 
 model LegalDocumentVersion {
-  id               String                     @id @default(uuid()) @db.Uuid
-  legalDocumentId  String                     @map("legal_document_id") @db.Uuid
-  version          Int
-  status           LegalDocumentVersionStatus @default(DRAFT)
+  id                 String                     @id @default(uuid()) @db.Uuid
+  legalDocumentId    String                     @map("legal_document_id") @db.Uuid
+  version            Int
+  status             LegalDocumentVersionStatus @default(DRAFT)
   // Freely editable while status = DRAFT. Never mutated once the
   // version moves past DRAFT - approve() snapshots it into
   // approvedContent below, which is what publish()/public reads
   // actually serve.
-  draftContent     Json                       @map("draft_content")
+  draftContent       Json                       @map("draft_content")
   // Null until approve() sets it (draftContent snapshot at the exact
   // moment of approval) - "draftContent may exist and be edited freely
   // without ever implying public approval" (PRD rule, verbatim).
-  approvedContent  Json?                      @map("approved_content")
-  effectiveDate    DateTime?                  @map("effective_date") @db.Timestamptz(3)
-  expirationDate   DateTime?                  @map("expiration_date") @db.Timestamptz(3)
-  changeSummary    String?                    @map("change_summary")
+  approvedContent    Json?                      @map("approved_content")
+  effectiveDate      DateTime?                  @map("effective_date") @db.Timestamptz(3)
+  expirationDate     DateTime?                  @map("expiration_date") @db.Timestamptz(3)
+  changeSummary      String?                    @map("change_summary")
   // Evidence supporting this exact version. Paths and concise factual
   // bases only; source documents themselves and sensitive payloads are
   // never copied into the database.
-  sourceTraceability Json?                    @map("source_traceability")
-  approvedByUserId String?                    @map("approved_by_user_id") @db.Uuid
-  approvalDate     DateTime?                  @map("approval_date") @db.Timestamptz(3)
-  publicationDate  DateTime?                  @map("publication_date") @db.Timestamptz(3)
-  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  sourceTraceability Json?                      @map("source_traceability")
+  approvedByUserId   String?                    @map("approved_by_user_id") @db.Uuid
+  approvalDate       DateTime?                  @map("approval_date") @db.Timestamptz(3)
+  publicationDate    DateTime?                  @map("publication_date") @db.Timestamptz(3)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
 
   legalDocument      LegalDocument   @relation("DocumentVersions", fields: [legalDocumentId], references: [id], onDelete: Restrict)
   currentForDocument LegalDocument?  @relation("CurrentVersion")
@@ -1912,16 +1912,16 @@ enum ExportJobStatus {
 // exposed directly, only served through an authenticated download
 // route.
 model ExportJob {
-  id            String          @id @default(uuid()) @db.Uuid
-  reportKey     String          @map("report_key")
-  filters       Json
-  status        ExportJobStatus @default(PENDING)
-  rowCount      Int?            @map("row_count")
-  filePath      String?         @map("file_path")
-  errorMessage  String?         @map("error_message")
-  requestedByUserId String       @map("requested_by_user_id") @db.Uuid
-  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  completedAt   DateTime?       @map("completed_at") @db.Timestamptz(3)
+  id                String          @id @default(uuid()) @db.Uuid
+  reportKey         String          @map("report_key")
+  filters           Json
+  status            ExportJobStatus @default(PENDING)
+  rowCount          Int?            @map("row_count")
+  filePath          String?         @map("file_path")
+  errorMessage      String?         @map("error_message")
+  requestedByUserId String          @map("requested_by_user_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt       DateTime?       @map("completed_at") @db.Timestamptz(3)
 
   // US-076: durable-queue fields, resolving the preproduction technical
   // debt the original comment above documented ("if the process
@@ -1930,12 +1930,12 @@ model ExportJob {
   // BullMQ/Redis and rejected as unnecessary infrastructure for this
   // deployment's export volume (see ReportsService's own doc comment
   // for the full decision record).
-  leaseOwner    String?         @map("lease_owner")
-  leaseExpiresAt DateTime?      @map("lease_expires_at") @db.Timestamptz(3)
-  attemptCount  Int             @default(0) @map("attempt_count")
-  maxAttempts   Int             @default(3) @map("max_attempts")
-  nextAttemptAt DateTime?       @map("next_attempt_at") @db.Timestamptz(3)
-  failedAt      DateTime?       @map("failed_at") @db.Timestamptz(3)
+  leaseOwner     String?   @map("lease_owner")
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  attemptCount   Int       @default(0) @map("attempt_count")
+  maxAttempts    Int       @default(3) @map("max_attempts")
+  nextAttemptAt  DateTime? @map("next_attempt_at") @db.Timestamptz(3)
+  failedAt       DateTime? @map("failed_at") @db.Timestamptz(3)
 
   requestedByUser User @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
 
@@ -2038,7 +2038,7 @@ model SelfServiceSession {
   revokedAt           DateTime?         @map("revoked_at") @db.Timestamptz(3)
   createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  challenge      SelfServiceOtpChallenge @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  challenge       SelfServiceOtpChallenge    @relation(fields: [challengeId], references: [id], onDelete: Restrict)
   idempotencyKeys SelfServiceIdempotency[]
   contactUpdates  SelfServiceContactUpdate[]
 
