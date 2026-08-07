@@ -1943,3 +1943,166 @@ model ExportJob {
   @@index([status, leaseExpiresAt])
   @@map("export_jobs")
 }
+
+// Isolated authentication records for the external-core-backed affiliate and
+// company portals. These tokens never participate in staff JWT/RBAC sessions.
+enum SelfServicePortal {
+  AFFILIATE
+  COMPANY
+
+  @@map("self_service_portal")
+}
+
+enum SelfServiceChallengeStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  LOCKED
+
+  @@map("self_service_challenge_status")
+}
+
+enum SelfServiceContactUpdateStatus {
+  DRAFT
+  CHALLENGE_PENDING
+  VERIFIED
+  SUBMITTED
+  APPLIED
+  REJECTED
+  LOCKED
+
+  @@map("self_service_contact_update_status")
+}
+
+model SelfServiceOtpChallenge {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  accessLookupId      String                     @map("access_lookup_id") @db.Uuid
+  portal              SelfServicePortal
+  lookupHash          String                     @map("lookup_hash")
+  subjectRefEncrypted String                     @map("subject_ref_encrypted")
+  browserBindingHash  String                     @map("browser_binding_hash")
+  channel             String
+  channelReference    String                     @map("channel_reference")
+  destinationMasked   String                     @map("destination_masked")
+  codeHash            String                     @map("code_hash")
+  status              SelfServiceChallengeStatus @default(PENDING)
+  attempts            Int                        @default(0)
+  maxAttempts         Int                        @default(5) @map("max_attempts")
+  expiresAt           DateTime                   @map("expires_at") @db.Timestamptz(3)
+  retryAvailableAt    DateTime                   @map("retry_available_at") @db.Timestamptz(3)
+  verifiedAt          DateTime?                  @map("verified_at") @db.Timestamptz(3)
+  lockedAt            DateTime?                  @map("locked_at") @db.Timestamptz(3)
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  accessLookup SelfServiceAccessLookup @relation(fields: [accessLookupId], references: [id], onDelete: Restrict)
+  sessions     SelfServiceSession[]
+
+  @@index([lookupHash, createdAt])
+  @@index([accessLookupId])
+  @@index([status, expiresAt])
+  @@map("self_service_otp_challenges")
+}
+
+model SelfServiceAccessLookup {
+  id                    String            @id @default(uuid()) @db.Uuid
+  portal                SelfServicePortal
+  lookupHash            String            @map("lookup_hash")
+  subjectRefEncrypted   String            @map("subject_ref_encrypted")
+  browserBindingHash    String            @map("browser_binding_hash")
+  channels              Json
+  destinationsEncrypted String            @map("destinations_encrypted")
+  expiresAt             DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  challenges SelfServiceOtpChallenge[]
+
+  @@index([lookupHash, createdAt])
+  @@index([expiresAt])
+  @@map("self_service_access_lookups")
+}
+
+model SelfServiceSession {
+  id                  String            @id @default(uuid()) @db.Uuid
+  challengeId         String            @map("challenge_id") @db.Uuid
+  portal              SelfServicePortal
+  subjectRefEncrypted String            @map("subject_ref_encrypted")
+  tokenHash           String            @unique @map("token_hash")
+  csrfTokenHash       String            @map("csrf_token_hash")
+  scopes              String[]
+  assurance           String
+  ipHash              String?           @map("ip_hash")
+  userAgentHash       String?           @map("user_agent_hash")
+  expiresAt           DateTime          @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt          DateTime?         @map("last_used_at") @db.Timestamptz(3)
+  revokedAt           DateTime?         @map("revoked_at") @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  challenge      SelfServiceOtpChallenge @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  idempotencyKeys SelfServiceIdempotency[]
+  contactUpdates  SelfServiceContactUpdate[]
+
+  @@index([portal, expiresAt])
+  @@index([challengeId])
+  @@map("self_service_sessions")
+}
+
+model SelfServiceContactUpdate {
+  id                   String                         @id @default(uuid()) @db.Uuid
+  sessionId            String                         @map("session_id") @db.Uuid
+  channel              String
+  destinationEncrypted String                         @map("destination_encrypted")
+  destinationMasked    String                         @map("destination_masked")
+  browserBindingHash   String                         @map("browser_binding_hash")
+  codeHash             String?                        @map("code_hash")
+  status               SelfServiceContactUpdateStatus @default(DRAFT)
+  attempts             Int                            @default(0)
+  maxAttempts          Int                            @default(5) @map("max_attempts")
+  expiresAt            DateTime                       @map("expires_at") @db.Timestamptz(3)
+  retryAvailableAt     DateTime                       @map("retry_available_at") @db.Timestamptz(3)
+  verifiedAt           DateTime?                      @map("verified_at") @db.Timestamptz(3)
+  providerReference    String?                        @map("provider_reference")
+  appliedAt            DateTime?                      @map("applied_at") @db.Timestamptz(3)
+  createdAt            DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  session SelfServiceSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, createdAt])
+  @@index([status, expiresAt])
+  @@index([providerReference])
+  @@map("self_service_contact_updates")
+}
+
+model SelfServiceIdempotency {
+  id          String   @id @default(uuid()) @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  operation   String
+  key         String
+  requestHash String   @map("request_hash")
+  response    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  session SelfServiceSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, operation, key])
+  @@index([createdAt])
+  @@map("self_service_idempotency")
+}
+
+model SelfServiceAuditEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  portal      SelfServicePortal?
+  action      String
+  outcome     String
+  challengeId String?            @map("challenge_id") @db.Uuid
+  sessionId   String?            @map("session_id") @db.Uuid
+  subjectHash String?            @map("subject_hash")
+  ipHash      String?            @map("ip_hash")
+  metadata    Json?
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([action, createdAt])
+  @@index([sessionId, createdAt])
+  @@map("self_service_audit_events")
+}

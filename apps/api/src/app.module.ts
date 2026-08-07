@@ -32,6 +32,7 @@ import { ApprovalGatesModule } from "./modules/approval-gates/approval-gates.mod
 import { CommunicationsModule } from "./modules/communications/communications.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ReportsModule } from "./modules/reports/reports.module";
+import { SelfServiceModule } from "./modules/self-service/self-service.module";
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { ReportsModule } from "./modules/reports/reports.module";
     CommunicationsModule,
     DashboardModule,
     ReportsModule,
+    SelfServiceModule,
   ],
   controllers: [AppController],
   providers: [],

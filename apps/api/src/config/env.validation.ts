@@ -44,6 +44,21 @@ export const envSchema = z.object({
     .string({ required_error: "ENCRYPTION_KEY is required" })
     .min(32, "ENCRYPTION_KEY must be at least 32 characters"),
 
+  // Short, independently authenticated affiliate/company portal sessions.
+  // The upper bound prevents a configuration error from turning an OTP
+  // session into a long-lived credential.
+  SELF_SERVICE_SESSION_TTL_MINUTES: z.coerce.number().int().positive().max(120).default(30),
+  SELF_SERVICE_OTP_TTL_MINUTES: z.coerce.number().int().positive().max(30).default(10),
+  SELF_SERVICE_OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
+  SELF_SERVICE_OTP_COOLDOWN_SECONDS: z.coerce.number().int().min(30).max(600).default(60),
+  EXTERNAL_CORE_PROVIDER: z.enum(["not_configured", "http"]).default("not_configured"),
+  EXTERNAL_CORE_BASE_URL: z.string().default(""),
+  EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
+  EXTERNAL_CORE_CLIENT_SECRET: z.string().default(""),
+  EXTERNAL_CORE_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  EXTERNAL_CORE_WEBHOOK_SECRET: z.string().default(""),
+  SELF_SERVICE_MESSAGE_PROVIDER: z.enum(["not_configured"]).default("not_configured"),
+
   // US-022: "sandbox" and "production" both route through the real HTTP
   // transport (against BOLD_BASE_URL, which Bold itself doesn't split by
   // environment) and both require BOLD_IDENTITY_KEY to be configured -
@@ -195,6 +210,23 @@ export const envSchema = z.object({
   // reports (US-064): background-job CSV exports (>1000 rows), same
   // rationale as the other STORAGE_DIR vars.
   REPORTS_STORAGE_DIR: z.string().default("./storage/reports"),
+}).superRefine((config, context) => {
+  if (config.EXTERNAL_CORE_PROVIDER !== "http") return;
+  const required: Array<keyof typeof config> = [
+    "EXTERNAL_CORE_BASE_URL",
+    "EXTERNAL_CORE_CLIENT_ID",
+    "EXTERNAL_CORE_CLIENT_SECRET",
+    "EXTERNAL_CORE_WEBHOOK_SECRET",
+  ];
+  for (const field of required) {
+    if (!config[field]) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required when EXTERNAL_CORE_PROVIDER=http` });
+    }
+  }
+  if (config.EXTERNAL_CORE_BASE_URL) {
+    const parsed = z.string().url().safeParse(config.EXTERNAL_CORE_BASE_URL);
+    if (!parsed.success) context.addIssue({ code: z.ZodIssueCode.custom, path: ["EXTERNAL_CORE_BASE_URL"], message: "EXTERNAL_CORE_BASE_URL must be a valid URL" });
+  }
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
