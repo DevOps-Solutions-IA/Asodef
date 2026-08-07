@@ -21,6 +21,10 @@ export interface ApiRequestOptions {
    * "do not enter infinite refresh loops").
    */
   skipAuthRefresh?: boolean;
+  /** Optional response observer for protocol metadata such as rotated CSRF
+   * tokens. It runs before the body is consumed and must not mutate the
+   * response. */
+  onResponse?: (response: Response) => void;
 }
 
 /** Returns true if a refresh just succeeded (safe to retry the original
@@ -87,6 +91,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
     throw new ApiError({ kind: "network", status: null, envelope: null, requestId, cause });
   }
+
+  options.onResponse?.(response);
 
   if (response.status === 204) {
     return undefined as T;

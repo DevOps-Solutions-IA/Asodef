@@ -106,19 +106,19 @@ describe("router", () => {
   it("renders the complete public company journey at /empresas", async () => {
     renderAtPath("/empresas");
     expect(await screen.findByRole("heading", { level: 1, name: "Empresas" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /portal empresarial/i })).toHaveAttribute("href", "/empresa");
+    expect(screen.getAllByRole("link", { name: /acceso de empresas/i })[0]).toHaveAttribute("href", "/empresa/acceso");
   });
 
   it("renders AuthLayout with the common public menu for /iniciar-sesion", async () => {
     renderAtPath("/iniciar-sesion");
 
-    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceso administrativo" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "ASODEF S.A.S." })).toBeInTheDocument();
   });
 
-  it.each(["/", "/iniciar-sesion", "/pagos"])("uses the same principal menu on non-legal public route %s", async (path) => {
+  it.each(["/", "/iniciar-sesion", "/pagos", "/mi-cuenta/acceso", "/empresa/acceso"])("uses the same principal menu on non-legal public route %s", async (path) => {
     renderAtPath(path);
 
     const nav = await screen.findByRole("navigation", { name: "Principal" });
@@ -126,7 +126,7 @@ describe("router", () => {
       expect(nav).toHaveTextContent(label);
     }
     const actions = screen.getByLabelText("Acciones de navegación");
-    expect(actions).toHaveTextContent(/Pagar.*Ingresar.*Recibir orientación/);
+    expect(actions).toHaveTextContent(/Pagar.*Recibir orientación/);
   });
 
   it("keeps the frozen institutional header on /legal", async () => {
@@ -137,27 +137,27 @@ describe("router", () => {
     expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
   });
 
-  it("redirects an already-authenticated visitor away from /iniciar-sesion (GuestOnlyRoute)", async () => {
+  it("does not route a legacy external administrative session into self-service", async () => {
     renderAtPath("/iniciar-sesion", buildCurrentUser({ roles: ["CUSTOMER"] }));
 
-    expect(await screen.findByRole("heading", { name: "Mi cuenta" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Iniciar sesión" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/Beneficios, pagos y solicitudes/i);
+    expect(screen.queryByRole("heading", { name: "Acceso administrativo" })).not.toBeInTheDocument();
   });
 
-  it("redirects an unauthenticated visitor away from a protected /mi-cuenta/* route", async () => {
-    renderAtPath("/mi-cuenta/perfil");
+  it("redirects an unauthenticated visitor to the affiliate identifier gateway", async () => {
+    renderAtPath("/mi-cuenta/beneficiarios");
 
-    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceso de afiliados" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Número de titular")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
   });
 
-  it("renders the lazily-loaded AccountLayout with its own nav for an authenticated /mi-cuenta/* route", async () => {
-    renderAtPath("/mi-cuenta/perfil", buildCurrentUser({ roles: ["CUSTOMER"] }));
+  it("keeps the company portal behind its independent NIT verification session", async () => {
+    renderAtPath("/empresa/reportes", buildCurrentUser({ roles: ["COMPANY_PARTNER"] }));
 
-    expect(await screen.findByRole("heading", { name: "Perfil" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Cuenta" })).toBeInTheDocument();
-    // and the sibling nav item to the active one is also present, proving
-    // it's the full AccountLayout shell, not just the bare page
-    expect(screen.getByRole("link", { name: "Documentos" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceso de empresas" })).toBeInTheDocument();
+    expect(screen.getByLabelText("NIT de la empresa")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
   });
 
   it("renders the lazily-loaded AdminLayout with its distinct nav for /admin when the user holds ADMIN", async () => {
@@ -191,7 +191,7 @@ describe("router", () => {
   it("Negative case (AC): an unauthenticated request to /admin/pagos redirects to /iniciar-sesion and returns there after login", async () => {
     renderAtPath("/admin/pagos");
 
-    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceso administrativo" })).toBeInTheDocument();
   });
 
   it("Negative case (AC), full login round-trip: after logging in from the preserved return location, actually lands back on /admin/pagos (not the default landing page)", async () => {
@@ -210,7 +210,7 @@ describe("router", () => {
     const testRouter = createMemoryRouter(routeConfig, { initialEntries: ["/admin/pagos"], future: routerFutureConfig });
     renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
 
-    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), financeUser.email);
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
@@ -330,11 +330,11 @@ describe("router", () => {
     expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
   });
 
-  it("does not match the catch-all for a route that belongs to a different layout group", async () => {
+  it("does not let the public catch-all shadow a self-service access route", async () => {
     // regression guard: PublicLayout's "*" child must not shadow more
     // specific routes defined in later top-level route groups
-    renderAtPath("/empresa/dashboard", buildCurrentUser({ roles: ["COMPANY_PARTNER"] }));
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    renderAtPath("/empresa/acceso");
+    expect(await screen.findByRole("heading", { name: "Acceso de empresas" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Página no encontrada")).not.toBeInTheDocument());
   });
 });

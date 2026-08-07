@@ -19,6 +19,7 @@ import { LegalDocumentPage } from "../pages/legal/LegalDocumentPage";
 import { PqrCasePage as LegacyPqrCasePage } from "../pages/legal/LegacyPqrCasePage";
 import { DataSubjectRequestPage as LegacyDataSubjectRequestPage } from "../pages/legal/LegacyDataSubjectRequestPage";
 import { PreserveRedirect } from "./PreserveRedirect";
+import { affiliateSelfServiceRoute, companySelfServiceRoute } from "./self-service-routes";
 
 // US-048: solicitudes-de-datos is a real submission workflow, not a
 // LegalDocument - it never gets the generic LegalDocumentPage treatment
@@ -36,9 +37,6 @@ const SPECIAL_CASED_LEGAL_SLUGS = new Set([DATA_SUBJECT_REQUEST_SLUG, PQR_SLUG])
 // unnecessary eager loading of admin or payment modules". Public/Auth stay
 // eager: Public is the landing experience itself, and Auth is tiny.
 const PaymentLayout = lazy(() => import("../layouts/PaymentLayout").then((m) => ({ default: m.PaymentLayout })));
-const AccountLayout = lazy(() => import("../layouts/AccountLayout").then((m) => ({ default: m.AccountLayout })));
-const MyAccountPage = lazy(() => import("../pages/account/MyAccountPage").then((m) => ({ default: m.MyAccountPage })));
-const CompanyLayout = lazy(() => import("../layouts/CompanyLayout").then((m) => ({ default: m.CompanyLayout })));
 const AdminLayout = lazy(() => import("../layouts/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LegalLayout = lazy(() => import("../layouts/LegalLayout").then((m) => ({ default: m.LegalLayout })));
 
@@ -152,54 +150,8 @@ export const routeConfig: RouteObject[] = [
       { path: "pagos/comprobante/:publicReference", element: <ReceiptViewPage /> },
     ],
   },
-  {
-    // Authentication is required for every /mi-cuenta/* route - no role
-    // restriction beyond "logged in" (US-010 recommended role routing:
-    // CUSTOMER/AFFILIATE land here, but any authenticated user may view
-    // their own account area).
-    element: <AuthenticatedRoute />,
-    errorElement: <RouteErrorBoundary />,
-    children: [
-      {
-        path: "mi-cuenta",
-        element: <AccountLayout />,
-        children: [
-          { index: true, element: <MyAccountPage /> },
-          { path: "perfil", element: <RoutePlaceholder title="Perfil" /> },
-          { path: "pagos", element: <RoutePlaceholder title="Mis pagos" /> },
-          { path: "documentos", element: <RoutePlaceholder title="Documentos" /> },
-          { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-          { path: "notificaciones", element: <RoutePlaceholder title="Notificaciones" /> },
-        ],
-      },
-    ],
-  },
-  {
-    element: <AuthenticatedRoute />,
-    errorElement: <RouteErrorBoundary />,
-    children: [
-      {
-        // Only COMPANY_PARTNER may reach /empresa/* - an authenticated
-        // user of any other role sees ForbiddenPage in place, never a
-        // silent redirect that would hide the route's existence
-        // inconsistently with how the backend responds (US-010 section 8).
-        element: <RoleRoute roles={["COMPANY_PARTNER"]} />,
-        children: [
-          {
-            path: "empresa",
-            element: <CompanyLayout />,
-            children: [
-              { index: true, element: <RoutePlaceholder title="Panel de empresa" /> },
-              { path: "dashboard", element: <RoutePlaceholder title="Dashboard" /> },
-              { path: "beneficios", element: <RoutePlaceholder title="Beneficios" /> },
-              { path: "contratos", element: <RoutePlaceholder title="Contratos" /> },
-              { path: "reportes", element: <RoutePlaceholder title="Reportes" /> },
-            ],
-          },
-        ],
-      },
-    ],
-  },
+  affiliateSelfServiceRoute,
+  companySelfServiceRoute,
   {
     element: <AuthenticatedRoute />,
     errorElement: <RouteErrorBoundary />,
