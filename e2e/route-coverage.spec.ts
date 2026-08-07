@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { disconnectTestActorsClient, ensureTestActor, TEST_ACTOR_PASSWORD } from "./support/test-actors";
 
 const ADMIN_EMAIL = "e2e.super-admin.routes@example.com";
-const COMPANY_EMAIL = "e2e.company.routes@example.com";
 
 async function login(page: Page, email: string) {
   await page.goto("/iniciar-sesion");
@@ -15,7 +14,6 @@ async function login(page: Page, email: string) {
 test.describe("cobertura de rutas solicitadas", () => {
   test.beforeAll(async () => {
     await ensureTestActor(ADMIN_EMAIL, "E2E Route Super Admin", "SUPER_ADMIN");
-    await ensureTestActor(COMPANY_EMAIL, "E2E Route Company", "COMPANY_PARTNER");
   });
 
   test.afterAll(async () => disconnectTestActorsClient());
@@ -29,13 +27,31 @@ test.describe("cobertura de rutas solicitadas", () => {
     await expect(page).toHaveURL(/\/pagos$/);
   });
 
-  test("portal de cuenta y portal empresarial respetan autenticación y rol", async ({ page }) => {
-    await login(page, COMPANY_EMAIL);
+  test("los portales usan sesiones de autoservicio independientes", async ({ page }) => {
     await page.goto("/mi-cuenta");
-    await expect(page.getByRole("heading", { name: "Mi cuenta" })).toBeVisible();
+    await expect(page).toHaveURL(/\/mi-cuenta\/acceso$/);
+    await expect(page.getByRole("heading", { name: "Acceso de afiliados" })).toBeVisible();
+    await expect(page.getByLabel("Número de titular")).toBeVisible();
+    await expect(page.getByLabel(/contraseña/i)).toHaveCount(0);
     await page.goto("/empresa");
-    await expect(page.getByRole("heading", { name: "Panel de empresa" })).toBeVisible();
-    await expect(page.getByText("No tienes permisos para ver esta página")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/empresa\/acceso$/);
+    await expect(page.getByRole("heading", { name: "Acceso de empresas" })).toBeVisible();
+    await expect(page.getByLabel("NIT de la empresa")).toBeVisible();
+    await expect(page.getByLabel(/contraseña/i)).toHaveCount(0);
+  });
+
+  test("el proveedor no configurado falla de forma controlada y nunca simula una sesión", async ({ page }) => {
+    await page.goto("/mi-cuenta/acceso");
+    await page.getByLabel("Número de titular").fill("TITULAR-1234");
+    await page.getByRole("button", { name: "Consultar opciones de verificación" }).click();
+    await expect(page.getByText("El servicio externo de autoservicio no está configurado.")).toBeVisible();
+    await expect(page).toHaveURL(/\/mi-cuenta\/acceso$/);
+
+    await page.goto("/empresa/acceso");
+    await page.getByLabel("NIT de la empresa").fill("900123456-7");
+    await page.getByRole("button", { name: "Consultar opciones de verificación" }).click();
+    await expect(page.getByText("El servicio externo de autoservicio no está configurado.")).toBeVisible();
+    await expect(page).toHaveURL(/\/empresa\/acceso$/);
   });
 
   test("SUPER_ADMIN accede a cada área administrativa requerida", async ({ page }) => {

@@ -9,7 +9,7 @@ test.describe("Admin platform access control (e2e)", () => {
   test("an unauthenticated visit to /admin redirects to /iniciar-sesion", async ({ page }) => {
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/iniciar-sesion/);
-    await expect(page.getByRole("heading", { name: "Iniciar sesión" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Acceso administrativo" })).toBeVisible();
   });
 
   test("Negative case (AC): a CUSTOMER_SERVICE user navigating directly to /admin/usuarios sees the unauthorized state, not the user list", async ({

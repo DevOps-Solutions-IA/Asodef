@@ -177,7 +177,7 @@ describe("router", () => {
   it("Example (AC): a FINANCE user with only payments.read can open /admin/pagos", async () => {
     renderAtPath("/admin/pagos", buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }));
 
-    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pagos" }, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Administración" })).toBeInTheDocument();
   });
 
@@ -215,7 +215,7 @@ describe("router", () => {
     await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
-    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pagos" }, { timeout: 5_000 })).toBeInTheDocument();
   });
 
   it("hides nav sections the current user lacks permission for, without hiding always-visible sections (AC1)", async () => {

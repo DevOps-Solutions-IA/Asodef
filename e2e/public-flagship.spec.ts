@@ -30,6 +30,8 @@ const routes = [
   "/legal/politica-de-privacidad",
   "/login",
   "/iniciar-sesion",
+  "/mi-cuenta/acceso",
+  "/empresa/acceso",
   "/ruta-publica-no-existente",
 ];
 
@@ -46,7 +48,7 @@ const viewports = [
 ];
 
 const isExpectedAnonymousSessionResponse = (url: string, status: number) =>
-  status === 401 && (url.includes("/auth/me") || url.includes("/auth/refresh"));
+  status === 401 && (url.includes("/auth/me") || url.includes("/auth/refresh") || url.includes("/self-service/affiliate/session") || url.includes("/self-service/company/session"));
 
 test.describe("flagship public experience", () => {
   test("mobile home and drawer expose one deliberate action hierarchy", async ({ page }) => {
@@ -60,7 +62,7 @@ test.describe("flagship public experience", () => {
 
     const quickActions = page.getByRole("navigation", { name: "Acciones rápidas" });
     await expect(quickActions.getByRole("link")).toHaveCount(5);
-    await expect(quickActions.getByRole("link")).toHaveText(["Pagar", "Radicar PQR", "Consultar caso", "Solicitudes de datos", "Ingresar"]);
+    await expect(quickActions.getByRole("link")).toHaveText(["Pagar", "Radicar PQR", "Consultar caso", "Solicitudes de datos", "Mi cuenta"]);
     await expect(quickActions.getByRole("link", { name: /Consultar beneficios|Recibir orientación/ })).toHaveCount(0);
 
     const openMenu = page.getByRole("button", { name: "Abrir menú de navegación" });
@@ -72,8 +74,11 @@ test.describe("flagship public experience", () => {
     await expect(resources.getByRole("link", { name: "PQR" })).toBeVisible();
     await expect(resources.getByRole("link", { name: "Solicitudes de datos" })).toBeVisible();
     await expect(resources.getByRole("link", { name: "Contacto" })).toHaveCount(0);
+    await expect(drawer.getByRole("link", { name: "Mi cuenta" })).toBeVisible();
+    await expect(drawer.getByRole("link", { name: "Acceso de empresas" })).toBeVisible();
+    await expect(drawer.getByRole("link", { name: "Acceso administrativo" })).toBeVisible();
     const drawerActions = drawer.locator('[aria-label="Acciones principales"] a');
-    await expect(drawerActions).toHaveText(["Pagar", "Ingresar", "Recibir orientación"]);
+    await expect(drawerActions).toHaveText(["Pagar", "Recibir orientación"]);
     await drawer.getByRole("button", { name: "Cerrar" }).click();
     await expect(openMenu).toBeFocused();
   });
@@ -92,8 +97,8 @@ test.describe("flagship public experience", () => {
 
     await page.goto("/beneficios/plan-exequial-familiar");
     const heroActions = page.locator("main section").first().getByRole("link");
-    await expect(heroActions.first()).toHaveText("Encontrar mi ruta");
-    await expect(heroActions.nth(1)).toHaveText("Volver al portafolio");
+    await expect(heroActions.first()).toHaveText("Consultar mi plan");
+    await expect(heroActions.nth(1)).toHaveText("Solicitar orientación");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   });
 
@@ -130,7 +135,10 @@ test.describe("flagship public experience", () => {
         await page.goto(route);
         await expect(page.locator("h1").first()).toBeVisible();
         if (route.startsWith("/legal")) {
-          await expect(page.getByText("Información institucional")).toBeVisible();
+          // The frozen LegalLayout intentionally hides its institutional badge
+          // below the `sm` breakpoint; the always-present return link is the
+          // stable protected-header contract at every resolution.
+          await expect(page.getByRole("link", { name: "Volver al sitio" })).toBeVisible();
         } else if (viewport.width >= 1024) {
           await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
         } else {

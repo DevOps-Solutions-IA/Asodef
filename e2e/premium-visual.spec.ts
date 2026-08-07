@@ -53,7 +53,7 @@ test.describe("premium enterprise visual system", () => {
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-payments.png`), fullPage: true });
 
       await login(page);
-      for (const route of ["/admin", "/admin/crm/empresas", "/admin/legal", "/mi-cuenta"] as const) {
+      for (const route of ["/admin", "/admin/crm/empresas", "/admin/legal"] as const) {
         await page.goto(route);
         await expect(page.locator("main#main-content")).toBeVisible();
         await expectStableViewport(page);
