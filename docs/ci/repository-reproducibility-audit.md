@@ -149,7 +149,7 @@ enmascarados para cada variable S.
 | `CONTRACT_DOWNLOAD_URL_TTL_MINUTES` | contratos | positivo, D 15 | default | N |
 | `VITE_API_URL`, `VITE_APP_URL` | build web | URL pública del runtime | localhost/localhost/4173+3100 | N |
 | `PLAYWRIGHT_BASE_URL` | E2E | URL del preview | 5180 o 4173 | N |
-| `COMPOSE_PROJECT_NAME`, `CI_POSTGRES_DB`, `CI_POSTGRES_USER`, `CI_POSTGRES_PASSWORD`, `CI_POSTGRES_PORT`, `CI_REDIS_PORT` | orquestación CI | identidad/puertos aislados; password R | generado | password S; resto N |
+| `COMPOSE_PROJECT_NAME`, `CI_POSTGRES_DB`, `CI_POSTGRES_USER`, `CI_POSTGRES_PASSWORD`, `CI_POSTGRES_PORT`, `CI_REDIS_PORT`, `CI_API_PORT`, `CI_WEB_PORT` | orquestación CI | identidad/puertos loopback aislados y distintos; password R | generado | password S; resto N |
 
 Ningún secreto usa prefijo `VITE_`; por tanto no se incorpora un secreto al
 bundle del navegador. `.env.example` contiene únicamente plantillas de

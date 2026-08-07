@@ -6,8 +6,6 @@ IFS=$'\n\t'
 readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly compose_file="$repository_root/.github/compose.ci.yml"
 readonly purpose_label="prisma-clean-install-check"
-readonly api_url="http://127.0.0.1:3100"
-readonly web_url="http://127.0.0.1:4173"
 artifacts_dir=""
 
 cd "$repository_root"
@@ -30,15 +28,36 @@ require_command setsid
 
 [[ -f "$compose_file" ]] || fail "isolated Compose definition is missing"
 
+# Reserve four distinct loopback ports in one process, then release them for
+# the services. Doing this as a group prevents the kernel from returning the
+# same ephemeral port four times and avoids collisions with a developer stack.
+mapfile -t allocated_ports < <(node <<'NODE'
+const net = require('node:net');
+const servers = Array.from({ length: 4 }, () => net.createServer());
+Promise.all(servers.map((server) => new Promise((resolve, reject) => {
+  server.once('error', reject);
+  server.listen({ host: '127.0.0.1', port: 0 }, () => resolve(server.address().port));
+}))).then((ports) => {
+  for (const port of ports) process.stdout.write(`${port}\n`);
+  return Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
+}).catch(() => process.exit(1));
+NODE
+)
+[[ "${#allocated_ports[@]}" == "4" ]] || fail "could not allocate isolated loopback ports"
+
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-asodef-ci-local-$$}"
 export CI_POSTGRES_DB="${CI_POSTGRES_DB:-asodef_ci_local}"
 export CI_POSTGRES_USER="${CI_POSTGRES_USER:-asodef_ci}"
-export CI_POSTGRES_PORT="${CI_POSTGRES_PORT:-55433}"
-export CI_REDIS_PORT="${CI_REDIS_PORT:-56379}"
+export CI_POSTGRES_PORT="${CI_POSTGRES_PORT:-${allocated_ports[0]}}"
+export CI_REDIS_PORT="${CI_REDIS_PORT:-${allocated_ports[1]}}"
+export CI_API_PORT="${CI_API_PORT:-${allocated_ports[2]}}"
+export CI_WEB_PORT="${CI_WEB_PORT:-${allocated_ports[3]}}"
 export CI_POSTGRES_PASSWORD="$(openssl rand -hex 32)"
 export DATABASE_URL="postgresql://${CI_POSTGRES_USER}:${CI_POSTGRES_PASSWORD}@127.0.0.1:${CI_POSTGRES_PORT}/${CI_POSTGRES_DB}?schema=public"
 export REDIS_URL="redis://127.0.0.1:${CI_REDIS_PORT}"
-export API_PORT="3100"
+export API_PORT="$CI_API_PORT"
+readonly api_url="http://127.0.0.1:${CI_API_PORT}"
+readonly web_url="http://127.0.0.1:${CI_WEB_PORT}"
 export VITE_API_URL="$api_url"
 export VITE_APP_URL="$web_url"
 export PUBLIC_API_URL="$api_url"
@@ -52,13 +71,15 @@ export PASSWORD_RESET_TOKEN_SECRET="$(openssl rand -hex 32)"
 export CONTRACT_DOWNLOAD_TOKEN_SECRET="$(openssl rand -hex 32)"
 
 [[ "$COMPOSE_PROJECT_NAME" =~ ^asodef-ci-[a-z0-9][a-z0-9_-]{7,}$ ]] || fail "COMPOSE_PROJECT_NAME must identify an isolated asodef-ci-* project"
-[[ "$CI_POSTGRES_PORT" =~ ^[0-9]+$ && "$CI_REDIS_PORT" =~ ^[0-9]+$ ]] || fail "isolated service ports must be numeric"
+[[ "$CI_POSTGRES_PORT" =~ ^[0-9]+$ && "$CI_REDIS_PORT" =~ ^[0-9]+$ && "$CI_API_PORT" =~ ^[0-9]+$ && "$CI_WEB_PORT" =~ ^[0-9]+$ ]] || fail "isolated service ports must be numeric"
 (( CI_POSTGRES_PORT >= 1024 && CI_POSTGRES_PORT <= 65535 )) || fail "CI_POSTGRES_PORT is outside the allowed range"
 (( CI_REDIS_PORT >= 1024 && CI_REDIS_PORT <= 65535 )) || fail "CI_REDIS_PORT is outside the allowed range"
+(( CI_API_PORT >= 1024 && CI_API_PORT <= 65535 )) || fail "CI_API_PORT is outside the allowed range"
+(( CI_WEB_PORT >= 1024 && CI_WEB_PORT <= 65535 )) || fail "CI_WEB_PORT is outside the allowed range"
 [[ "$CI_POSTGRES_DB" =~ ^asodef_ci_[a-z0-9_]+$ ]] || fail "CI_POSTGRES_DB must identify an isolated asodef_ci_* database"
 [[ "$CI_POSTGRES_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || fail "CI_POSTGRES_USER contains unsupported characters"
 [[ "$CI_POSTGRES_PORT" != "5432" && "$CI_POSTGRES_PORT" != "5433" && "$CI_REDIS_PORT" != "6379" ]] || fail "developer service ports are forbidden"
-[[ "$CI_POSTGRES_PORT" != "$CI_REDIS_PORT" ]] || fail "isolated service ports must be distinct"
+[[ "$(printf '%s\n' "$CI_POSTGRES_PORT" "$CI_REDIS_PORT" "$CI_API_PORT" "$CI_WEB_PORT" | sort -u | wc -l)" == "4" ]] || fail "all isolated service ports must be distinct"
 [[ "$CI_POSTGRES_PASSWORD" != "asodef_dev_password" ]] || fail "the developer database password is forbidden"
 
 compose() {
@@ -133,7 +154,7 @@ NODE
 port_is_available "$CI_POSTGRES_PORT" || fail "isolated PostgreSQL port is already in use"
 port_is_available "$CI_REDIS_PORT" || fail "isolated Redis port is already in use"
 port_is_available "$API_PORT" || fail "API verification port is already in use"
-port_is_available "4173" || fail "frontend verification port is already in use"
+port_is_available "$CI_WEB_PORT" || fail "frontend verification port is already in use"
 
 wait_for_services() {
   local attempt postgres_id redis_id postgres_health redis_health
@@ -190,7 +211,7 @@ setsid node apps/api/dist/main.js >"$artifacts_dir/api.log" 2>&1 &
 api_pid=$!
 wait_for_url "compiled API" "$api_url/api/v1/health" "$artifacts_dir/api.log"
 
-setsid pnpm --dir apps/web exec vite preview --host 127.0.0.1 --port 4173 --strictPort >"$artifacts_dir/web.log" 2>&1 &
+setsid pnpm --dir apps/web exec vite preview --host 127.0.0.1 --port "$CI_WEB_PORT" --strictPort >"$artifacts_dir/web.log" 2>&1 &
 web_pid=$!
 wait_for_url "frontend preview" "$web_url/" "$artifacts_dir/web.log"
 
