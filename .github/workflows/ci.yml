@@ -4,9 +4,7 @@ name: CI
 # workflow fails (non-zero exit) the moment any step fails, and nothing
 # here uses --no-verify or a skip flag. Dev-only placeholder secrets are
 # generated fresh per run (openssl rand) - never a real credential, and
-# never printed (GitHub Actions masks any string set via GITHUB_ENV/
-# step outputs that matches a value added through `::add-mask::`, but
-# these are also just meaningless-outside-this-run local dev values).
+# explicitly masked before it is exported to subsequent steps.
 on:
   push:
     branches: [main]
@@ -16,30 +14,37 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "20"
   PNPM_VERSION: "10.16.0"
-  # Existing docker-compose.yml's own published ports (US-021's own
-  # local dev stack) - reused as-is, never re-mapped, since a CI runner
-  # is an isolated, single-tenant environment with no "shared machine"
-  # port-conflict concern.
-  DATABASE_URL: "postgresql://asodef:asodef_dev_password@localhost:5433/asodef?schema=public"
-  REDIS_URL: "redis://localhost:6379"
+  COMPOSE_PROJECT_NAME: "asodef-ci-github-${{ github.run_id }}-${{ github.run_attempt }}"
+  CI_POSTGRES_DB: "asodef_ci_github"
+  CI_POSTGRES_USER: "asodef_ci"
+  CI_POSTGRES_PORT: "55433"
+  CI_REDIS_PORT: "56379"
+  REDIS_URL: "redis://127.0.0.1:56379"
   API_PORT: "3100"
   BOLD_MODE: "mock"
   NODE_ENV: "development"
   VITE_API_URL: "http://localhost:3100"
   VITE_APP_URL: "http://localhost:4173"
+  PUBLIC_API_URL: "http://localhost:3100"
+  PUBLIC_APP_URL: "http://localhost:4173"
   CORS_ORIGIN: "http://localhost:4173"
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -60,27 +65,48 @@ jobs:
         # this single ephemeral CI run. Exported via GITHUB_ENV so every
         # later step (test, build, the e2e API process) sees them.
         run: |
-          {
-            echo "JWT_SECRET=$(openssl rand -hex 24)"
-            echo "JWT_REFRESH_SECRET=$(openssl rand -hex 24)"
-            echo "ENCRYPTION_KEY=$(openssl rand -hex 24)"
-            echo "PASSWORD_RESET_TOKEN_SECRET=$(openssl rand -hex 24)"
-          } >> "$GITHUB_ENV"
+          set -Eeuo pipefail
 
-      - name: Lint
-        run: pnpm lint
+          generate_masked_secret() {
+            local name="$1"
+            local value
+            value="$(openssl rand -hex 32)"
+            printf '::add-mask::%s\n' "$value"
+            printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+          }
 
-      - name: Typecheck
-        run: pnpm typecheck
+          generate_masked_secret JWT_SECRET
+          generate_masked_secret JWT_REFRESH_SECRET
+          generate_masked_secret ENCRYPTION_KEY
+          generate_masked_secret PASSWORD_RESET_TOKEN_SECRET
+          generate_masked_secret CONTRACT_DOWNLOAD_TOKEN_SECRET
 
-      - name: Start docker-compose service stack (Postgres + Redis)
-        run: docker compose up -d
+          postgres_password="$(openssl rand -hex 32)"
+          database_url="postgresql://${CI_POSTGRES_USER}:${postgres_password}@127.0.0.1:${CI_POSTGRES_PORT}/${CI_POSTGRES_DB}?schema=public"
+          printf '::add-mask::%s\n' "$postgres_password"
+          printf '::add-mask::%s\n' "$database_url"
+          printf 'CI_POSTGRES_PASSWORD=%s\n' "$postgres_password" >> "$GITHUB_ENV"
+          printf 'DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
 
-      - name: Wait for Postgres and Redis to report healthy
+      - name: Prepare generated clients
+        run: pnpm prepare:generated
+
+      - name: Start isolated clean-install services
+        run: >-
+          docker compose
+          --project-name "$COMPOSE_PROJECT_NAME"
+          --file .github/compose.ci.yml
+          up -d postgres redis
+
+      - name: Wait for isolated clean-install services
         run: |
+          set -Eeuo pipefail
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file .github/compose.ci.yml)
           for i in $(seq 1 30); do
-            pg_status=$(docker inspect --format='{{.State.Health.Status}}' asodef-postgres-1 2>/dev/null || echo "starting")
-            redis_status=$(docker inspect --format='{{.State.Health.Status}}' asodef-redis-1 2>/dev/null || echo "starting")
+            postgres_id="$("${compose[@]}" ps --quiet postgres)"
+            redis_id="$("${compose[@]}" ps --quiet redis)"
+            pg_status="$(docker inspect --format='{{.State.Health.Status}}' "$postgres_id" 2>/dev/null || echo "starting")"
+            redis_status="$(docker inspect --format='{{.State.Health.Status}}' "$redis_id" 2>/dev/null || echo "starting")"
             if [ "$pg_status" = "healthy" ] && [ "$redis_status" = "healthy" ]; then
               echo "Postgres and Redis are healthy."
               exit 0
@@ -88,20 +114,55 @@ jobs:
             sleep 2
           done
           echo "::error::Postgres/Redis did not become healthy in time (postgres=$pg_status, redis=$redis_status)"
-          docker compose logs
+          "${compose[@]}" logs --no-color postgres redis
           exit 1
 
-      - name: Apply migrations
+      - name: Verify clean migrations and repeatable seeds
+        run: scripts/ci-database-check.sh
+
+      - name: Start fresh isolated runtime services
+        run: >-
+          docker compose
+          --project-name "$COMPOSE_PROJECT_NAME"
+          --file .github/compose.ci.yml
+          up -d postgres redis
+
+      - name: Wait for isolated runtime services
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file .github/compose.ci.yml)
+          for i in $(seq 1 30); do
+            postgres_id="$("${compose[@]}" ps --quiet postgres)"
+            redis_id="$("${compose[@]}" ps --quiet redis)"
+            pg_status="$(docker inspect --format='{{.State.Health.Status}}' "$postgres_id" 2>/dev/null || echo "starting")"
+            redis_status="$(docker inspect --format='{{.State.Health.Status}}' "$redis_id" 2>/dev/null || echo "starting")"
+            if [ "$pg_status" = "healthy" ] && [ "$redis_status" = "healthy" ]; then
+              echo "Postgres and Redis are healthy."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Postgres/Redis did not become healthy in time (postgres=$pg_status, redis=$redis_status)"
+          "${compose[@]}" logs --no-color postgres redis
+          exit 1
+
+      - name: Apply runtime migrations
         run: pnpm --filter api prisma:deploy
 
-      - name: Seed approved demo/RBAC/content data
+      - name: Seed runtime data
         run: pnpm --filter api prisma:seed
 
-      - name: Unit and integration tests (backend --runInBand, frontend)
-        run: pnpm test
+      - name: Verify lint, strict types, tests, and production build
+        run: pnpm ci:check
 
-      - name: Build
-        run: pnpm build
+      - name: Prepare guarded ephemeral E2E state
+        # Tests intentionally exercise legal seed restoration. E2E state is
+        # therefore prepared afterwards, through the real audited publication
+        # workflow, so no test mutation can leave a current version in DRAFT.
+        env:
+          ASODEF_E2E_PREPARE: "true"
+          NODE_ENV: development
+        run: pnpm --filter api ci:prepare-e2e
 
       - name: Start the compiled API in the background
         run: nohup node apps/api/dist/main.js > api.log 2>&1 &
@@ -121,7 +182,7 @@ jobs:
 
       - name: Start the built frontend preview in the background
         working-directory: apps/web
-        run: nohup npx vite preview --host 127.0.0.1 --port 4173 --strictPort > ../../web.log 2>&1 &
+        run: nohup pnpm exec vite preview --host 127.0.0.1 --port 4173 --strictPort > ../../web.log 2>&1 &
 
       - name: Wait for the frontend preview server
         run: |
@@ -137,19 +198,22 @@ jobs:
           exit 1
 
       - name: Install Playwright's Chromium browser
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: End-to-end smoke test
         env:
           PLAYWRIGHT_BASE_URL: "http://localhost:4173"
         run: pnpm test:e2e
 
-      - name: Upload Playwright report on failure
+      - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Upload API/web logs on failure
@@ -160,8 +224,36 @@ jobs:
           path: |
             api.log
             web.log
+          if-no-files-found: ignore
           retention-days: 7
 
-      - name: Tear down the docker-compose service stack
+      - name: Capture isolated service logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            --project-name "$COMPOSE_PROJECT_NAME" \
+            --file .github/compose.ci.yml \
+            logs --no-color postgres redis > compose.log 2>&1 || true
+
+      - name: Upload isolated service logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-service-logs
+          path: compose.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Tear down only the isolated CI service stack
         if: always()
-        run: docker compose down -v
+        run: |
+          set -Eeuo pipefail
+          if [ ! -f .github/compose.ci.yml ]; then
+            echo "Isolated Compose definition is unavailable; no CI service could have started."
+            exit 0
+          fi
+          export CI_POSTGRES_PASSWORD="${CI_POSTGRES_PASSWORD:-ci-cleanup-only-postgres-password}"
+          docker compose \
+            --project-name "$COMPOSE_PROJECT_NAME" \
+            --file .github/compose.ci.yml \
+            down --volumes --remove-orphans

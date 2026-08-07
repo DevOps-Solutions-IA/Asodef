@@ -10,14 +10,46 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**"]
     },
+    "@asodef/web#build": {
+      "dependsOn": ["^build"],
+      "env": ["NODE_ENV", "VITE_API_URL", "VITE_APP_URL"],
+      "outputs": ["dist/**"]
+    },
+    "@asodef/api#build": {
+      "dependsOn": ["^build", "prisma:generate"],
+      "outputs": ["dist/**"]
+    },
     "lint": {
       "dependsOn": ["^build"]
     },
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    "@asodef/api#lint": {
+      "dependsOn": ["^build", "prisma:generate"]
+    },
+    "@asodef/api#typecheck": {
+      "dependsOn": ["^build", "prisma:generate"]
+    },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "@asodef/api#test": {
+      "dependsOn": ["^build", "prisma:generate"],
+      "cache": false,
+      "passThroughEnv": [
+        "API_PORT",
+        "BOLD_MODE",
+        "CONTRACT_DOWNLOAD_TOKEN_SECRET",
+        "CORS_ORIGIN",
+        "DATABASE_URL",
+        "ENCRYPTION_KEY",
+        "JWT_REFRESH_SECRET",
+        "JWT_SECRET",
+        "NODE_ENV",
+        "PASSWORD_RESET_TOKEN_SECRET",
+        "REDIS_URL"
+      ]
     },
     "test:e2e": {
       "dependsOn": ["build"],
