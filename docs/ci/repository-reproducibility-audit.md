@@ -43,7 +43,9 @@ de error Prisma.
 |---|---|---|---|
 | P1 | Checkout limpio no pasa typecheck | `@prisma/client` ejecuta postinstall desde el `INIT_CWD` raíz y no descubre `apps/api/prisma/schema.prisma`; deja el cliente stub con exit 0 | Dependencia explícita `prisma:generate` para cada consumidor API y paso de CI previo |
 | P1 | Workflow no reconstruía la base ni publicaba el estado legal requerido por E2E | El job reutilizaba Compose de desarrollo y un seed limpio no publica documentos | Stack efímero, 34 migraciones, tres seeds y preparación E2E guardada mediante el workflow real de publicación |
+| P1 | `prisma:seed` fallaba en Actions aunque pasaba en el workspace | El seed importa `@asodef/config` por sus exports compilados; lint/typecheck locales habían dejado `packages/config/dist`, pero el gate remoto llegaba sin ese artefacto | El comando de seed construye explícitamente su dependencia workspace y se verificó sin `dist` previo |
 | P2 | Cola durable de reportes podía quedar en `PROCESSING` y el test dependía de polling/reloj | `processExportJob` redisparaba recuperación/reintento recursivamente y el test no esperaba la operación real | Barrido único, dispatch con errores observables y harness que espera exactamente las promesas internas |
+| P2 | Formato de medianoche divergía entre Node 20 y Node 22 | `Intl` con `hour12: false` usa `24:00:00` en el ICU de Node 20 y `00:00:00` en Node 22 | `hourCycle: h23`, validado en ambos runtimes sin cambiar el instante UTC |
 | P2 | La semilla no tenía prueba independiente de idempotencia | CI ejecutaba una sola vez sobre una base no demostrablemente vacía | Verificador fail-closed: tres ejecuciones, conteos y claves naturales estables |
 | P2 | Teardown podía fallar antes de limpiar | Evaluación de variables obligatorias del Compose general | Compose mínimo aislado y cleanup limitado por project/labels |
 | P2 | Dependencias con avisos críticos/altos alcanzables | Versiones antiguas directas/transitivas | Nodemailer/Vite/Vitest actualizados y overrides estrechos; suites completas requeridas |
@@ -78,8 +80,8 @@ silenciosos de un checkout limpio.
   `SecurityEvent`, `LegalDocumentVersion`, `PaymentOrder`, `ApprovalGate`,
   `SelfServicePortal`, `SelfServiceChallengeStatus`.
 - El CLI 5.22 no expone `prisma format --check`. La comprobación no mutante
-  se realiza formateando una copia temporal y comparándola, sin tocar el
-  schema autorizado.
+  formateó una copia temporal y detectó alineación no canónica; el schema se
+  normalizó mecánicamente, se regeneró y la segunda comparación fue idéntica.
 - El verificador de base rechaza puertos/credenciales de desarrollo, exige
   una base vacía, aplica las 34 migraciones, consulta tablas, índices y
   foreign keys, y ejecuta el seed tres veces sin reset intermedio.
@@ -181,11 +183,38 @@ ocho archivos ni el catálogo, seed, versiones o relaciones de consentimiento.
 
 ## Evidencia de cierre
 
-Pendiente hasta ejecutar, para el commit final, los tres loops globales:
+Los tres loops globales se completaron:
 
-1. checkout limpio y `pnpm ci:verify`;
-2. imágenes Docker sin caché, cold start/restart y Chromium compilado dos veces;
-3. GitHub Actions del SHA exacto con todos los pasos en `success`.
+1. Dos ejecuciones consecutivas de `pnpm ci:verify` en el checkout limpio
+   `/tmp/asodef-final-clean3.qrkMMs/repo`: 34 migraciones desde cero, seed x3
+   estable, 92 suites/803 pruebas API, 82/445 web, 8/46 UI, 1/5 payments,
+   lint, TypeScript y build aprobados; Chromium 39/39 en cada ejecución.
+2. `docker compose build --no-cache api web` produjo las imágenes
+   `asodef-api` (`23659f9e…`) y `asodef-web` (`3d2a3a10…`). API/web fueron
+   recreados conservando los volúmenes locales y quedaron healthy antes y
+   después de restart; health API `ok` y frontend HTTP 200.
+3. GitHub Actions run `31143329626`, job `92757607903`, SHA de implementación
+   `9f4d2b5e005cb6d280956e4dc5d66751422be4ea`, concluyó `success` en 8m58s.
+   Todos los gates materiales —incluidos seed limpio, source gates, runtime
+   compilado y E2E— finalizaron correctamente.
 
-Los IDs, conteos finales, hashes, tamaños, commits y riesgos residuales se
-actualizan después del cierre real; no se anticipan resultados.
+Los runs `31142704730` y `31142917842` se mantuvieron como evidencia de dos
+discrepancias adicionales encontradas por el runner: dependencia oculta de
+`@asodef/config` durante seed y diferencia ICU de medianoche. Ambas fueron
+corregidas en vez de reintentar u omitir gates.
+
+El build web final contiene main `246.69 kB` (`68.0 kB` gzip), routing
+`209.04 kB` (`68.31 kB` gzip), motion `103.87 kB` (`34.76 kB` gzip), forms
+`82.39 kB` (`22.68 kB` gzip) y CSS `63.73 kB` (`12.09 kB` gzip). Solo queda
+el warning P4 del chunk vacío `vendor-react`; no afecta runtime ni carga.
+
+El Centro Legal conserva la huella concatenada
+`ec8fd836cd092570cf2708afbab6d92f7298677f575f4b304fa6f5e9a7f5d547`;
+21/21 documentos vigentes siguen publicados y sus 21 API/URLs públicas
+respondieron 200. No hubo cambio en archivos protegidos, cuerpos, slugs,
+versiones, `currentVersionId` ni relaciones de consentimiento.
+
+Riesgos residuales: avisos moderados P3 no alcanzables o que requieren una
+migración mayor separada (Nest, React Router y herramientas de desarrollo),
+y aviso de GitHub sobre el runtime interno Node 20 de acciones v4. No quedan
+hallazgos P0, P1 o P2 abiertos.

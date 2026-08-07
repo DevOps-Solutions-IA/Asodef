@@ -4448,7 +4448,7 @@
         "id": "US-158",
         "title": "CI incident reproduction and evidence",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "in_progress",
+        "status": "complete",
         "description": "Reproducir el incidente de GitHub y el contraste antes/después de Prisma en un checkout aislado.",
         "businessValue": "Distingue la causa raíz de los errores en cascada y evita correcciones especulativas.",
         "dependsOn": ["US-157"],
@@ -4459,15 +4459,15 @@
         "testingRequirements": ["Install, lint y typecheck antes/después sin caché"],
         "auditRequirements": ["SHA, run, job, comandos, conteos y causa raíz"],
         "outOfScope": ["Ocultar diagnósticos con tipos laxos"],
-        "completionStatus": "in_progress",
-        "commit": null,
-        "notes": "Run 31139538591 y reproducción limpia confirmados; corrección pendiente."
+        "completionStatus": "complete",
+        "commit": "e9ac77f",
+        "notes": "Incidente 31139538591/92746308550 reproducido en checkout limpio: 308 diagnósticos antes y 0 después de prisma:generate; evidencia y severidad documentadas."
       },
       {
         "id": "US-159",
         "title": "Prisma generation and clean-install determinism",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Garantizar que todo consumidor reciba el cliente Prisma correcto desde un checkout limpio.",
         "businessValue": "Elimina la dependencia oculta del node_modules del desarrollador.",
         "dependsOn": ["US-158"],
@@ -4478,15 +4478,15 @@
         "testingRequirements": ["Generate, validate, format-check equivalente y typecheck limpio"],
         "auditRequirements": ["Mapa productor/consumidor de artefactos"],
         "outOfScope": ["Duplicar manualmente tipos Prisma"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "88bb9ae",
+        "notes": "Generación explícita en grafo y workflow; Prisma CLI/client 5.22 alineados, schema validado y normalizado en f9e826a; checkout limpio y GitHub aprobados."
       },
       {
         "id": "US-160",
         "title": "Turbo and workspace dependency graph correction",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Expresar generación y builds internos en Turbo sin depender de artefactos obsoletos.",
         "businessValue": "Hace deterministas lint, typecheck, test y build en monorepo.",
         "dependsOn": ["US-159"],
@@ -4497,15 +4497,15 @@
         "testingRequirements": ["Turbo sin caché y dos ejecuciones consecutivas"],
         "auditRequirements": ["Grafo y decisiones documentados"],
         "outOfScope": ["Cambiar de gestor de paquetes"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "88bb9ae",
+        "notes": "Turbo declara Prisma para consumidores API, evita cachear generación/tests y separa fuentes de build; dependencia compilada del seed quedó autosuficiente en 01fee56."
       },
       {
         "id": "US-161",
         "title": "Strict TypeScript recovery",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Validar y corregir cualquier error estricto real restante después de generar Prisma.",
         "businessValue": "Conserva garantías de tipos sin confundir cascadas generadas con defectos del dominio.",
         "dependsOn": ["US-159", "US-160"],
@@ -4516,15 +4516,15 @@
         "testingRequirements": ["Typecheck por workspace y agregado"],
         "auditRequirements": ["Errores reales separados de cascadas"],
         "outOfScope": ["Debilitar tsconfig"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "88bb9ae",
+        "notes": "0 errores estrictos en raíz, API y web después de generación; los 308 originales eran 188 símbolos Prisma ausentes y 103 cascadas implicit-any, sin relajar TypeScript."
       },
       {
         "id": "US-162",
         "title": "Database migration and seed reproducibility",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Aplicar 34 migraciones desde cero y demostrar semillas idempotentes en PostgreSQL aislado.",
         "businessValue": "Garantiza reconstrucción de datos sin estado manual oculto.",
         "dependsOn": ["US-159"],
@@ -4535,15 +4535,15 @@
         "testingRequirements": ["Estado migratorio, consultas de esquema y tres seeds"],
         "auditRequirements": ["Manifest/checksums, conteos y digest"],
         "outOfScope": ["Resetear base del desarrollador"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "01fee56",
+        "notes": "34 migraciones desde base vacía, índices/FK/tablas consultados y semillas x3 estables; seed construye @asodef/config por contrato y funciona sin dist previo."
       },
       {
         "id": "US-163",
         "title": "Test and fixture isolation",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Eliminar dependencias de orden, caché, datos, Redis, reloj y handles abiertos en pruebas.",
         "businessValue": "Convierte las suites en señal confiable para cada commit.",
         "dependsOn": ["US-161", "US-162"],
@@ -4554,15 +4554,15 @@
         "testingRequirements": ["API, web, UI, payments y E2E enfocado"],
         "auditRequirements": ["Flakes y handles documentados"],
         "outOfScope": ["Reducir aserciones"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "995bb53",
+        "notes": "Cola durable sin polling/sleeps ni redispatch recursivo; fixtures legal y guided-consent restauran estado exacto (5247f30); suites terminan naturalmente y pasan consecutivamente."
       },
       {
         "id": "US-164",
         "title": "Docker and runtime parity",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Alinear imágenes, compose, migraciones, cold start, restart, health y preview compilado.",
         "businessValue": "Demuestra que el runtime no depende del host ni de artefactos locales.",
         "dependsOn": ["US-162", "US-163"],
@@ -4573,15 +4573,15 @@
         "testingRequirements": ["Docker, readiness, HTTP, shutdown y E2E"],
         "auditRequirements": ["Estado de contenedores e imágenes"],
         "outOfScope": ["Infraestructura productiva"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "88bb9ae",
+        "notes": "API/web reconstruidos sin caché, runtime local recreado sin borrar datos, Postgres/Redis/API/web healthy antes y después de restart; preview compilado y E2E aprobados."
       },
       {
         "id": "US-165",
         "title": "GitHub Actions hardening",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Corregir orden, secretos efímeros, servicios, caché, permisos, timeouts y artefactos de CI.",
         "businessValue": "Hace que GitHub ejecute el mismo contrato comprobado localmente.",
         "dependsOn": ["US-159", "US-160", "US-164"],
@@ -4592,15 +4592,15 @@
         "testingRequirements": ["Workflow exacto validado local y remotamente"],
         "auditRequirements": ["Run/job/steps finales registrados"],
         "outOfScope": ["Eliminar gates"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "6c7a90c",
+        "notes": "Workflow read-only con secretos efímeros enmascarados, stack aislado, diagnósticos redactados y teardown protegido; run 31143329626 aprobó todos los pasos."
       },
       {
         "id": "US-166",
         "title": "Security and repository hygiene",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Auditar secretos, PII, dependencias, ignores, artefactos y contrato de entorno.",
         "businessValue": "Evita publicar datos sensibles o confiar en configuración implícita.",
         "dependsOn": ["US-158"],
@@ -4611,15 +4611,15 @@
         "testingRequirements": ["Secret scan, audit de dependencias y config validation"],
         "auditRequirements": ["P0-P4 con falsos positivos diferenciados"],
         "outOfScope": ["Rotaciones sin credencial comprometida"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "feecaa0",
+        "notes": "Scan actual/histórico sin credenciales reales ni PII; env contract completo; audit 0 críticos/0 altos, avisos moderados residuales P3 no alcanzables o de migración mayor."
       },
       {
         "id": "US-167",
         "title": "Full local and remote release verification",
         "domain": "RE - Reproducibilidad y CI",
-        "status": "open",
+        "status": "complete",
         "description": "Ejecutar CI local canónico, Docker/E2E, proteger Legal y cerrar el run remoto del SHA final.",
         "businessValue": "Recupera main con evidencia independiente del workspace del desarrollador.",
         "dependsOn": ["US-158", "US-159", "US-160", "US-161", "US-162", "US-163", "US-164", "US-165", "US-166"],
@@ -4630,9 +4630,9 @@
         "testingRequirements": ["ci:verify, Docker, E2E x2 y workflow remoto"],
         "auditRequirements": ["Documento final con runs, commits y riesgos"],
         "outOfScope": ["Despliegue"],
-        "completionStatus": "open",
-        "commit": null,
-        "notes": "Pendiente de implementación."
+        "completionStatus": "complete",
+        "commit": "9f4d2b5",
+        "notes": "Dos ci:verify limpios, Docker sin caché/restart, 39 E2E x2, Legal 21/21 y hashes protegidos idénticos; GitHub run 31143329626/job 92757607903 concluyó success."
       }
   ]
 }
