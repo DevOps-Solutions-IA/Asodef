@@ -31,7 +31,7 @@ test.describe("cobertura de rutas solicitadas", () => {
     await page.goto("/mi-cuenta");
     await expect(page).toHaveURL(/\/mi-cuenta\/acceso$/);
     await expect(page.getByRole("heading", { name: "Acceso de afiliados" })).toBeVisible();
-    await expect(page.getByLabel("Número de titular")).toBeVisible();
+    await expect(page.getByLabel("Número de documento del titular")).toBeVisible();
     await expect(page.getByLabel(/contraseña/i)).toHaveCount(0);
     await page.goto("/empresa");
     await expect(page).toHaveURL(/\/empresa\/acceso$/);
@@ -42,15 +42,15 @@ test.describe("cobertura de rutas solicitadas", () => {
 
   test("el proveedor no configurado falla de forma controlada y nunca simula una sesión", async ({ page }) => {
     await page.goto("/mi-cuenta/acceso");
-    await page.getByLabel("Número de titular").fill("TITULAR-1234");
-    await page.getByRole("button", { name: "Consultar opciones de verificación" }).click();
-    await expect(page.getByText("El servicio externo de autoservicio no está configurado.")).toBeVisible();
+    await page.getByLabel("Número de documento del titular").fill("10203040");
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await expect(page.getByText("El servicio de verificación no está disponible en este momento. Intenta nuevamente más tarde.")).toBeVisible();
     await expect(page).toHaveURL(/\/mi-cuenta\/acceso$/);
 
     await page.goto("/empresa/acceso");
     await page.getByLabel("NIT de la empresa").fill("900123456-7");
-    await page.getByRole("button", { name: "Consultar opciones de verificación" }).click();
-    await expect(page.getByText("El servicio externo de autoservicio no está configurado.")).toBeVisible();
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await expect(page.getByText("El servicio de verificación no está disponible en este momento. Intenta nuevamente más tarde.")).toBeVisible();
     await expect(page).toHaveURL(/\/empresa\/acceso$/);
   });
 

@@ -25,11 +25,18 @@ describe("premium public navigation", () => {
   });
 
   it("separates affiliate, company and administrative access", async()=>{
-    const user=userEvent.setup();renderLayout();await user.click(screen.getByRole("button",{name:"Accesos"}));
+    const user=userEvent.setup();renderLayout();const trigger=screen.getByRole("button",{name:"Accesos"});await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded","true");
     const panel=document.getElementById("access-menu");expect(panel).not.toBeNull();
-    expect(within(panel!).getByRole("link",{name:/Mi cuenta/})).toHaveAttribute("href","/mi-cuenta/acceso");
-    expect(within(panel!).getByRole("link",{name:/Acceso de empresas/})).toHaveAttribute("href","/empresa/acceso");
+    expect(within(panel!).getAllByRole("link")).toHaveLength(3);
+    expect(within(panel!).getByRole("link",{name:/Afiliados/})).toHaveAttribute("href","/mi-cuenta/acceso");
+    expect(within(panel!).getByRole("link",{name:/Empresas/})).toHaveAttribute("href","/empresa/acceso");
     expect(within(panel!).getByRole("link",{name:/Acceso administrativo/})).toHaveAttribute("href","/iniciar-sesion");
+    await user.tab();
+    expect(within(panel!).getByRole("link",{name:/Afiliados/})).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded","false");
+    await waitFor(()=>expect(trigger).toHaveFocus());
   });
 
   it("opens a focused resources panel containing only PQR and data requests", async()=>{
@@ -48,8 +55,12 @@ describe("premium public navigation", () => {
     const dialog=await screen.findByRole("dialog");
     for(const group of ["Conocer ASODEF","Recursos"])expect(within(dialog).getByText(group)).toBeInTheDocument();
     expect(within(dialog).getAllByRole("button",{name:"Cerrar"})).toHaveLength(1);
-    expect(within(dialog).getByRole("link",{name:"Acceso administrativo"})).toHaveAttribute("href","/iniciar-sesion");
-    expect(within(dialog).getByRole("link",{name:"Mi cuenta"})).toHaveAttribute("href","/mi-cuenta/acceso");
+    await user.click(within(dialog).getByRole("button",{name:"Accesos"}));
+    expect(within(dialog).getByRole("link",{name:/Acceso administrativo/})).toHaveAttribute("href","/iniciar-sesion");
+    const accessPanel=within(dialog).getByRole("button",{name:"Accesos"}).getAttribute("aria-controls");
+    const accessList=document.getElementById(accessPanel!);expect(accessList).not.toBeNull();
+    expect(within(accessList!).getByRole("link",{name:/Afiliados/})).toHaveAttribute("href","/mi-cuenta/acceso");
+    expect(within(accessList!).getByRole("link",{name:/Empresas/})).toHaveAttribute("href","/empresa/acceso");
     await user.keyboard("{Escape}");await waitFor(()=>expect(screen.queryByRole("dialog")).not.toBeInTheDocument());expect(trigger).toHaveFocus();
   });
 
@@ -57,6 +68,11 @@ describe("premium public navigation", () => {
     const user=userEvent.setup();renderLayout();await user.click(screen.getByRole("button",{name:"Abrir menú de navegación"}));
     const dialog=await screen.findByRole("dialog");
     const mobileNav=within(dialog).getByRole("navigation",{name:"Principal móvil"});
+    const accessTrigger=within(mobileNav).getByRole("button",{name:"Accesos"});
+    expect(accessTrigger).toHaveClass("min-h-12");
+    expect(accessTrigger).toHaveAttribute("aria-expanded","false");
+    await user.click(accessTrigger);
+    expect(accessTrigger).toHaveAttribute("aria-expanded","true");
     expect(within(mobileNav).getAllByRole("link")).toHaveLength(9);
     expect(within(mobileNav).getByRole("link",{name:"PQR"})).toHaveClass("min-h-14");
     expect(within(mobileNav).getByRole("link",{name:"Solicitudes de datos"})).toBeInTheDocument();

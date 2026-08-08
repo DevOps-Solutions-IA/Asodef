@@ -74,13 +74,30 @@ test.describe("flagship public experience", () => {
     await expect(resources.getByRole("link", { name: "PQR" })).toBeVisible();
     await expect(resources.getByRole("link", { name: "Solicitudes de datos" })).toBeVisible();
     await expect(resources.getByRole("link", { name: "Contacto" })).toHaveCount(0);
-    await expect(drawer.getByRole("link", { name: "Mi cuenta" })).toBeVisible();
-    await expect(drawer.getByRole("link", { name: "Acceso de empresas" })).toBeVisible();
-    await expect(drawer.getByRole("link", { name: "Acceso administrativo" })).toBeVisible();
+    const accessGateway = drawer.getByRole("button", { name: "Accesos" });
+    await expect(accessGateway).toHaveAttribute("aria-expanded", "false");
+    await accessGateway.click();
+    await expect(accessGateway).toHaveAttribute("aria-expanded", "true");
+    const mobileAccessMenu = drawer.locator("#mobile-access-menu");
+    await expect(mobileAccessMenu.getByRole("link", { name: /Afiliados/ })).toBeVisible();
+    await expect(mobileAccessMenu.getByRole("link", { name: /Empresas/ })).toBeVisible();
+    await expect(mobileAccessMenu.getByRole("link", { name: /Acceso administrativo/ })).toBeVisible();
     const drawerActions = drawer.locator('[aria-label="Acciones principales"] a');
     await expect(drawerActions).toHaveText(["Pagar", "Recibir orientación"]);
     await drawer.getByRole("button", { name: "Cerrar" }).click();
     await expect(openMenu).toBeFocused();
+  });
+
+  test("desktop access gateway routes each audience to its real entry point", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    for (const [label, route] of [["Afiliados", "/mi-cuenta/acceso"], ["Empresas", "/empresa/acceso"], ["Acceso administrativo", "/iniciar-sesion"]] as const) {
+      await page.goto("/");
+      const trigger = page.getByRole("button", { name: "Accesos" });
+      await trigger.click();
+      await expect(trigger).toHaveAttribute("aria-expanded", "true");
+      await page.locator("#access-menu").getByRole("link", { name: new RegExp(label) }).click();
+      await expect(page).toHaveURL(new RegExp(`${route.replaceAll("/", "\\/")}$`));
+    }
   });
 
   test("mobile benefits keep compact filters and ordered detail actions", async ({ page }) => {

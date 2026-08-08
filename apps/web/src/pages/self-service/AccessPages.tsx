@@ -3,7 +3,7 @@ import { useAffiliateSelfService, useCompanySelfService } from "../../lib/self-s
 
 export function AffiliateAccessPage() {
   const controller = useAffiliateSelfService();
-  return <SelfServiceAccessGateway scope="affiliate" controller={controller} makeInput={(identifier, options) => ({ identifier, identifierMode: options.identifierMode, documentType: options.documentType })} />;
+  return <SelfServiceAccessGateway scope="affiliate" controller={controller} makeInput={(identifier) => ({ identifier, identifierMode: "DOCUMENT" as const, documentType: "CC" as const })} />;
 }
 
 export function CompanyAccessPage() {
