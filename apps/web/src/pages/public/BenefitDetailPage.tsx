@@ -6,6 +6,7 @@ import { BENEFITS, getBenefit } from "../../lib/public-content/benefits";
 import { Seo } from "../../lib/seo/Seo";
 import { NotFoundPage } from "../errors/NotFoundPage";
 import { PublicActionCard } from "../../components/public/PublicActionCard";
+import { ExequialPlanPage } from "./ExequialPlanPage";
 
 const legalLabels: Record<string, string> = {
   "terminos-y-condiciones": "Términos y condiciones",
@@ -22,6 +23,10 @@ export function BenefitDetailPage() {
   if (!benefit) return <NotFoundPage />;
   const relatedSlugs: readonly string[] = benefit.relatedSlugs;
   const related = BENEFITS.filter((item) => relatedSlugs.includes(item.slug));
+
+  if (benefit.slug === "plan-exequial-familiar") {
+    return <ExequialPlanPage benefit={benefit} related={related} />;
+  }
 
   return <>
     <Seo custom={{ ...benefit.seo, path: `/beneficios/${benefit.slug}` }} breadcrumbs={[{ name: "Inicio", path: "/" }, { name: "Beneficios", path: "/beneficios" }, { name: benefit.title, path: `/beneficios/${benefit.slug}` }]} service={{ name: benefit.title, description: benefit.summary }} faq={benefit.faq} />

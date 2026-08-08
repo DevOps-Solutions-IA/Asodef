@@ -71,9 +71,9 @@ export function PublicHeader() {
   return (
     <>
       <header className={`sticky top-0 z-40 border-b transition ${scrolled ? "border-brand-dark/10 bg-[#F4F5F1]/92 shadow-e2 backdrop-blur-2xl" : "border-transparent bg-bg-base/80 backdrop-blur-xl"}`}>
-        <div className="mx-auto flex max-w-7xl items-center gap-5 px-5 py-3 sm:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-7xl items-center gap-5 px-4 py-2.5 sm:px-8 sm:py-3 lg:px-12">
           <Link to="/" aria-label={`${ASODEF_COMPANY.legalName}, inicio`}>
-            <BrandLogo className="h-10 w-auto" />
+            <BrandLogo className="h-9 w-auto sm:h-10" />
           </Link>
 
           <nav aria-label="Principal" className="ml-auto hidden items-center lg:flex">
@@ -102,7 +102,7 @@ export function PublicHeader() {
             <Link to="/comenzar" className="public-button-primary !min-h-10 !px-4">Recibir orientación<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
           </div>
 
-          <IconButton ref={hamburgerRef} aria-label="Abrir menú de navegación" icon={<Menu className="h-5 w-5" />} className="ml-auto !h-12 !w-12 lg:hidden" onClick={() => setDrawerOpen(true)} />
+          <IconButton ref={hamburgerRef} aria-label="Abrir menú de navegación" icon={<Menu className="h-5 w-5" />} className="ml-auto !h-11 !w-11 sm:!h-12 sm:!w-12 lg:hidden" onClick={() => setDrawerOpen(true)} />
         </div>
       </header>
 

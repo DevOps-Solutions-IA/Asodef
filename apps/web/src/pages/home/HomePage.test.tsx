@@ -4,31 +4,29 @@ import { describe, expect, it } from "vitest";
 import { HomePage } from "./HomePage";
 
 describe("flagship homepage",()=>{
-  it("leads with concrete actions and linked service nodes",()=>{
+  it("leads with a corporate message and restrained service signals",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
-    expect(screen.getByRole("heading",{level:1})).toHaveTextContent(/beneficios, pagos y solicitudes/i);
-    expect(screen.getAllByRole("link",{name:/recibir orientación/i})[0]).toHaveAttribute("href","/comenzar");
-    const ecosystem = screen.getByRole("navigation", { name: "Accesos directos ASODEF" });
-    expect(within(ecosystem).getByRole("link", { name: /personas/i })).toHaveAttribute("href", "/soluciones/personas");
-    expect(within(ecosystem).getByRole("link", { name: /pagos/i })).toHaveAttribute("href", "/pagos");
+    expect(screen.getByRole("heading",{level:1})).toHaveTextContent(/bienestar, respaldo y atención/i);
+    expect(screen.getAllByRole("link",{name:/mi cuenta/i})[0]).toHaveAttribute("href","/mi-cuenta/acceso");
+    expect(screen.getByRole("link",{name:/conocer beneficios/i})).toHaveAttribute("href","/beneficios");
+    expect(screen.getByRole("heading", { name: /cada gestión tiene un acceso claro/i })).toBeInTheDocument();
+    expect(screen.queryByText("Servicios conectados")).not.toBeInTheDocument();
   });
-  it("offers only the five transactional mobile quick actions as real links", () => {
+  it("offers only Pagar and Mi cuenta in the mobile quick-action block", () => {
     render(<MemoryRouter><HomePage/></MemoryRouter>);
     const actions = screen.getByLabelText("Acciones rápidas", { selector: "nav" });
-    expect(within(actions).getByRole("list")).toHaveClass("grid", "grid-cols-2");
-    expect(within(actions).getAllByRole("link")).toHaveLength(5);
-    expect(within(actions).queryByRole("link", { name: /consultar beneficios|recibir orientación/i })).not.toBeInTheDocument();
+    expect(within(actions).getByRole("list")).toHaveClass("grid", "gap-3");
+    expect(within(actions).getAllByRole("link")).toHaveLength(2);
+    expect(within(actions).queryByRole("link", { name: /consultar beneficios|recibir orientación|radicar pqr|consultar caso|solicitudes de datos/i })).not.toBeInTheDocument();
     expect(within(actions).getByRole("link", { name: /^pagar$/i })).toHaveAttribute("href", "/pagos");
     expect(within(actions).getByRole("link", { name: /^pagar$/i })).toHaveClass("bg-brand-dark");
-    expect(within(actions).getByRole("link", { name: /^pagar$/i }).closest("li")).toHaveClass("col-span-2");
-    expect(within(actions).getByRole("link", { name: /radicar pqr/i })).toHaveAttribute("href", "/pqr?accion=radicar");
-    expect(within(actions).getByRole("link", { name: /consultar caso/i })).toHaveAttribute("href", "/pqr?accion=consultar");
-    expect(within(actions).getByRole("link", { name: /solicitudes de datos/i })).toHaveAttribute("href", "/solicitudes-de-datos");
     expect(within(actions).getByRole("link", { name: /mi cuenta/i })).toHaveAttribute("href", "/mi-cuenta/acceso");
   });
-  it("uses one sourced temporal figure and two qualitative indicators",()=>{
+  it("presents the verified trajectory as one compact institutional band",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
-    expect(screen.getByText("años como ASODEF S.A.S.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /más de una década construyendo relaciones de confianza/i })).toBeInTheDocument();
+    expect(screen.getByText("de trayectoria institucional")).toBeInTheDocument();
+    expect(screen.getByText("2012")).toBeInTheDocument();
     expect(screen.getByText("Cali, Colombia")).toBeInTheDocument();
     expect(screen.getByText("S.A.S.")).toBeInTheDocument();
     expect(screen.queryByText("categorías de beneficios")).not.toBeInTheDocument();
@@ -37,12 +35,11 @@ describe("flagship homepage",()=>{
     expect(screen.queryByText("8.405")).not.toBeInTheDocument();
     expect(screen.queryByText("54.692")).not.toBeInTheDocument();
   });
-  it("hides the audience chip on mobile and balances the two hero actions",()=>{
+  it("removes the old audience chip and keeps desktop hero actions out of the mobile action block",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
-    expect(screen.getByText(/Personas · afiliados · empresas · aliados/)).toHaveClass("hidden");
-    const primary=screen.getAllByRole("link",{name:/recibir orientación/i})[0];
-    expect(primary).toBeDefined();
-    expect(primary?.parentElement).toHaveClass("min-[390px]:grid-cols-2");
+    expect(screen.queryByText(/Personas · afiliados · empresas · aliados/)).not.toBeInTheDocument();
+    const primary=screen.getAllByRole("link",{name:/mi cuenta/i})[0];
+    expect(primary?.parentElement).toHaveClass("hidden", "sm:flex");
   });
   it("presents all audience paths and a substantive benefit preview",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);

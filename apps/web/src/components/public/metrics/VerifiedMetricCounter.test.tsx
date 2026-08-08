@@ -16,8 +16,8 @@ describe("verified public indicators", () => {
     expect(getVerifiedPublicIndicator("corporate-years")?.source.field).toBe("ASODEF_COMPANY.registrationDate");
   });
 
-  it("maps the temporal figure and both qualitative indicators to exact sources", () => {
-    expect(VERIFIED_PUBLIC_INDICATORS).toHaveLength(3);
+  it("maps the temporal figure and three qualitative indicators to exact sources", () => {
+    expect(VERIFIED_PUBLIC_INDICATORS).toHaveLength(4);
     expect(VERIFIED_PUBLIC_INDICATORS.filter((indicator) => indicator.kind === "numeric")).toHaveLength(1);
     for (const indicator of VERIFIED_PUBLIC_INDICATORS) {
       expect(indicator.source.path).toBe("packages/config/src/company.ts");
@@ -43,6 +43,7 @@ describe("verified public indicators", () => {
 
   it("renders qualitative indicators as text without count-up semantics", () => {
     render(<VerifiedIndicators indicators={VERIFIED_PUBLIC_INDICATORS} />);
+    expect(screen.getByText("2012")).toBeVisible();
     expect(screen.getByText("Cali, Colombia")).toBeVisible();
     expect(screen.getByText("S.A.S.")).toBeVisible();
     expect(screen.queryByText("categorías de beneficios")).not.toBeInTheDocument();

@@ -9,23 +9,27 @@ import { ReactQueryDevtoolsLazy } from "./lib/ReactQueryDevtoolsLazy";
 import { AuthProvider } from "./lib/auth/AuthProvider";
 import { CookieConsentProvider } from "./lib/cookie-consent/CookieConsentContext";
 import { CookieConsentBanner } from "./components/cookie-consent/CookieConsentBanner";
+import { AppPreloader } from "./components/public/AppPreloader";
 
 export function App() {
   const [queryClient] = useState(createQueryClient);
 
   return (
-    <AppErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <CookieConsentProvider>
-            <Suspense fallback={<RouteLoadingFallback />}>
-              <RouterProvider router={router} future={{ v7_startTransition: true }} />
-            </Suspense>
-            <CookieConsentBanner />
-          </CookieConsentProvider>
-        </AuthProvider>
-        <ReactQueryDevtoolsLazy />
-      </QueryClientProvider>
-    </AppErrorBoundary>
+    <>
+      <AppPreloader pathname={window.location.pathname} />
+      <AppErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <CookieConsentProvider>
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <RouterProvider router={router} future={{ v7_startTransition: true }} />
+              </Suspense>
+              <CookieConsentBanner />
+            </CookieConsentProvider>
+          </AuthProvider>
+          <ReactQueryDevtoolsLazy />
+        </QueryClientProvider>
+      </AppErrorBoundary>
+    </>
   );
 }

@@ -56,14 +56,14 @@ test.describe("flagship public experience", () => {
     await page.goto("/");
 
     await expect(page.getByText("Personas · afiliados · empresas · aliados")).toBeHidden();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Beneficios, pagos y solicitudes");
-    await expect(page.getByRole("link", { name: "Recibir orientación" }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Consultar beneficios" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Bienestar, respaldo y atención");
+    const hero = page.locator("main section").first();
+    await expect(hero.getByRole("link", { name: "Conocer beneficios" })).toBeHidden();
 
     const quickActions = page.getByRole("navigation", { name: "Acciones rápidas" });
-    await expect(quickActions.getByRole("link")).toHaveCount(5);
-    await expect(quickActions.getByRole("link")).toHaveText(["Pagar", "Radicar PQR", "Consultar caso", "Solicitudes de datos", "Mi cuenta"]);
-    await expect(quickActions.getByRole("link", { name: /Consultar beneficios|Recibir orientación/ })).toHaveCount(0);
+    await expect(quickActions.getByRole("link")).toHaveCount(2);
+    await expect(quickActions.getByRole("link")).toHaveText(["Pagar", "Mi cuenta"]);
+    await expect(quickActions.getByRole("link", { name: /Conocer beneficios|Recibir orientación|Radicar PQR|Consultar caso|Solicitudes de datos/ })).toHaveCount(0);
 
     const openMenu = page.getByRole("button", { name: "Abrir menú de navegación" });
     await openMenu.click();

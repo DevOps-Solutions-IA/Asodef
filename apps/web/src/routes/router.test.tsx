@@ -94,6 +94,7 @@ describe("router", () => {
     ["/beneficios", /Encuentra una opción para tu necesidad/i],
     ["/portafolio?utm_source=legacy", /Encuentra una opción para tu necesidad/i],
     ["/cobertura", /ASODEF conecta personas/i],
+    ["/plan-exequial-familiar", /Plan exequial familiar/i],
     ["/contacto", /Qué necesitas hacer/i],
   ])("renders or safely redirects %s to substantive content", async (path, expectedHeading) => {
     renderAtPath(path);
@@ -140,7 +141,7 @@ describe("router", () => {
   it("does not route a legacy external administrative session into self-service", async () => {
     renderAtPath("/iniciar-sesion", buildCurrentUser({ roles: ["CUSTOMER"] }));
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/Beneficios, pagos y solicitudes/i);
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/Bienestar, respaldo y atención/i);
     expect(screen.queryByRole("heading", { name: "Acceso administrativo" })).not.toBeInTheDocument();
   });
 

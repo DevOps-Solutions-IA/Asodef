@@ -104,6 +104,7 @@ export const routeConfig: RouteObject[] = [
       { path: "quienes-somos", element: <AboutPage /> },
       { path: "beneficios", element: <BenefitsPage /> },
       { path: "beneficios/:slug", element: <BenefitDetailPage /> },
+      { path: "plan-exequial-familiar", element: <PreserveRedirect to="/beneficios/plan-exequial-familiar" /> },
       { path: "soluciones", element: <SolutionsPage /> },
       { path: "soluciones/:audience", element: <AudiencePage /> },
       { path: "empresas", element: <CompaniesPage /> },

@@ -40,13 +40,18 @@ describe("BenefitDetailPage", () => {
   it("publishes the sourced Plan Preferencial facts and #523 without inventing eligibility", () => {
     render(<MemoryRouter initialEntries={["/beneficios/plan-exequial-familiar"]}><Routes><Route path="/beneficios/:slug" element={<BenefitDetailPage/>}/></Routes></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Plan preferencial para mayor acompañamiento familiar" })).toBeInTheDocument();
-    expect(screen.getAllByText(/Sala VIP: comodidad y privacidad/i)).not.toHaveLength(0);
-    expect(screen.getAllByText(/Dos buses: transporte para acompañantes/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/hasta \$3\.000\.000 sin costo adicional, sujeto/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("ATENCIÓN RÁPIDA")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sala VIP" })).toBeInTheDocument();
+    expect(screen.getByText(/comodidad y privacidad para la familia/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Dos buses" })).toBeInTheDocument();
+    expect(screen.getByText(/hasta \$3\.000\.000 sin costo adicional, sujeto/i)).toBeInTheDocument();
+    expect(screen.getByText(/atención rápida/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Marca #523 gratis desde tu celular/i })).toHaveAttribute("href", "tel:%23523");
     expect(screen.getAllByRole("link", { name: "Consultar mi plan" })[0]).toHaveAttribute("href", "/mi-cuenta/acceso");
     expect(screen.getByRole("link", { name: "Solicitar orientación" })).toHaveAttribute("href", "/comenzar?beneficio=plan-exequial-familiar");
+    expect(screen.getByRole("heading", { name: /cuatro pasos para confirmar tu opción/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Tratamiento de datos" })).toHaveAttribute("href", "/legal/tratamiento-de-datos");
+    expect(screen.getByRole("link", { name: "Política de privacidad" })).toHaveAttribute("href", "/legal/politica-de-privacidad");
+    expect(screen.getByRole("link", { name: "Centro Legal" })).toHaveAttribute("href", "/legal");
     expect(document.body).not.toHaveTextContent(/incluido automáticamente|cobertura garantizada/i);
   });
 });

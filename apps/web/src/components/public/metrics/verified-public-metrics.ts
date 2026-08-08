@@ -1,6 +1,6 @@
 import { ASODEF_COMPANY } from "@asodef/config";
 
-export type VerifiedIndicatorId = "corporate-years" | "registered-domicile" | "legal-form";
+export type VerifiedIndicatorId = "corporate-years" | "registration-year" | "registered-domicile" | "legal-form";
 
 interface VerifiedIndicatorSource {
   kind: "verified-corporate-config";
@@ -56,8 +56,8 @@ export const VERIFIED_PUBLIC_INDICATORS = [
     id: "corporate-years",
     kind: "numeric",
     value: completedCorporateYears,
-    label: "años como ASODEF S.A.S.",
-    context: "Desde el 10 de septiembre de 2012.",
+    label: "de trayectoria institucional",
+    context: "Años completos desde la fecha registral.",
     source: {
       kind: "verified-corporate-config",
       path: "packages/config/src/company.ts",
@@ -66,11 +66,24 @@ export const VERIFIED_PUBLIC_INDICATORS = [
     },
   },
   {
+    id: "registration-year",
+    kind: "text",
+    value: ASODEF_COMPANY.registrationDate.slice(0, 4),
+    label: "inicio de operaciones",
+    context: "Evolución documentada a ASODEF S.A.S.",
+    source: {
+      kind: "verified-corporate-config",
+      path: "packages/config/src/company.ts",
+      field: "ASODEF_COMPANY.registrationDate",
+      derivation: "Año de la fecha registral 2012-09-10.",
+    },
+  },
+  {
     id: "registered-domicile",
     kind: "text",
     value: `${ASODEF_COMPANY.city}, ${ASODEF_COMPANY.country}`,
-    label: "domicilio registrado",
-    context: "Sede corporativa verificada.",
+    label: "sede corporativa",
+    context: "Domicilio registrado.",
     source: {
       kind: "verified-corporate-config",
       path: "packages/config/src/company.ts",
@@ -82,7 +95,7 @@ export const VERIFIED_PUBLIC_INDICATORS = [
     id: "legal-form",
     kind: "text",
     value: "S.A.S.",
-    label: "forma jurídica registrada",
+    label: "estructura jurídica registrada",
     context: ASODEF_COMPANY.legalForm,
     source: {
       kind: "verified-corporate-config",
