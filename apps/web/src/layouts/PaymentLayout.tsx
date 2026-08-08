@@ -4,12 +4,14 @@ import { LockKeyhole } from "lucide-react";
 import { PublicHeader } from "./shared/PublicHeader";
 import { SkipToContent } from "./shared/SkipToContent";
 import { useFocusMainOnRouteChange } from "./shared/useFocusMainOnRouteChange";
+import { useScrollToHash } from "./shared/useScrollToHash";
 
 /** Centro de Pagos with the shared public navigation and a focused,
  * transactional content/footer treatment. */
 export function PaymentLayout() {
   const mainRef = useRef<HTMLElement>(null);
-  useFocusMainOnRouteChange(mainRef);
+  useFocusMainOnRouteChange(mainRef, { preventScroll: true });
+  useScrollToHash();
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-clip bg-surface-canvas">
@@ -21,13 +23,13 @@ export function PaymentLayout() {
         id="main-content"
         ref={mainRef}
         tabIndex={-1}
-        className="relative mx-auto w-full max-w-6xl flex-1 px-5 py-10 focus:outline-none sm:px-8 lg:px-10 lg:py-14"
+        className="relative mx-auto w-full max-w-7xl flex-1 px-4 py-9 focus:outline-none sm:px-8 sm:py-12 lg:px-12 lg:py-16"
       >
         <Outlet />
       </main>
 
       <footer className="relative border-t border-border-soft bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-5 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
           <span className="inline-flex items-center gap-2 text-text-muted"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-brand-orange" /> Consulta y gestión transaccional ASODEF</span>
           <Link to="/legal" className="font-medium text-brand-dark hover:underline">Centro legal</Link>
         </div>

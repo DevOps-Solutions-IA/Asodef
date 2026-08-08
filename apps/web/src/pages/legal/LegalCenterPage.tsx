@@ -100,7 +100,7 @@ export function LegalCenterPage() {
                           <h4 className="mt-4 font-display text-lg font-semibold text-text-main group-hover:text-brand-dark">{entry.title}</h4>
                           <p className="mt-2 flex-1 text-sm leading-6 text-text-muted">{entry.description}</p>
                           <div className="mt-5 flex items-center justify-between border-t border-border-soft pt-4 text-xs text-text-muted">
-                            <span>{published ? `Versión ${result.data.version} · ${formatDate(result.data.effectiveDate ?? result.data.publicationDate!)}` : "Verificando publicación"}</span>
+                            <span>{published ? formatDate(result.data.effectiveDate ?? result.data.publicationDate!) : "Verificando publicación"}</span>
                             <span className="flex items-center gap-1 font-semibold text-brand-dark">Ver documento <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden="true" /></span>
                           </div>
                         </Link>

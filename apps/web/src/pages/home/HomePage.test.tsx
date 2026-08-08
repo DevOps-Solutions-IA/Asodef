@@ -11,6 +11,11 @@ describe("flagship homepage",()=>{
     expect(screen.getByRole("link",{name:/conocer beneficios/i})).toHaveAttribute("href","/beneficios");
     expect(screen.getByRole("heading", { name: /cada gestión tiene un acceso claro/i })).toBeInTheDocument();
     expect(screen.queryByText("Servicios conectados")).not.toBeInTheDocument();
+    const accessPanel = screen.getByRole("heading", { name: /cada gestión tiene un acceso claro/i }).closest<HTMLDivElement>("div.relative");
+    expect(accessPanel).not.toBeNull();
+    for (const [label, path] of [["Afiliados", "/mi-cuenta/acceso"], ["Empresas", "/empresa/acceso"], ["Pagos", "/pagos"], ["Solicitudes", "/recursos"]]) {
+      expect(within(accessPanel!).getByRole("link", { name: label })).toHaveAttribute("href", path);
+    }
   });
   it("offers only Pagar and Mi cuenta in the mobile quick-action block", () => {
     render(<MemoryRouter><HomePage/></MemoryRouter>);
@@ -22,13 +27,14 @@ describe("flagship homepage",()=>{
     expect(within(actions).getByRole("link", { name: /^pagar$/i })).toHaveClass("bg-brand-dark");
     expect(within(actions).getByRole("link", { name: /mi cuenta/i })).toHaveAttribute("href", "/mi-cuenta/acceso");
   });
-  it("presents the verified trajectory as one compact institutional band",()=>{
+  it("presents the verified trajectory as one breathable two-by-two institutional panel",()=>{
     render(<MemoryRouter><HomePage/></MemoryRouter>);
     expect(screen.getByRole("heading", { name: /más de una década construyendo relaciones de confianza/i })).toBeInTheDocument();
     expect(screen.getByText("de trayectoria institucional")).toBeInTheDocument();
     expect(screen.getByText("2012")).toBeInTheDocument();
     expect(screen.getByText("Cali, Colombia")).toBeInTheDocument();
     expect(screen.getByText("S.A.S.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Información institucional verificada" })).toHaveClass("grid-cols-2");
     expect(screen.queryByText("categorías de beneficios")).not.toBeInTheDocument();
     expect(screen.queryByText("documentos institucionales publicados")).not.toBeInTheDocument();
     expect(screen.queryByText("gestiones públicas")).not.toBeInTheDocument();

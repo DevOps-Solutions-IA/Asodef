@@ -36,6 +36,10 @@ describe("PaymentLookupPage", () => {
     expect(screen.getByLabelText("Tipo de documento", { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText("Número de documento", { exact: false })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Buscar" })).toBeInTheDocument();
+    expect(screen.queryByText("Método de búsqueda")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Por referencia de pago")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Referencia de pago", { exact: false })).not.toBeInTheDocument();
   });
 
   it("Example (AC): searching by document returns the customer's obligations with a Pagar action each", async () => {
@@ -145,39 +149,6 @@ describe("PaymentLookupPage", () => {
 
     expect(await screen.findByText("El número de documento es requerido.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/payments/lookup"), expect.anything());
-  });
-
-  it("switches to reference mode and searches by reference directly", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("/payments/lookup")) {
-        return jsonResponse(200, {
-          type: "order",
-          order: {
-            publicReference: "xyz789ref",
-            amountCents: 100_000,
-            currency: "COP",
-            status: "PENDING",
-            statusLabel: "Pendiente",
-            createdAt: "2026-08-19T12:43:19.951Z",
-            expiresAt: "2026-08-19T13:13:19.951Z",
-            obligation: { concept: "Cuota", dueDate: "2026-08-19T12:43:19.951Z" },
-          },
-        });
-      }
-      return jsonResponse(200, {});
-    });
-
-    const user = userEvent.setup();
-    renderPaymentLookupPage(fetchMock);
-
-    await user.click(screen.getByRole("radio", { name: "Por referencia de pago" }));
-    expect(screen.queryByLabelText("Número de documento", { exact: false })).not.toBeInTheDocument();
-
-    await user.type(screen.getByLabelText(/^Referencia de pago/), "xyz789ref");
-    await user.click(screen.getByRole("button", { name: "Buscar" }));
-
-    expect(await screen.findByText("Resumen de la orden")).toBeInTheDocument();
   });
 
   it("never renders a raw API error body", async () => {

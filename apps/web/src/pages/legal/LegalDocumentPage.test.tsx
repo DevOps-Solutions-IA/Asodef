@@ -40,6 +40,8 @@ describe("LegalDocumentPage", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Términos y condiciones" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { level: 2, name: "Identificación de la empresa" })).toBeInTheDocument();
     expect(screen.getByText("ASODEF S.A.S.")).toBeInTheDocument();
+    expect(screen.getByText("Vigente")).toBeInTheDocument();
+    expect(screen.queryByText(/Versión\s+1/i)).not.toBeInTheDocument();
   });
 
   it("Negative case (AC): shows a controlled unavailable state, not an error or blank page, for a 404", async () => {

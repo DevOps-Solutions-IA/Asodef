@@ -79,7 +79,7 @@ export function PqrCasePage() {
 
       {policyQuery.data?.content && (
         <details className="mt-5 rounded-2xl border border-brand-dark/10 bg-brand-dark-50 p-4">
-          <summary className="cursor-pointer font-display text-sm font-semibold text-brand-dark">Consultar la política PQR vigente <Badge variant="success" className="ml-2">Versión {policyQuery.data.version}</Badge></summary>
+          <summary className="cursor-pointer font-display text-sm font-semibold text-brand-dark">Consultar la política PQR vigente <Badge variant="success" className="ml-2">Vigente</Badge></summary>
           <div className="mt-4 space-y-4">{policyQuery.data.content.sections.map((section) => <section key={section.heading}><h2 className="text-sm font-semibold text-text-main">{section.heading}</h2><p className="mt-1 text-sm leading-6 text-text-muted">{section.body}</p></section>)}</div>
         </details>
       )}

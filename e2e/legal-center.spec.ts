@@ -53,6 +53,7 @@ test.describe("Centro Legal publicado", () => {
       expect(legalResponses.map((response) => response.status)).toEqual(Array(21).fill(200));
       await expect(page.locator("main").getByText("Vigente", { exact: true })).toHaveCount(21);
       await expect(page.locator("main").getByText("No disponible")).toHaveCount(0);
+      await expect(page.locator("main")).not.toContainText(/Versión\s+\d+/i);
       await expect(page.locator("body")).not.toContainText(/Pendiente de confirmación legal|LEGAL_CONTENT_PLACEHOLDER|Aún no publicado/i);
       await expectNoHorizontalOverflow(page);
     });
@@ -72,6 +73,7 @@ test.describe("Centro Legal publicado", () => {
         await expect(page.locator("article h2").first()).toBeVisible();
       }
       await expect(page.locator("main")).not.toContainText(/Pendiente de confirmación legal|LEGAL_CONTENT_PLACEHOLDER|Aún no publicado/i);
+      await expect(page.locator("main")).not.toContainText(/Versión\s+\d+/i);
       await expectNoHorizontalOverflow(page);
     }
   });

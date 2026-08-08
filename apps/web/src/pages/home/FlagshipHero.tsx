@@ -12,10 +12,10 @@ import {
 import { SafeReveal, StaggeredItems } from "../../components/public/motion";
 
 const serviceSignals = [
-  { label: "Afiliados", icon: UsersRound },
-  { label: "Empresas", icon: Building2 },
-  { label: "Pagos", icon: CreditCard },
-  { label: "Solicitudes", icon: FileCheck2 },
+  { label: "Afiliados", to: "/mi-cuenta/acceso", icon: UsersRound },
+  { label: "Empresas", to: "/empresa/acceso", icon: Building2 },
+  { label: "Pagos", to: "/pagos", icon: CreditCard },
+  { label: "Solicitudes", to: "/recursos", icon: FileCheck2 },
 ] as const;
 
 const mobileActions = [
@@ -74,13 +74,14 @@ export function FlagshipHero() {
               Personas y organizaciones encuentran el canal que corresponde sin exponer información privada.
             </p>
             <StaggeredItems className="mt-8 grid grid-cols-2 gap-3">
-              {serviceSignals.map(({ label, icon: Icon }) => (
-                <div key={label} className="flex min-h-20 items-center gap-3 rounded-2xl border border-brand-dark/10 bg-bg-soft/75 p-4 transition duration-200 hover:border-brand-dark/20 hover:bg-white hover:shadow-e1 motion-reduce:transition-none">
+              {serviceSignals.map(({ label, to, icon: Icon }) => (
+                <Link key={label} to={to} className="group flex min-h-20 cursor-pointer items-center gap-3 rounded-2xl border border-brand-dark/10 bg-bg-soft/75 p-4 transition duration-200 hover:-translate-y-0.5 hover:border-brand-dark/20 hover:bg-white hover:shadow-e1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-orange/25 motion-reduce:transform-none motion-reduce:transition-none">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-brand-dark shadow-e1">
                     <Icon aria-hidden className="h-4 w-4" />
                   </span>
                   <span className="text-sm font-semibold text-text-main">{label}</span>
-                </div>
+                  <ArrowRight aria-hidden className="ml-auto h-4 w-4 shrink-0 text-brand-orange opacity-70 transition group-hover:translate-x-0.5 group-hover:opacity-100 motion-reduce:transform-none" />
+                </Link>
               ))}
             </StaggeredItems>
             <div className="mt-7 flex items-center gap-3 border-t border-brand-dark/10 pt-5 text-xs font-semibold uppercase tracking-[.13em] text-text-muted">

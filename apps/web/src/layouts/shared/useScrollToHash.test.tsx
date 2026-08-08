@@ -81,7 +81,7 @@ describe("useScrollToHash", () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", left: 0, top: 0 });
   });
 
-  it("restores the recorded position on POP navigation", async () => {
+  it("starts at the top on POP navigation instead of leaking the prior page position", async () => {
     let top = 0;
     Object.defineProperty(window, "scrollY", { configurable: true, get: () => top });
     Object.defineProperty(window, "scrollX", { configurable: true, get: () => 0 });
@@ -96,6 +96,6 @@ describe("useScrollToHash", () => {
     await user.click(screen.getByRole("button", { name: "Volver" }));
 
     expect(screen.getByLabelText("Ruta actual")).toHaveTextContent("/primera");
-    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", left: 0, top: 420 });
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: "auto", left: 0, top: 0 });
   });
 });

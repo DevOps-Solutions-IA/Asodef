@@ -36,7 +36,7 @@ export function LegalDocumentPage({ slug, title }: LegalDocumentPageProps) {
         <nav aria-label="Migas de pan" className="text-xs text-text-muted"><Link to="/legal" className="hover:text-brand-dark hover:underline">Centro Legal</Link><span aria-hidden="true"> / </span><span>{catalogEntry?.category ?? "Documento"}</span></nav>
         <div className="mt-5 flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
           <div className="max-w-3xl">
-            {data && <div className="mb-3 flex flex-wrap items-center gap-2"><Badge variant="success">Vigente</Badge><span className="text-xs font-medium text-text-muted">Versión {data.version}</span></div>}
+            {data && <div className="mb-3 flex flex-wrap items-center gap-2"><Badge variant="success">Vigente</Badge></div>}
             <h1 className="font-display text-3xl font-semibold tracking-tight text-brand-dark sm:text-4xl">{title}</h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-text-muted">{data?.content?.summary ?? catalogEntry?.description}</p>
           </div>

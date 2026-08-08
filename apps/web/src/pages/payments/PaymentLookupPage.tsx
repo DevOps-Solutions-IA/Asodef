@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { FileSearch, LockKeyhole, ReceiptText, ShieldCheck } from "lucide-react";
-import { Alert, Button, Card, EmptyState, FormField, Input, Radio, StatusBadge } from "@asodef/ui";
+import { Alert, Button, Card, EmptyState, FormField, Input, StatusBadge } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
 import { createPaymentOrder, lookupPayments } from "../../lib/payments/payments-api";
 import type { PaymentsLookupResponse } from "../../lib/payments/payments-types";
@@ -21,25 +21,10 @@ import { getObligationStatusLabel } from "./obligation-status-labels";
  * defaulting to "CC" (the one confirmed value), matching the backend's
  * own lack of a fixed vocabulary.
  */
-const lookupSchema = z
-  .object({
-    mode: z.enum(["document", "reference"]),
-    documentType: z.string().trim().optional(),
-    documentNumber: z.string().trim().optional(),
-    reference: z.string().trim().optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.mode === "document") {
-      if (!data.documentType) {
-        ctx.addIssue({ code: "custom", path: ["documentType"], message: "El tipo de documento es requerido." });
-      }
-      if (!data.documentNumber) {
-        ctx.addIssue({ code: "custom", path: ["documentNumber"], message: "El número de documento es requerido." });
-      }
-    } else if (!data.reference) {
-      ctx.addIssue({ code: "custom", path: ["reference"], message: "La referencia de pago es requerida." });
-    }
-  });
+const lookupSchema = z.object({
+  documentType: z.string().trim().min(1, "El tipo de documento es requerido."),
+  documentNumber: z.string().trim().min(1, "El número de documento es requerido."),
+});
 
 type LookupFormValues = z.infer<typeof lookupSchema>;
 
@@ -52,14 +37,11 @@ export function PaymentLookupPage() {
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LookupFormValues>({
     resolver: zodResolver(lookupSchema),
-    defaultValues: { mode: "document", documentType: "CC" },
+    defaultValues: { documentType: "CC", documentNumber: "" },
   });
-
-  const mode = watch("mode");
 
   const lookupMutation = useMutation({
     mutationFn: lookupPayments,
@@ -101,19 +83,15 @@ export function PaymentLookupPage() {
     setResult(null);
     setNotFound(false);
     setFormError(null);
-    if (values.mode === "document") {
-      lookupMutation.mutate({ documentType: values.documentType!.trim(), documentNumber: values.documentNumber!.trim() });
-    } else {
-      lookupMutation.mutate({ reference: values.reference!.trim() });
-    }
+    lookupMutation.mutate({ documentType: values.documentType.trim(), documentNumber: values.documentNumber.trim() });
   });
 
   const isBusy = isSubmitting || lookupMutation.isPending || createOrderMutation.isPending;
 
   return (
-    <div>
-      <div className="grid overflow-hidden rounded-[2rem] border border-border-subtle bg-brand-deep shadow-e4 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="relative flex flex-col justify-between overflow-hidden p-7 text-white sm:p-9 lg:p-11">
+    <div className="mx-auto w-full max-w-[75rem]">
+      <div className="grid overflow-hidden rounded-[2rem] border border-border-subtle bg-brand-deep shadow-e4 lg:min-h-[34rem] lg:grid-cols-[0.82fr_1.18fr]">
+        <section className="relative flex flex-col justify-between overflow-hidden p-6 text-white sm:p-9 lg:p-12 xl:p-14">
           <div aria-hidden="true" className="absolute -right-20 -top-20 h-64 w-64 rounded-full border border-white/10 bg-brand-orange/10" />
           <div className="relative">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/80">
@@ -121,7 +99,7 @@ export function PaymentLookupPage() {
             </span>
             <h1 className="mt-6 max-w-md font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">Centro de Pagos</h1>
             <p className="mt-4 max-w-md text-sm leading-6 text-white/70 sm:text-base">
-              Consulta tus obligaciones pendientes por documento o retoma un pago con tu número de referencia.
+              Consulta tus obligaciones pendientes utilizando tu documento.
             </p>
           </div>
           <ul className="relative mt-9 grid gap-3 text-sm text-white/80">
@@ -131,36 +109,24 @@ export function PaymentLookupPage() {
           </ul>
         </section>
 
-        <section className="bg-white p-6 sm:p-9 lg:p-11">
+        <section className="flex flex-col justify-center bg-white p-5 sm:p-9 lg:p-12 xl:p-14">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-orange">Consulta de obligaciones</p>
-          <h2 className="mt-2 font-display text-2xl font-semibold text-brand-dark">Encuentra tu información de pago</h2>
-          <p className="mt-2 text-sm leading-6 text-text-muted">Selecciona el dato que tienes disponible para continuar.</p>
-        <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-          <fieldset className="mt-6 flex flex-col gap-3 rounded-2xl border border-border-soft bg-bg-soft p-4 sm:flex-row sm:gap-6">
-            <legend className="text-sm font-medium text-text-main">Método de búsqueda</legend>
-            <Radio value="document" label="Por documento" {...register("mode")} />
-            <Radio value="reference" label="Por referencia de pago" {...register("mode")} />
-          </fieldset>
-
-          {mode === "reference" ? (
-            <FormField label="Referencia de pago" error={errors.reference?.message} required>
-              {(controlProps) => <Input {...controlProps} autoComplete="off" {...register("reference")} />}
+          <h2 className="mt-2 max-w-xl font-display text-2xl font-semibold leading-tight text-brand-dark sm:text-3xl">Encuentra tu información de pago</h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-text-muted">Ingresa los datos de tu documento para continuar.</p>
+        <form onSubmit={onSubmit} noValidate className="mt-8 flex flex-col gap-5">
+          <div className="grid gap-5 sm:grid-cols-[minmax(0,180px)_1fr]">
+            <FormField label="Tipo de documento" error={errors.documentType?.message} required>
+              {(controlProps) => <Input {...controlProps} className="min-h-12" {...register("documentType")} />}
             </FormField>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,140px)_1fr]">
-              <FormField label="Tipo de documento" error={errors.documentType?.message} required>
-                {(controlProps) => <Input {...controlProps} {...register("documentType")} />}
-              </FormField>
-              <FormField label="Número de documento" error={errors.documentNumber?.message} required>
-                {(controlProps) => <Input {...controlProps} inputMode="numeric" autoComplete="off" {...register("documentNumber")} />}
-              </FormField>
-            </div>
-          )}
+            <FormField label="Número de documento" error={errors.documentNumber?.message} required>
+              {(controlProps) => <Input {...controlProps} className="min-h-12" inputMode="numeric" autoComplete="off" {...register("documentNumber")} />}
+            </FormField>
+          </div>
 
           {formError && <Alert variant="danger">{formError}</Alert>}
 
           <div className="pt-2">
-            <Button type="submit" loading={isBusy} disabled={isBusy} className="w-full sm:w-auto">
+            <Button type="submit" loading={isBusy} disabled={isBusy} className="min-h-12 w-full sm:max-w-xs">
               Buscar
             </Button>
           </div>

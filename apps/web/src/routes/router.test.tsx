@@ -130,12 +130,14 @@ describe("router", () => {
     expect(actions).toHaveTextContent(/Pagar.*Recibir orientación/);
   });
 
-  it("keeps the frozen institutional header on /legal", async () => {
+  it("uses the canonical public header throughout the Legal Center", async () => {
     renderAtPath("/legal");
 
-    expect(await screen.findByText("Información institucional")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /volver al sitio/i })).toHaveAttribute("href", "/");
-    expect(screen.queryByRole("navigation", { name: "Principal" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Centro Legal ASODEF" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Principal" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Acciones de navegación")).toHaveTextContent(/Pagar.*Recibir orientación/);
+    expect(screen.queryByText("Información institucional")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /volver al sitio/i })).not.toBeInTheDocument();
   });
 
   it("does not route a legacy external administrative session into self-service", async () => {

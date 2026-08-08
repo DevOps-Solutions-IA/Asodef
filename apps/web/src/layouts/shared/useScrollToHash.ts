@@ -1,10 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useLocation, useNavigationType } from "react-router-dom";
-
-interface ScrollPosition {
-  left: number;
-  top: number;
-}
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 function scrollToHash(hash: string): boolean {
   if (!hash) return false;
@@ -21,7 +16,7 @@ function scrollToHash(hash: string): boolean {
   return true;
 }
 
-function scrollWindow(position: ScrollPosition): void {
+function scrollWindow(position: { left: number; top: number }): void {
   // jsdom exposes a placeholder that only emits a "not implemented" error.
   // Focused tests replace it with a mock; browsers execute the native method.
   if (navigator.userAgent.includes("jsdom") && !("mock" in window.scrollTo)) return;
@@ -31,17 +26,14 @@ function scrollWindow(position: ScrollPosition): void {
 /**
  * Deterministic SPA scroll restoration:
  * - hash targets always win;
- * - PUSH and REPLACE start at the top;
- * - POP restores the position recorded for that history entry.
+ * - every path/search navigation starts at the top;
+ * - browser back/forward follows the same predictable page-entry rule.
  *
  * Direct loads also start at the top unless a valid hash target is present.
  * All movement is instant and therefore independent of motion settings.
  */
 export function useScrollToHash(): void {
   const location = useLocation();
-  const navigationType = useNavigationType();
-  const positions = useRef(new Map<string, ScrollPosition>());
-  const firstRender = useRef(true);
 
   useEffect(() => {
     if (!("scrollRestoration" in window.history)) return;
@@ -53,22 +45,6 @@ export function useScrollToHash(): void {
   }, []);
 
   useEffect(() => {
-    const entryKey = location.key;
-    const savedPositions = positions.current;
-
-    if (firstRender.current) {
-      firstRender.current = false;
-      if (!scrollToHash(location.hash)) scrollWindow({ left: 0, top: 0 });
-    } else if (!scrollToHash(location.hash)) {
-      const restored = navigationType === "POP" ? positions.current.get(entryKey) : undefined;
-      scrollWindow({
-        left: restored?.left ?? 0,
-        top: restored?.top ?? 0,
-      });
-    }
-
-    return () => {
-      savedPositions.set(entryKey, { left: window.scrollX, top: window.scrollY });
-    };
-  }, [location.hash, location.key, location.pathname, location.search, navigationType]);
+    if (!scrollToHash(location.hash)) scrollWindow({ left: 0, top: 0 });
+  }, [location.hash, location.key, location.pathname, location.search]);
 }

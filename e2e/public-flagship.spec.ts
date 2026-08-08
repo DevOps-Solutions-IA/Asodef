@@ -135,10 +135,11 @@ test.describe("flagship public experience", () => {
         await page.goto(route);
         await expect(page.locator("h1").first()).toBeVisible();
         if (route.startsWith("/legal")) {
-          // The frozen LegalLayout intentionally hides its institutional badge
-          // below the `sm` breakpoint; the always-present return link is the
-          // stable protected-header contract at every resolution.
-          await expect(page.getByRole("link", { name: "Volver al sitio" })).toBeVisible();
+          if (viewport.width >= 1024) {
+            await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
+          } else {
+            await expect(page.getByRole("button", { name: "Abrir menú de navegación" })).toBeVisible();
+          }
         } else if (viewport.width >= 1024) {
           await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
         } else {

@@ -65,6 +65,7 @@ describe("LegalCenterPage", () => {
 
     const row = await screen.findByRole("link", { name: /Términos y condiciones/ });
     expect(await screen.findByText("Vigente")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/Versión\s+1/i);
     expect(row).toHaveAttribute("href", "/legal/terminos-y-condiciones");
   });
 
