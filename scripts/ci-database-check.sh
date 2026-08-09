@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="35"
+readonly EXPECTED_MIGRATIONS="36"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"
@@ -181,6 +181,13 @@ expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHE
 [[ "$expected_constraints" == "7" ]] || fail "one or more identity/self-service foreign keys are missing"
 [[ "$expected_tables" == "12" ]] || fail "one or more representative tables are missing"
 
+bingo_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('bingo_events','bingo_participants','bingo_rounds','bingo_round_executions','bingo_cards','bingo_card_assignments','bingo_draws','bingo_winner_candidates','bingo_winners','bingo_command_idempotency','bingo_outbox_events','bingo_import_batches','bingo_import_rows','bingo_audit_events','bingo_retention_policies');")"
+bingo_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('bingo_round_executions_one_active_key','bingo_card_assignments_one_active_key','bingo_eligibility_approvals_active_key','bingo_draws_execution_id_sequence_key','bingo_draws_execution_id_ball_number_key','bingo_import_batches_event_id_sha256_key');")"
+bingo_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('bingo_participants_external_subject_id_event_id_kind_fkey','bingo_draws_execution_id_round_id_event_id_fkey','bingo_winner_candidates_assignment_scope_fkey','bingo_winners_candidate_scope_fkey','bingo_winners_win_group_prize_scope_fkey','bingo_import_rows_batch_id_event_id_fkey');")"
+[[ "$bingo_tables" == "15" ]] || fail "one or more representative Bingo tables are missing"
+[[ "$bingo_indexes" == "6" ]] || fail "one or more critical Bingo indexes are missing"
+[[ "$bingo_constraints" == "6" ]] || fail "one or more critical Bingo scope constraints are missing"
+
 snapshot_sql=$(cat <<'SQL'
 SELECT 'roles=' || count(*) FROM roles
 UNION ALL SELECT 'permissions=' || count(*) FROM permissions
@@ -237,5 +244,8 @@ done
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents WHERE current_version_id IS NOT NULL OR slug LIKE 'consent-test-doc-%';")" == "0" ]] || fail "clean legal seed created a current/synthetic legal document"
 [[ "$(db_scalar "SELECT count(*) FROM users;")" == "0" ]] || fail "clean seed must not create users"
 [[ "$(db_scalar "SELECT (SELECT count(*) FROM self_service_access_lookups) + (SELECT count(*) FROM self_service_otp_challenges) + (SELECT count(*) FROM self_service_sessions) + (SELECT count(*) FROM self_service_idempotency) + (SELECT count(*) FROM self_service_contact_updates) + (SELECT count(*) FROM self_service_audit_events) + (SELECT count(*) FROM affiliate_external_identities) + (SELECT count(*) FROM affiliate_external_identity_fingerprints);")" == "0" ]] || fail "clean seed must not create self-service identity/session data"
+[[ "$(db_scalar "SELECT (SELECT count(*) FROM bingo_events) + (SELECT count(*) FROM bingo_participants) + (SELECT count(*) FROM bingo_round_executions) + (SELECT count(*) FROM bingo_cards) + (SELECT count(*) FROM bingo_draws) + (SELECT count(*) FROM bingo_winners) + (SELECT count(*) FROM bingo_import_batches) + (SELECT count(*) FROM bingo_audit_events);")" == "0" ]] || fail "clean seed must not create Bingo operational or evidence data"
+
+run_quiet "Bingo upgrade-from-main canary failed" scripts/ci-bingo-upgrade-check.sh
 
 printf 'CI database check passed: %s migrations; three stable seed runs; isolated project verified.\n' "$EXPECTED_MIGRATIONS"
