@@ -1,4 +1,5 @@
 import {
+  BINGO_EVENT_CRITICAL_CONFIGURATION_FIELDS,
   changedLockedFields,
   evaluateEventConfigurationChange,
   evaluatePatternConfigurationChange,
@@ -10,20 +11,15 @@ import { BINGO_EVENT_STATUSES, BINGO_ROUND_STATUSES } from "./state-machines";
 import { BingoLifecycleErrorCode } from "./lifecycle-errors";
 
 const eventBefore = {
+  defaultValidationPolicy: "SIMPLE",
   eligibilityPolicy: "AFFILIATES",
+  eligibilityRules: ["ACTIVE_AFFILIATE"],
   fairnessMode: "CRYPTO_RNG",
   maxCardsPerParticipant: 1,
-  privacyPolicy: { winner: "CARD_ONLY" },
-  validationPolicy: "SIMPLE",
+  publicWinnerVisibility: "CARD_ONLY",
+  retentionPolicy: { evidence: "CORPORATE_MINIMUM" },
+  visibility: "AUTHORIZED_PARTICIPANTS",
 } as const;
-
-const lockedEventFields = [
-  "eligibilityPolicy",
-  "fairnessMode",
-  "maxCardsPerParticipant",
-  "privacyPolicy",
-  "validationPolicy",
-] as const;
 
 describe("Bingo configuration freeze", () => {
   it("freezes event configuration at an explicit lock or publication", () => {
@@ -49,18 +45,19 @@ describe("Bingo configuration freeze", () => {
       ...eventBefore,
       fairnessMode: "CRYPTO_RNG_COMMIT_REVEAL",
       maxCardsPerParticipant: 5,
-      privacyPolicy: { winner: "CARD_ONLY" },
+      publicWinnerVisibility: "CARD_ONLY",
     } as const;
     const context = {
       before: eventBefore,
       after,
-      lockedFields: lockedEventFields,
     };
 
-    expect(changedLockedFields(context)).toEqual([
-      "fairnessMode",
-      "maxCardsPerParticipant",
-    ]);
+    expect(
+      changedLockedFields({
+        ...context,
+        lockedFields: BINGO_EVENT_CRITICAL_CONFIGURATION_FIELDS,
+      }),
+    ).toEqual(["fairnessMode", "maxCardsPerParticipant"]);
     expect(
       evaluateEventConfigurationChange("PUBLISHED", new Date(0), context),
     ).toEqual({
@@ -76,7 +73,6 @@ describe("Bingo configuration freeze", () => {
       evaluateEventConfigurationChange("CONFIGURED", null, {
         before: eventBefore,
         after,
-        lockedFields: lockedEventFields,
       }),
     ).toEqual({ allowed: true, value: after });
   });
@@ -88,18 +84,21 @@ describe("Bingo configuration freeze", () => {
       evaluateEventConfigurationChange("IN_PROGRESS", new Date(0), {
         before,
         after,
-        lockedFields: lockedEventFields,
       }),
     ).toEqual({ allowed: true, value: after });
   });
 
   it("blocks tie, validation and special-rule changes on a frozen round", () => {
     const before = {
+      patterns: ["line-v1"],
+      prizes: ["prize-a"],
+      tiePolicyConfiguration: null,
       tiePolicy: "SPLIT_PRIZE",
       validationPolicy: "SIMPLE",
       specialRuleReference: null,
     } as const;
     const after = {
+      ...before,
       tiePolicy: "PRECONFIGURED_SPECIAL_RULE",
       validationPolicy: "DUAL_CONTROL",
       specialRuleReference: "special-v1",
@@ -108,7 +107,6 @@ describe("Bingo configuration freeze", () => {
       evaluateRoundConfigurationChange("READY", new Date(0), {
         before,
         after,
-        lockedFields: ["tiePolicy", "validationPolicy", "specialRuleReference"],
       }),
     ).toMatchObject({
       allowed: false,
@@ -120,6 +118,27 @@ describe("Bingo configuration freeze", () => {
           "validationPolicy",
         ],
       },
+    });
+  });
+
+  it("cannot weaken a canonical freeze with caller-controlled fields", () => {
+    const after = { ...eventBefore, maxCardsPerParticipant: 5 } as const;
+    const adversarialContext = {
+      after,
+      before: eventBefore,
+      lockedFields: [] as const,
+    };
+
+    expect(
+      evaluateEventConfigurationChange(
+        "PUBLISHED",
+        new Date(0),
+        adversarialContext,
+      ),
+    ).toMatchObject({
+      allowed: false,
+      code: BingoLifecycleErrorCode.EVENT_CONFIGURATION_LOCKED,
+      details: { changedFields: ["maxCardsPerParticipant"] },
     });
   });
 
@@ -138,7 +157,6 @@ describe("Bingo configuration freeze", () => {
       evaluatePatternConfigurationChange("IN_PROGRESS", new Date(0), {
         before,
         after,
-        lockedFields: ["kind", "requiredMatchCount", "masks"],
       }),
     ).toMatchObject({
       allowed: false,

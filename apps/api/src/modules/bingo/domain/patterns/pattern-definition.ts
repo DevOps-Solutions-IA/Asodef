@@ -29,7 +29,7 @@ export const DIAGONAL_LINE_MASKS = Object.freeze([
   positionMask(0, 6, 12, 18, 24),
   positionMask(4, 8, 12, 16, 20),
 ]);
-export const VALID_LINE_MASKS = new Set<number>([
+const VALID_LINE_MASKS = new Set<number>([
   ...HORIZONTAL_LINE_MASKS,
   ...VERTICAL_LINE_MASKS,
   ...DIAGONAL_LINE_MASKS,

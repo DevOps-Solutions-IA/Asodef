@@ -1,7 +1,10 @@
-import { CryptoRandomSource } from './crypto-random-source';
+import {
+  CRYPTO_RANDOM_INT_MAX_EXCLUSIVE,
+  CryptoRandomSource,
+} from "./crypto-random-source";
 
-describe('CryptoRandomSource', () => {
-  it('honors the declared half-open interval', () => {
+describe("CryptoRandomSource", () => {
+  it("honors the declared half-open interval", () => {
     const source = new CryptoRandomSource();
 
     for (let index = 0; index < 2_000; index += 1) {
@@ -12,10 +15,13 @@ describe('CryptoRandomSource', () => {
     }
   });
 
-  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
-    'rejects invalid bounds: %s',
-    (maximum) => {
-      expect(() => new CryptoRandomSource().nextInt(maximum)).toThrow(RangeError);
-    },
-  );
+  it.each([
+    0,
+    -1,
+    1.5,
+    CRYPTO_RANDOM_INT_MAX_EXCLUSIVE + 1,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects invalid bounds: %s", (maximum) => {
+    expect(() => new CryptoRandomSource().nextInt(maximum)).toThrow(RangeError);
+  });
 });

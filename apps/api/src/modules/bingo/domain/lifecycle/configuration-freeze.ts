@@ -50,6 +50,25 @@ export interface ConfigurationFreezeContext<
   readonly lockedFields: readonly (keyof TBefore & keyof TAfter & string)[];
 }
 
+type CanonicalFreezeContext<
+  TBefore extends CriticalConfiguration,
+  TAfter extends CriticalConfiguration,
+> = Readonly<{ before: TBefore; after: TAfter }>;
+
+type EventCriticalField =
+  (typeof BINGO_EVENT_CRITICAL_CONFIGURATION_FIELDS)[number];
+type RoundCriticalField =
+  (typeof BINGO_ROUND_CRITICAL_CONFIGURATION_FIELDS)[number];
+type PatternCriticalField =
+  (typeof BINGO_PATTERN_CRITICAL_CONFIGURATION_FIELDS)[number];
+
+type EventCriticalConfiguration = CriticalConfiguration &
+  Readonly<Record<EventCriticalField, ConfigurationValue>>;
+type RoundCriticalConfiguration = CriticalConfiguration &
+  Readonly<Record<RoundCriticalField, ConfigurationValue>>;
+type PatternCriticalConfiguration = CriticalConfiguration &
+  Readonly<Record<PatternCriticalField, ConfigurationValue>>;
+
 function structurallyEqual(
   left: ConfigurationValue,
   right: ConfigurationValue,
@@ -149,46 +168,55 @@ function evaluateFrozenChange<
 }
 
 export function evaluateEventConfigurationChange<
-  TBefore extends CriticalConfiguration,
-  TAfter extends CriticalConfiguration,
+  TBefore extends EventCriticalConfiguration,
+  TAfter extends EventCriticalConfiguration,
 >(
   status: BingoEventStatus,
   configurationLockedAt: Date | null,
-  context: ConfigurationFreezeContext<TBefore, TAfter>,
+  context: CanonicalFreezeContext<TBefore, TAfter>,
 ): BingoLifecycleDecision<TAfter> {
   return evaluateFrozenChange(
     isEventConfigurationFrozen(status, configurationLockedAt),
     BingoLifecycleErrorCode.EVENT_CONFIGURATION_LOCKED,
-    context,
+    {
+      ...context,
+      lockedFields: BINGO_EVENT_CRITICAL_CONFIGURATION_FIELDS,
+    },
   );
 }
 
 export function evaluateRoundConfigurationChange<
-  TBefore extends CriticalConfiguration,
-  TAfter extends CriticalConfiguration,
+  TBefore extends RoundCriticalConfiguration,
+  TAfter extends RoundCriticalConfiguration,
 >(
   status: BingoRoundStatus,
   configurationLockedAt: Date | null,
-  context: ConfigurationFreezeContext<TBefore, TAfter>,
+  context: CanonicalFreezeContext<TBefore, TAfter>,
 ): BingoLifecycleDecision<TAfter> {
   return evaluateFrozenChange(
     isRoundConfigurationFrozen(status, configurationLockedAt),
     BingoLifecycleErrorCode.ROUND_CONFIGURATION_LOCKED,
-    context,
+    {
+      ...context,
+      lockedFields: BINGO_ROUND_CRITICAL_CONFIGURATION_FIELDS,
+    },
   );
 }
 
 export function evaluatePatternConfigurationChange<
-  TBefore extends CriticalConfiguration,
-  TAfter extends CriticalConfiguration,
+  TBefore extends PatternCriticalConfiguration,
+  TAfter extends PatternCriticalConfiguration,
 >(
   roundStatus: BingoRoundStatus,
   roundConfigurationLockedAt: Date | null,
-  context: ConfigurationFreezeContext<TBefore, TAfter>,
+  context: CanonicalFreezeContext<TBefore, TAfter>,
 ): BingoLifecycleDecision<TAfter> {
   return evaluateFrozenChange(
     isRoundConfigurationFrozen(roundStatus, roundConfigurationLockedAt),
     BingoLifecycleErrorCode.PATTERN_CONFIGURATION_LOCKED,
-    context,
+    {
+      ...context,
+      lockedFields: BINGO_PATTERN_CRITICAL_CONFIGURATION_FIELDS,
+    },
   );
 }
