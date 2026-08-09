@@ -174,12 +174,12 @@ unfinished_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations WHER
 [[ "$total_migrations" == "$EXPECTED_MIGRATIONS" ]] || fail "migration history contains an unexpected number of rows"
 [[ "$unfinished_migrations" == "0" ]] || fail "migration history contains failed or rolled-back rows"
 
-expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key','affiliate_external_identities_issuer_subject_ref_hash_key','affiliate_external_identities_issuer_affiliate_id_key');")"
-expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey','affiliate_external_identities_affiliate_id_fkey');")"
-expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','affiliate_external_identities','pqr_cases','data_subject_requests','payment_events','payment_orders');")"
-[[ "$expected_indexes" == "8" ]] || fail "one or more required unique indexes are missing"
-[[ "$expected_constraints" == "5" ]] || fail "one or more identity/self-service foreign keys are missing"
-[[ "$expected_tables" == "11" ]] || fail "one or more representative tables are missing"
+expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key','affiliate_external_identities_active_affiliate_issuer_key','affiliate_external_identity_fingerprints_issuer_key_id_subject_ref_hash_key','affiliate_external_identity_fingerprints_identity_id_key_id_key');")"
+expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey','affiliate_external_identities_affiliate_id_fkey','affiliate_external_identities_replaced_by_identity_id_fkey','affiliate_external_identity_fingerprints_identity_id_issuer_fkey');")"
+expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','affiliate_external_identities','affiliate_external_identity_fingerprints','pqr_cases','data_subject_requests','payment_events','payment_orders');")"
+[[ "$expected_indexes" == "9" ]] || fail "one or more required unique indexes are missing"
+[[ "$expected_constraints" == "7" ]] || fail "one or more identity/self-service foreign keys are missing"
+[[ "$expected_tables" == "12" ]] || fail "one or more representative tables are missing"
 
 snapshot_sql=$(cat <<'SQL'
 SELECT 'roles=' || count(*) FROM roles
@@ -236,6 +236,6 @@ done
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version<>1 OR status<>'DRAFT';")" == "0" ]] || fail "clean legal seed performed an unauthorized workflow transition"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents WHERE current_version_id IS NOT NULL OR slug LIKE 'consent-test-doc-%';")" == "0" ]] || fail "clean legal seed created a current/synthetic legal document"
 [[ "$(db_scalar "SELECT count(*) FROM users;")" == "0" ]] || fail "clean seed must not create users"
-[[ "$(db_scalar "SELECT (SELECT count(*) FROM self_service_access_lookups) + (SELECT count(*) FROM self_service_otp_challenges) + (SELECT count(*) FROM self_service_sessions) + (SELECT count(*) FROM self_service_idempotency) + (SELECT count(*) FROM self_service_contact_updates) + (SELECT count(*) FROM self_service_audit_events) + (SELECT count(*) FROM affiliate_external_identities);")" == "0" ]] || fail "clean seed must not create self-service identity/session data"
+[[ "$(db_scalar "SELECT (SELECT count(*) FROM self_service_access_lookups) + (SELECT count(*) FROM self_service_otp_challenges) + (SELECT count(*) FROM self_service_sessions) + (SELECT count(*) FROM self_service_idempotency) + (SELECT count(*) FROM self_service_contact_updates) + (SELECT count(*) FROM self_service_audit_events) + (SELECT count(*) FROM affiliate_external_identities) + (SELECT count(*) FROM affiliate_external_identity_fingerprints);")" == "0" ]] || fail "clean seed must not create self-service identity/session data"
 
 printf 'CI database check passed: %s migrations; three stable seed runs; isolated project verified.\n' "$EXPECTED_MIGRATIONS"
