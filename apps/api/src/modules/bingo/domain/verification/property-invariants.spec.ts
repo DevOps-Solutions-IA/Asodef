@@ -208,14 +208,25 @@ describe("Bingo domain mutation-directed guards", () => {
   });
 
   it("rejects changes to frozen critical configuration", () => {
+    const frozenEventConfiguration = {
+      visibility: "PUBLIC",
+      eligibilityPolicy: "AFFILIATES",
+      maxCardsPerParticipant: 1,
+      publicWinnerVisibility: "CARD_ONLY",
+      defaultValidationPolicy: "SIMPLE",
+      fairnessMode: "CRYPTO_RNG",
+      eligibilityRules: ["ACTIVE_AFFILIATE"],
+      retentionPolicy: "corporate-default",
+    } as const;
+
     expect(
       evaluateEventConfigurationChange("PUBLISHED", new Date(0), {
-        before: { fairnessMode: "CRYPTO_RNG", maxCardsPerParticipant: 1 },
+        before: frozenEventConfiguration,
         after: {
+          ...frozenEventConfiguration,
           fairnessMode: "CRYPTO_RNG_COMMIT_REVEAL",
           maxCardsPerParticipant: 2,
         },
-        lockedFields: ["fairnessMode", "maxCardsPerParticipant"],
       }),
     ).toMatchObject({
       allowed: false,
