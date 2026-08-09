@@ -39,17 +39,17 @@ El modelo físico debe permitir distinguir cuatro conceptos:
 
 La recomendación para ETAPA 3 es:
 
-- `BingoRetentionRule`: regla por `(eventId, category)`, con periodo solicitado por evento, mínimo corporativo efectivo, versión, actor y timestamp.
-- Campos directos `retentionUntil` y `legalHold` en artefactos que tengan lifecycle individual, especialmente imports y archivos.
+- `BingoRetentionPolicy`: regla única por `(eventId, category)`, con `configuredRetentionDays`, `corporateMinimumDays`, `effectiveRetentionDays`, `legalHold`, actor y timestamps.
+- Campos directos `retentionUntil` y `legalHoldAt` en artefactos con lifecycle individual, especialmente imports y evidencia. `legalHoldAt IS NOT NULL` significa hold individual vigente.
 - Categoría de evidencia explícita en artefactos heterogéneos/outbox/auditoría, evitando inferirla desde nombres libres.
 - El periodo efectivo se calcula como el mayor entre el solicitado por el evento y el mínimo corporativo vigente. Si alguno requerido no está configurado, la disposición queda bloqueada.
 
 `retentionUntil` debe calcularse desde el hito correcto de cada categoría —por ejemplo, cierre oficial del evento, finalización del import o expiración del archivo temporal— y no indiscriminadamente desde `createdAt`.
 
-Cambiar una política:
+El modelo físico actual actualiza la fila única de política y no conserva versiones por sí mismo. Por tanto, cambiar una política:
 
 - nunca acorta retroactivamente una evidencia por debajo del mínimo aplicable;
-- crea una versión o deja evidencia del valor anterior/nuevo;
+- debe crear un `BingoAuditEvent` append-only con el valor anterior/nuevo antes de considerarse una operación completa; una versión explícita de política queda como hardening no bloqueante previo a implementar retención;
 - recalcula solo mediante una operación futura explícita, auditable e idempotente;
 - no elimina datos durante la modificación.
 
@@ -105,13 +105,13 @@ Los plazos definitivos deben quedar en un catálogo administrable/versionado, co
 
 ### Persona de empresa aliada
 
-- Se vincula a `Company` y a una autorización/identidad event-scoped.
+- Se vincula a `Company` mediante `BingoAuthorizedExternalSubject`, una autorización/identidad event-scoped.
 - No se crea automáticamente `Affiliate`, `Customer` ni `User`.
 - La fuente autorizante, referencia, actor/issuer y vigencia son obligatorios.
 
 ### Invitado autorizado
 
-- Usa una autorización event-scoped con lookup hash/token de alta entropía.
+- Usa `BingoAuthorizedExternalSubject` con `issuer`, `keyId`, `subjectRefFingerprint` y, cuando aplique, `sourceReferenceHash`; no guarda la referencia externa en claro.
 - Cualquier nombre de exhibición debe ser mínimo, cifrado cuando se conserve y separado del DTO público.
 - Contacto solo se almacena si existe una finalidad operacional aprobada; no se usa como autenticador único.
 
@@ -137,7 +137,7 @@ Todo JSON debe tener schema/version y allowlist. No se acepta `metadata` como de
 
 ## 8. Legal hold
 
-`legalHold` puede aplicarse a un evento completo o a artefactos individuales. La evaluación efectiva es OR: cualquier hold vigente en la cadena aplicable bloquea la disposición.
+`BingoRetentionPolicy.legalHold` aplica a la categoría completa del evento y `legalHoldAt` a un artefacto individual. La evaluación efectiva es OR: cualquier hold vigente en la cadena aplicable bloquea la disposición.
 
 Cada cambio de hold debe conservar:
 

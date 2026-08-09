@@ -19,7 +19,7 @@ protocolVersion = "asodef-bingo-commit-reveal-v1"
 seedLength       = 32 bytes
 seedGenerator    = operating-system CSPRNG
 hashAlgorithm    = SHA-256
-encoding         = base64url sin padding para bytes; UTF-8 para texto canónico
+encoding         = hexadecimal minúsculo para SHA-256; base64url sin padding para seed/ciphertext versionados
 canonicalization = JSON Canonicalization Scheme (RFC 8785) o serialización binaria versionada equivalente
 ```
 
@@ -33,17 +33,17 @@ No se concatena texto ambiguamente. El compromiso se calcula sobre un envelope c
   "roundId": "uuid",
   "executionId": "uuid",
   "revision": 1,
-  "configurationHash": "base64url-sha256",
+  "configurationHash": "sha256-hex-lowercase",
   "algorithmId": "identificador-versionado-del-shuffle/draw",
   "seed": "base64url-32-bytes"
 }
 ```
 
 ```text
-commitment = base64url(SHA-256(canonicalEnvelopeBytes))
+commitment = lowercaseHex(SHA-256(canonicalEnvelopeBytes))
 ```
 
-`algorithmId`, `protocolVersion`, canonicalización y `configurationHash` quedan congelados antes del inicio. Cambiar cualquiera exige nueva ejecución/revisión y nuevo compromiso; nunca se reescribe el anterior.
+En el modelo físico, `hashAlgorithm`, `rngAlgorithm` y `protocolVersion` identifican la suite. La versión de canonicalización debe formar parte inequívoca de `protocolVersion`, porque no existe una columna separada. `configurationHash` participa en el envelope, pero el esquema actual no lo persiste como campo independiente; esta carencia queda registrada como hardening previo al motor. Cambiar cualquiera exige nueva ejecución/revisión y nuevo compromiso; nunca se reescribe el anterior.
 
 La forma exacta en que la semilla alimenta el algoritmo de selección pertenece al diseño del motor futuro y deberá evitar sesgo modular. No se considera aprobado un algoritmo por el solo hecho de producir el hash correcto.
 
@@ -74,7 +74,7 @@ La semilla sin revelar es un secreto operacional de corta vida. Antes del reveal
 - solo el componente autorizado que ejecutará el motor puede obtenerla;
 - backups, crash dumps, traces y métricas no deben exponerla.
 
-ETAPA 3 reserva la evidencia (`commitmentHash`, versiones y campos de reveal), pero no inventa una infraestructura externa de secretos. Antes de implementar el motor debe elegirse un mecanismo de custodia compatible con la infraestructura real, por ejemplo cifrado envelope con clave dedicada/versionada o un secret manager autorizado. La clave de custodia debe estar separada de claves de sesión, cifrado general e identidad externa.
+ETAPA 3 reserva la evidencia en `BingoFairnessCommitment`: `commitmentHash`, `hashAlgorithm`, `rngAlgorithm`, `protocolVersion`, `seedCiphertext`, `custodyKeyId` y campos de reveal. `seedCiphertext` debe ser un envelope cifrado autenticado y autodescriptivo —algoritmo, versión y nonce/tag—, nunca una seed meramente codificada. Antes de implementar el motor debe elegirse un mecanismo de custodia compatible con la infraestructura real, por ejemplo cifrado envelope con clave dedicada/versionada o un secret manager autorizado. La clave indicada por `custodyKeyId` debe estar separada de claves de sesión, cifrado general e identidad externa.
 
 Si no existe custodia aprobada o la clave no está disponible, crear/iniciar una ejecución commit-reveal falla cerrada. No se degrada silenciosamente a semilla legible ni a modo RNG-only.
 
@@ -87,7 +87,7 @@ Si no existe custodia aprobada o la clave no está disponible, crear/iniciar una
 3. Calcular y persistir `configurationHash`.
 4. Generar 32 bytes de semilla con CSPRNG.
 5. Construir el envelope canónico y calcular el compromiso.
-6. Custodiar la semilla cifrada fuera de superficies públicas.
+6. Custodiar la semilla en `seedCiphertext` bajo el boundary restringido y la clave versionada por `custodyKeyId`; la columna existe en PostgreSQL, pero nunca se expone en DTOs, logs, outbox o Redis.
 7. Insertar `BingoFairnessCommitment` y evidencia/auditoría en la misma transacción de preparación.
 
 Un retry con la misma idempotency key devuelve la misma ejecución/compromiso; no genera una segunda semilla. Si la transacción falla, no se publica compromiso alguno.
@@ -214,20 +214,20 @@ Cada evento incluye actor o identidad del proceso, permiso/rol relevante, event/
 
 ## 10. Modelo mínimo requerido
 
-`BingoFairnessCommitment` debe poder expresar, como mínimo:
+El modelo físico `BingoFairnessCommitment` expresa actualmente:
 
 - execution única;
-- protocol, hash, canonicalization y algorithm versions;
-- `configurationHash` y `commitmentHash`;
-- estado de compromiso/publicación/reveal;
+- `protocolVersion`, `hashAlgorithm` y `rngAlgorithm`; canonicalización debe quedar incluida en la versión de protocolo;
+- `commitmentHash` hexadecimal minúsculo;
+- publicación/reveal mediante `publishedAt`, `revealedSeed`, `revealedByUserId`, `revealedAt` y `revealEvidenceHash`;
 - timestamps de commit, publicación y reveal;
 - actor/proceso responsable;
-- referencia opaca y versión de la custodia, no secreto;
+- `seedCiphertext` y `custodyKeyId`, nunca expuestos en una superficie pública;
 - seed revelada únicamente después del cierre;
 - `revealEvidenceHash`, verification status/error;
 - clasificación de evidencia, `retentionUntil` y `legalHold` cuando corresponda.
 
-La semilla cifrada puede requerir un artefacto de custodia separado. No debe mezclarse con JSON genérico, outbox ni auditoría.
+El esquema no tiene `configurationHash`, `canonicalizationVersion`, verification status/error ni una referencia de publicación externa como columnas separadas. Antes de implementar el motor se debe agregar lo estrictamente necesario o documentar un derivado canónico verificable que no dependa de JSON mutable. `seedCiphertext` no debe mezclarse con JSON genérico, outbox ni auditoría.
 
 ## 11. Pruebas obligatorias antes de motor/producción
 
