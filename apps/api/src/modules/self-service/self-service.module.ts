@@ -15,6 +15,7 @@ import { SelfServiceProviderController } from "./self-service-provider.controlle
 import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-service-provider.registry";
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
 import { AffiliateIdentityService } from "./affiliate-identity.service";
+import { ExternalIdentityFingerprintService } from "./external-identity-fingerprint.service";
 
 @Module({
   imports: [AuthModule],
@@ -30,6 +31,7 @@ import { AffiliateIdentityService } from "./affiliate-identity.service";
     SelfServiceProviderRegistry,
     SelfServiceContactUpdateService,
     AffiliateIdentityService,
+    ExternalIdentityFingerprintService,
     NotConfiguredExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
     {

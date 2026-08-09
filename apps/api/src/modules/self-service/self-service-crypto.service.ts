@@ -6,23 +6,16 @@ import type { EnvConfig } from "../../config/env.validation";
 @Injectable()
 export class SelfServiceCryptoService {
   private readonly key: Buffer;
-  private readonly externalIdentityKey: Buffer;
 
   constructor(config: ConfigService<EnvConfig, true>) {
     const encryptionKey = config.get("ENCRYPTION_KEY", { infer: true });
     this.key = createHash("sha256").update(encryptionKey).digest();
-    const configuredIdentityKey = config.get("EXTERNAL_IDENTITY_HMAC_KEY", { infer: true });
-    // In fail-closed/not-configured environments the fallback keeps tests and
-    // existing self-service boot compatible. HTTP mode requires a dedicated
-    // key through env.validation and can never reach production with fallback.
-    this.externalIdentityKey = createHash("sha256").update(configuredIdentityKey || encryptionKey).digest();
   }
 
   generateToken(): string { return randomBytes(32).toString("base64url"); }
   generateOtp(): string { return randomInt(0, 1_000_000).toString().padStart(6, "0"); }
   hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
   fingerprint(value: string): string { return createHmac("sha256", this.key).update(value.trim().toLowerCase()).digest("hex"); }
-  fingerprintOpaque(value: string): string { return createHmac("sha256", this.externalIdentityKey).update(value).digest("hex"); }
   hashOtp(challengeId: string, code: string): string { return createHmac("sha256", this.key).update(`${challengeId}:${code}`).digest("hex"); }
 
   matches(expectedHex: string, actualHex: string): boolean {

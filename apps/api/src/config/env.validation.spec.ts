@@ -133,6 +133,7 @@ describe("validateEnv", () => {
     expect(() => validateEnv({
       ...VALID_ENV,
       EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
       EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
       EXTERNAL_CORE_BASE_URL: "https://core.example.com",
       EXTERNAL_CORE_CLIENT_ID: "client-id",
@@ -144,6 +145,7 @@ describe("validateEnv", () => {
       ...VALID_ENV,
       EXTERNAL_CORE_PROVIDER: "http",
       EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
       EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
       EXTERNAL_CORE_BASE_URL: "https://core.example.com",
       EXTERNAL_CORE_CLIENT_ID: "client-id",
@@ -158,6 +160,7 @@ describe("validateEnv", () => {
       ...VALID_ENV,
       EXTERNAL_CORE_PROVIDER: "http",
       EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
       EXTERNAL_IDENTITY_HMAC_KEY: "too-short",
       EXTERNAL_CORE_BASE_URL: "https://core.example.com",
       EXTERNAL_CORE_CLIENT_ID: "client-id",
@@ -166,11 +169,57 @@ describe("validateEnv", () => {
     })).toThrow(/EXTERNAL_IDENTITY_HMAC_KEY/);
   });
 
+  it("requires a fingerprint key id when the HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_KEY_ID/);
+  });
+
+  it("validates the transition keyring and forbids reusing the active key id", () => {
+    const base = {
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v2",
+      EXTERNAL_IDENTITY_HMAC_KEY: "active-dedicated-identity-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    };
+    expect(() => validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: "not-json",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS/);
+    expect(() => validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: JSON.stringify({
+        v2: "different-secret-that-is-nevertheless-at-least-32-characters",
+      }),
+    })).toThrow(/active EXTERNAL_IDENTITY_HMAC_KEY_ID/);
+    expect(validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: JSON.stringify({
+        v1: "previous-dedicated-identity-key-at-least-32-characters",
+      }),
+    }).EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS).toEqual({
+      v1: "previous-dedicated-identity-key-at-least-32-characters",
+    });
+  });
+
   it("rejects an all-whitespace external identity issuer", () => {
     expect(() => validateEnv({
       ...VALID_ENV,
       EXTERNAL_CORE_PROVIDER: "http",
       EXTERNAL_CORE_IDENTITY_ISSUER: "   ",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
       EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
       EXTERNAL_CORE_BASE_URL: "https://core.example.com",
       EXTERNAL_CORE_CLIENT_ID: "client-id",

@@ -2,40 +2,95 @@
 
 ## Alcance
 
-Esta decisión pertenece a la ETAPA 1. No crea rutas, permisos, tablas ni lógica de Bingo. Establece el único puente autorizado para que un `subjectRef` emitido por el núcleo externo se resuelva hacia el `Affiliate.id` interno que usarán posteriormente los dominios nativos de ASODEF.
+Esta decisión pertenece exclusivamente a la ETAPA 1. No crea rutas, permisos, entidades ni lógica de Bingo. Establece el puente autorizado `subjectRef externo -> AffiliateExternalIdentity -> Affiliate.id` sin duplicar personas ni autenticación.
 
 ## Hechos verificados
 
-- `Affiliate.id` es un UUID interno y `Affiliate` ya referencia a `Customer`; no se debe duplicar ninguna persona.
-- Las sesiones de autoservicio conservan `subjectRef` cifrado y lo entregan en `SelfServicePrincipal`.
-- Antes de este cambio no existía una relación persistente entre ese `subjectRef` y `Affiliate.id`.
-- El repositorio solo incluye actualmente el proveedor externo `not_configured`; el selector falla de forma cerrada si se configura un adaptador HTTP que aún no está instalado.
+- `Affiliate.id` es el UUID interno; `Affiliate` ya referencia a `Customer`.
+- Las sesiones de autoservicio mantienen el `subjectRef` cifrado y lo exponen mediante `SelfServicePrincipal`.
+- El repositorio solo incluye el proveedor externo `not_configured`; todavía no existe el adaptador HTTP real ni está confirmado el contrato de lifecycle del proveedor.
+- El `subjectRef` es opaco: ASODEF no lo normaliza, interpreta ni persiste en claro.
 
-## Decisión implementada
+## Modelo e invariantes
 
-La identidad externa se representa mediante `AffiliateExternalIdentity`:
+`AffiliateExternalIdentity` representa una emisión lógica de identidad. Sus campos mínimos son `affiliateId`, `issuer`, `status`, `verifiedAt`, `lastVerifiedAt`, `deactivatedAt`, `replacedByIdentityId` y timestamps. Sus estados son:
 
-- `issuer` identifica de forma estable a la autoridad externa confiable y proviene exclusivamente de configuración del servidor.
-- `subjectRefHash` es un HMAC-SHA-256 sensible a mayúsculas y espacios, firmado con una clave exclusiva de identidad externa. El `subjectRef` opaco nunca se normaliza ni se almacena en texto claro.
-- `(issuer, subjectRefHash)` es único: un sujeto no puede vincularse a dos afiliados.
-- `(issuer, affiliateId)` es único: un afiliado no puede tener dos sujetos en la misma autoridad.
-- La FK hacia `Affiliate` usa `ON DELETE RESTRICT` para impedir identidades huérfanas o eliminaciones accidentales.
-- Los `CHECK` de PostgreSQL validan el tamaño del issuer, el largo exacto del HMAC y el orden temporal de las verificaciones.
+- `ACTIVE`: resoluble; no tiene fecha de desactivación ni reemplazo.
+- `REPLACED`: histórico, no resoluble; conserva fecha y referencia a la identidad sucesora.
+- `REVOKED`: histórico, no resoluble; conserva fecha y no tiene sucesora.
 
-`AffiliateIdentityService.resolveSubject()` devuelve solamente `affiliateId`, `issuer` y `verifiedAt`. No busca por documento, nombre, teléfono, correo o número de afiliado. La ausencia de proveedor, issuer o vínculo produce un fallo cerrado.
+`AffiliateExternalIdentityFingerprint` contiene exclusivamente `identityId`, `issuer`, `keyId`, `subjectRefHash`, `lastUsedAt`, `retiredAt` y timestamps. Una identidad puede tener varias huellas del mismo sujeto, una por versión criptográfica.
 
-`linkVerifiedSubject()` es una operación interna de aprovisionamiento y no está expuesta por ningún controller. Solo un flujo posterior, autenticado contra el núcleo externo real y con auditoría aprobada, podrá invocarla. Repetir el mismo vínculo es idempotente; intentar una reasignación implícita genera conflicto.
+PostgreSQL garantiza:
 
-## Límites deliberados de ETAPA 1
+- como máximo una identidad `ACTIVE` por `(affiliateId, issuer)` mediante índice único parcial;
+- una huella única por `(issuer, keyId, subjectRefHash)`, por lo que una versión de un sujeto no puede pertenecer a dos identidades;
+- una sola huella por `(identityId, keyId)`;
+- coherencia entre `identityId` e `issuer` mediante FK compuesta;
+- estados y fechas coherentes mediante `CHECK`;
+- cadena de reemplazo uno-a-uno, sin autorreferencia;
+- conservación del afiliado mediante `ON DELETE RESTRICT`.
 
-- No se conecta todavía la experiencia Bingo autenticada.
-- No se instala ni simula un adaptador del núcleo externo.
-- No se crea un endpoint administrativo para vincular o reasignar identidades.
-- No se usa el estado `Affiliate.status` como parte de la resolución. Estado y elegibilidad son decisiones de dominio posteriores y permanecen separados de identidad.
-- No se implementa una operación de cambio/revocación. Si el negocio la requiere, deberá ser un flujo explícito, autorizado y auditado; nunca una actualización silenciosa.
+Las transacciones serializables, el bloqueo del afiliado y las restricciones anteriores trabajan conjuntamente. La aplicación nunca confía solamente en comprobaciones previas a una escritura.
 
-## Configuración operativa futura
+## Lifecycle
 
-Cuando se instale el adaptador HTTP real, además de sus credenciales deberán definirse `EXTERNAL_CORE_IDENTITY_ISSUER` con un identificador estable y `EXTERNAL_IDENTITY_HMAC_KEY` con al menos 32 caracteres desde el almacén de secretos. Cambiar el issuer crea un espacio de identidad distinto y requiere aprovisionar vínculos verificados para el nuevo issuer.
+### Creación y reintento
 
-La rotación de `EXTERNAL_IDENTITY_HMAC_KEY` requerirá un procedimiento de re-huella controlado a partir de la autoridad externa; no debe rotarse sin ese runbook porque ASODEF no almacena el sujeto en claro para reconstruir las huellas localmente. La separación permite rotar `ENCRYPTION_KEY` sin invalidar estos vínculos.
+`linkVerifiedSubject()` solo acepta un sujeto que un flujo confiable ya haya verificado. Si no existe identidad activa, crea una identidad y todas las huellas del keyring de transición. Repetir concurrentemente el mismo vínculo es idempotente. Un sujeto asociado a otro afiliado, una identidad activa con otro sujeto o la reactivación implícita de un sujeto histórico producen conflicto.
+
+### Reemplazo
+
+`replaceVerifiedSubject()` exige el `Affiliate.id` y la identidad activa conocida. En una sola transacción crea la nueva emisión, convierte la anterior en `REPLACED`, enlaza `replacedByIdentityId` y activa la sucesora. No actualiza la huella de la identidad anterior ni borra historia. Repetir exactamente el reemplazo devuelve la sucesora; intentar reemplazar hacia otro vínculo produce conflicto.
+
+### Revocación y nueva emisión
+
+`revokeIdentity()` cambia únicamente `ACTIVE -> REVOKED` y conserva la evidencia. Es idempotente para una identidad ya revocada. Después puede emitirse una identidad nueva para el mismo afiliado/issuer, pero el sujeto revocado no se reactiva silenciosamente.
+
+### Resolución
+
+`resolveSubject()` calcula las huellas con todas las versiones aceptadas, pero solo resuelve una identidad `ACTIVE` y una huella no retirada. Cero coincidencias o una situación ambigua fallan como no autorizadas. Una resolución con una clave anterior agrega de forma transaccional la huella de la clave activa y actualiza `lastUsedAt`/`lastVerifiedAt`.
+
+Estas operaciones son servicios internos, no controllers. Cuando sean expuestas a un flujo operativo deberán contar con autenticación, autorización, motivo y auditoría.
+
+## Rotación criptográfica
+
+La configuración usa tres contratos independientes:
+
+- `EXTERNAL_IDENTITY_HMAC_KEY_ID`: identificador estable de la clave activa;
+- `EXTERNAL_IDENTITY_HMAC_KEY`: secreto activo dedicado, mínimo 32 caracteres;
+- `EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS`: objeto JSON `keyId -> secreto` con las claves aceptadas durante la transición.
+
+Procedimiento previsto:
+
+1. generar una clave nueva y un `keyId` nunca reutilizado;
+2. mover temporalmente la clave anterior a `EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS` y activar la nueva;
+3. resolver o verificar sujetos contra el keyring solapado; cada uso materializa la huella nueva sin almacenar el sujeto;
+4. medir que no queden identidades activas dependientes únicamente de la versión anterior;
+5. marcar sus huellas `retiredAt` mediante una futura operación autorizada y auditada;
+6. retirar el secreto anterior de configuración.
+
+No se debe retirar una versión hasta demostrar cobertura completa o revalidar los sujetos pendientes contra el proveedor. Reutilizar un `keyId` para otro secreto está prohibido. La superposición es la que permite detectar el mismo sujeto en ambas versiones durante la transición.
+
+## Separación de claves y fallo cerrado
+
+El servicio de fingerprints no conoce ni consulta `ENCRYPTION_KEY`. No existe fallback. Si falta el `keyId`, la clave dedicada o el issuer/proveedor, la operación falla cerrada sin consultar ni modificar identidades. La validación de entorno exige estos valores cuando `EXTERNAL_CORE_PROVIDER=http` y rechaza keyrings mal formados o que repitan el `keyId` activo.
+
+`ENCRYPTION_KEY` protege otros datos del autoservicio y puede rotarse independientemente; nunca produce huellas de identidad.
+
+## Dependencias todavía no confirmadas
+
+Antes de conectar un proveedor real deben confirmarse contractualmente:
+
+- estabilidad y unicidad del `issuer`;
+- alcance del `subjectRef` (global, tenant o aplicación);
+- eventos o señales de revocación, reemplazo y reemisión;
+- prueba que autoriza cada vínculo y reemplazo;
+- comportamiento ante fusiones o correcciones de cuentas externas;
+- disponibilidad de revalidación masiva durante rotaciones incompletas.
+
+Sin ese contrato no se habilitará la experiencia autenticada de Bingo. Las operaciones implementadas son el núcleo seguro, no una autorización para inferir lifecycle.
+
+## Auditoría futura obligatoria
+
+Todo vínculo, reintento, conflicto, reemplazo, revocación, nueva emisión, resolución sensible, adición o retiro de versión deberá registrar actor/sistema, acción, identidad, afiliado, issuer, keyId (nunca secreto ni sujeto), estado anterior/nuevo, motivo, requestId, resultado, timestamp e IP/user-agent cuando aplique. La auditoría se incorporará al flujo que exponga estas operaciones; no existe todavía un endpoint que permita ejecutarlas externamente.

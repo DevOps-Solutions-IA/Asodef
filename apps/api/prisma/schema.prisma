@@ -588,24 +588,56 @@ model Affiliate {
   @@map("affiliates")
 }
 
+enum AffiliateExternalIdentityStatus {
+  ACTIVE
+  REPLACED
+  REVOKED
+
+  @@map("affiliate_external_identity_status")
+}
+
 // Stable bridge between an opaque subject issued by the trusted external
 // identity source and ASODEF's internal Affiliate identity. The raw subject
-// is never persisted; subjectRefHash is a keyed, case-sensitive HMAC.
+// is never persisted; versioned, keyed fingerprints live in the child model.
 model AffiliateExternalIdentity {
-  id                 String   @id @default(uuid()) @db.Uuid
-  affiliateId        String   @map("affiliate_id") @db.Uuid
-  issuer             String
-  subjectRefHash     String   @map("subject_ref_hash")
-  verifiedAt         DateTime @default(now()) @map("verified_at") @db.Timestamptz(3)
-  lastVerifiedAt     DateTime @default(now()) @map("last_verified_at") @db.Timestamptz(3)
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                   String                          @id @default(uuid()) @db.Uuid
+  affiliateId          String                          @map("affiliate_id") @db.Uuid
+  issuer               String
+  status               AffiliateExternalIdentityStatus @default(ACTIVE)
+  verifiedAt           DateTime                        @default(now()) @map("verified_at") @db.Timestamptz(3)
+  lastVerifiedAt       DateTime                        @default(now()) @map("last_verified_at") @db.Timestamptz(3)
+  deactivatedAt        DateTime?                       @map("deactivated_at") @db.Timestamptz(3)
+  replacedByIdentityId String?                         @unique @map("replaced_by_identity_id") @db.Uuid
+  createdAt            DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+  affiliate    Affiliate                              @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+  fingerprints AffiliateExternalIdentityFingerprint[]
+  replacedBy   AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement", fields: [replacedByIdentityId], references: [id], onDelete: Restrict)
+  replaces     AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement")
 
-  @@unique([issuer, subjectRefHash])
-  @@unique([issuer, affiliateId])
-  @@index([affiliateId])
+  @@unique([id, issuer])
+  @@index([affiliateId, issuer, status])
+  @@index([issuer, status])
   @@map("affiliate_external_identities")
+}
+
+model AffiliateExternalIdentityFingerprint {
+  id             String    @id @default(uuid()) @db.Uuid
+  identityId     String    @map("identity_id") @db.Uuid
+  issuer         String
+  keyId          String    @map("key_id")
+  subjectRefHash String    @map("subject_ref_hash")
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz(3)
+  retiredAt      DateTime? @map("retired_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  identity AffiliateExternalIdentity @relation(fields: [identityId, issuer], references: [id, issuer], onDelete: Restrict)
+
+  @@unique([issuer, keyId, subjectRefHash])
+  @@unique([identityId, keyId])
+  @@index([identityId])
+  @@index([keyId, retiredAt])
+  @@map("affiliate_external_identity_fingerprints")
 }
 
 model Company {

@@ -11,6 +11,38 @@ const booleanFromString = z
   .enum(["true", "false"])
   .transform((value) => value === "true");
 
+const fingerprintKeyId = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, "must be a stable key id (1-64 safe characters)");
+
+const previousIdentityKeys = z
+  .string()
+  .max(8192)
+  .default("{}")
+  .transform((value, context): Record<string, string> => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "must be a JSON object" });
+      return z.NEVER;
+    }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "must be a JSON object" });
+      return z.NEVER;
+    }
+    for (const [keyId, secret] of Object.entries(parsed)) {
+      if (!fingerprintKeyId.safeParse(keyId).success || typeof secret !== "string" || secret.length < 32 || secret.length > 512) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "each entry must use a valid key id and a 32-512 character secret",
+        });
+        return z.NEVER;
+      }
+    }
+    return parsed as Record<string, string>;
+  });
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(3000),
@@ -53,7 +85,9 @@ export const envSchema = z.object({
   SELF_SERVICE_OTP_COOLDOWN_SECONDS: z.coerce.number().int().min(30).max(600).default(60),
   EXTERNAL_CORE_PROVIDER: z.enum(["not_configured", "http"]).default("not_configured"),
   EXTERNAL_CORE_IDENTITY_ISSUER: z.string().trim().max(200).default(""),
+  EXTERNAL_IDENTITY_HMAC_KEY_ID: fingerprintKeyId.optional(),
   EXTERNAL_IDENTITY_HMAC_KEY: z.string().max(512).default(""),
+  EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: previousIdentityKeys,
   EXTERNAL_CORE_BASE_URL: z.string().default(""),
   EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
   EXTERNAL_CORE_CLIENT_SECRET: z.string().default(""),
@@ -217,6 +251,7 @@ export const envSchema = z.object({
   const required: Array<keyof typeof config> = [
     "EXTERNAL_CORE_BASE_URL",
     "EXTERNAL_CORE_IDENTITY_ISSUER",
+    "EXTERNAL_IDENTITY_HMAC_KEY_ID",
     "EXTERNAL_IDENTITY_HMAC_KEY",
     "EXTERNAL_CORE_CLIENT_ID",
     "EXTERNAL_CORE_CLIENT_SECRET",
@@ -232,6 +267,16 @@ export const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["EXTERNAL_IDENTITY_HMAC_KEY"],
       message: "EXTERNAL_IDENTITY_HMAC_KEY must be at least 32 characters",
+    });
+  }
+  if (
+    config.EXTERNAL_IDENTITY_HMAC_KEY_ID &&
+    Object.hasOwn(config.EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS, config.EXTERNAL_IDENTITY_HMAC_KEY_ID)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS"],
+      message: "must not contain the active EXTERNAL_IDENTITY_HMAC_KEY_ID",
     });
   }
   if (config.EXTERNAL_CORE_BASE_URL) {
