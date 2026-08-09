@@ -438,6 +438,55 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
     });
 
     await expect(
+      prisma.bingoWinGroup.update({
+        where: { id: graph.winGroup.id },
+        data: { evidenceHash: sha256("rewritten-group") },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.bingoWinnerCandidate.update({
+        where: { id: graph.candidate.id },
+        data: { evidenceHash: sha256("rewritten-candidate") },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.bingoWinner.update({
+        where: { id: winner.id },
+        data: { publicDisplaySnapshot: { card: "rewritten" } },
+      }),
+    ).rejects.toBeDefined();
+    await prisma.bingoWinnerCandidate.update({
+      where: { id: graph.candidate.id },
+      data: { status: "VALIDATED" },
+    });
+    await prisma.bingoWinner.update({
+      where: { id: winner.id },
+      data: {
+        status: "CONFIRMED",
+        validatedByUserId: graph.fixture.user.id,
+        validatedAt: new Date(),
+      },
+    });
+    await expect(
+      prisma.bingoWinnerCandidate.update({
+        where: { id: graph.candidate.id },
+        data: { status: "PENDING" },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.bingoWinner.update({
+        where: { id: winner.id },
+        data: { status: "PENDING_VALIDATION", tieResolution: { changed: true } },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.bingoWinner.update({
+        where: { id: winner.id },
+        data: { evidenceHash: sha256("rewritten-winner") },
+      }),
+    ).rejects.toBeDefined();
+
+    await expect(
       prisma.bingoCardAssignment.delete({ where: { id: graph.assignment.id } }),
     ).rejects.toBeDefined();
     await expect(
@@ -485,6 +534,28 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
       },
     );
     const committedAt = new Date();
+    await expect(
+      prisma.bingoFairnessCommitment.create({
+        data: {
+          eventId: event.id,
+          executionId: execution.id,
+          hashAlgorithm: "SHA-256",
+          rngAlgorithm: "Node crypto.randomBytes",
+          protocolVersion: "1",
+          commitmentHash: sha256("revealed-on-insert"),
+          configurationHash: sha256(`configuration:${event.id}:1`),
+          canonicalizationVersion: "jcs-v1",
+          seedCiphertext: "encrypted-test-seed",
+          custodyKeyId: "test-custody-v1",
+          committedByUserId: fixture.user.id,
+          committedAt,
+          revealedSeed: "forbidden",
+          revealedByUserId: supervisor.id,
+          revealedAt: committedAt,
+          revealEvidenceHash: sha256("forbidden"),
+        },
+      }),
+    ).rejects.toBeDefined();
     const commitment = await prisma.bingoFairnessCommitment.create({
       data: {
         eventId: event.id,
@@ -493,12 +564,20 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
         rngAlgorithm: "Node crypto.randomBytes",
         protocolVersion: "1",
         commitmentHash: sha256(randomUUID()),
+        configurationHash: sha256(`configuration:${event.id}:1`),
+        canonicalizationVersion: "jcs-v1",
         seedCiphertext: "encrypted-test-seed",
         custodyKeyId: "test-custody-v1",
         committedByUserId: fixture.user.id,
         committedAt,
       },
     });
+    await expect(
+      prisma.bingoFairnessCommitment.update({
+        where: { id: commitment.id },
+        data: { configurationHash: sha256("rewritten-configuration") },
+      }),
+    ).rejects.toBeDefined();
     await expect(
       prisma.bingoRoundExecution.update({
         where: { id: execution.id },
@@ -560,6 +639,39 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
         },
       }),
     ).resolves.toBeDefined();
+
+    const retrospective = await fixture.createExecution(
+      event.id,
+      configured.round.id,
+      {
+        revision: 2,
+        previousExecutionId: execution.id,
+        validationPolicy: BingoValidationPolicy.DUAL_CONTROL,
+        fairnessMode: BingoFairnessMode.CRYPTO_RNG_COMMIT_REVEAL,
+      },
+    );
+    await prisma.bingoRoundExecution.update({
+      where: { id: retrospective.id },
+      data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "test" },
+    });
+    await expect(
+      prisma.bingoFairnessCommitment.create({
+        data: {
+          eventId: event.id,
+          executionId: retrospective.id,
+          hashAlgorithm: "SHA-256",
+          rngAlgorithm: "Node crypto.randomBytes",
+          protocolVersion: "1",
+          commitmentHash: sha256("retrospective"),
+          configurationHash: sha256(`configuration:${event.id}:1`),
+          canonicalizationVersion: "jcs-v1",
+          seedCiphertext: "encrypted-test-seed",
+          custodyKeyId: "test-custody-v1",
+          committedByUserId: fixture.user.id,
+          committedAt: new Date(),
+        },
+      }),
+    ).rejects.toBeDefined();
   });
 
   it("allows only the distinct configured supervisor to confirm a dual-control winner", async () => {
@@ -588,24 +700,32 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
       winGroupId: graph.winGroup.id,
       candidateId: graph.candidate.id,
       prizeId: graph.configured.prize.id,
-      status: "CONFIRMED" as const,
       validationPolicySnapshot: BingoValidationPolicy.DUAL_CONTROL,
-      validatedAt: new Date(),
       evidenceHash: sha256(randomUUID()),
       publicDisplaySnapshot: { card: graph.card.displayNumber },
     };
-
+    const winner = await prisma.bingoWinner.create({ data });
+    await prisma.bingoWinnerCandidate.update({
+      where: { id: graph.candidate.id },
+      data: { status: "VALIDATED" },
+    });
     await expect(
-      prisma.bingoWinner.create({
-        data: { ...data, validatedByUserId: graph.fixture.user.id },
+      prisma.bingoWinner.update({
+        where: { id: winner.id },
+        data: {
+          status: "CONFIRMED",
+          validatedAt: new Date(),
+          validatedByUserId: graph.fixture.user.id,
+        },
       }),
     ).rejects.toBeDefined();
     await expect(
-      prisma.bingoWinner.create({
+      prisma.bingoWinner.update({
+        where: { id: winner.id },
         data: {
-          ...data,
+          status: "CONFIRMED",
           validatedByUserId: supervisor.id,
-          evidenceHash: sha256(randomUUID()),
+          validatedAt: new Date(),
         },
       }),
     ).resolves.toBeDefined();

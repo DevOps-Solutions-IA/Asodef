@@ -292,6 +292,8 @@ CREATE TABLE "bingo_fairness_commitments" (
     "rng_algorithm" TEXT NOT NULL,
     "protocol_version" TEXT NOT NULL,
     "commitment_hash" TEXT NOT NULL,
+    "configuration_hash" TEXT NOT NULL,
+    "canonicalization_version" TEXT NOT NULL,
     "seed_ciphertext" TEXT NOT NULL,
     "custody_key_id" TEXT NOT NULL,
     "committed_by_user_id" UUID NOT NULL,
@@ -1276,6 +1278,8 @@ ALTER TABLE "bingo_fairness_commitments" ADD CONSTRAINT "bingo_fairness_commitme
   AND char_length(btrim("rng_algorithm")) > 0
   AND char_length(btrim("protocol_version")) > 0
   AND "commitment_hash" ~ '^[0-9a-f]{64}$'
+  AND "configuration_hash" ~ '^[0-9a-f]{64}$'
+  AND "canonicalization_version" ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
   AND char_length(btrim("seed_ciphertext")) > 0
   AND "custody_key_id" ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
   AND ("published_at" IS NULL OR "published_at" >= "committed_at")
@@ -1328,12 +1332,13 @@ ALTER TABLE "bingo_win_groups" ADD CONSTRAINT "bingo_win_groups_evidence_check"
   CHECK ("candidate_count" > 0 AND "evidence_hash" ~ '^[0-9a-f]{64}$');
 ALTER TABLE "bingo_winner_candidates" ADD CONSTRAINT "bingo_winner_candidates_evidence_check" CHECK (
   "decisive_ball" BETWEEN 1 AND 75 AND "evidence_hash" ~ '^[0-9a-f]{64}$'
-  AND (("status" = 'REJECTED' AND "rejection_reason" IS NOT NULL) OR "status" <> 'REJECTED')
+  AND (("status" = 'REJECTED' AND char_length(btrim("rejection_reason")) > 0)
+    OR ("status" IN ('PENDING', 'VALIDATED') AND "rejection_reason" IS NULL))
 );
 ALTER TABLE "bingo_winners" ADD CONSTRAINT "bingo_winners_lifecycle_check" CHECK (
   "evidence_hash" ~ '^[0-9a-f]{64}$'
-  AND (("status" = 'PENDING_VALIDATION' AND "validated_by_user_id" IS NULL AND "validated_at" IS NULL AND "rejected_by_user_id" IS NULL AND "rejected_at" IS NULL)
-    OR ("status" = 'CONFIRMED' AND "validated_by_user_id" IS NOT NULL AND "validated_at" IS NOT NULL AND "rejected_by_user_id" IS NULL AND "rejected_at" IS NULL)
+  AND (("status" = 'PENDING_VALIDATION' AND "validated_by_user_id" IS NULL AND "validated_at" IS NULL AND "rejected_by_user_id" IS NULL AND "rejected_at" IS NULL AND "rejection_reason" IS NULL)
+    OR ("status" = 'CONFIRMED' AND "validated_by_user_id" IS NOT NULL AND "validated_at" IS NOT NULL AND "rejected_by_user_id" IS NULL AND "rejected_at" IS NULL AND "rejection_reason" IS NULL)
     OR ("status" = 'REJECTED' AND "rejected_by_user_id" IS NOT NULL AND "rejected_at" IS NOT NULL AND "rejection_reason" IS NOT NULL AND "validated_by_user_id" IS NULL AND "validated_at" IS NULL))
 );
 ALTER TABLE "bingo_tie_breaks" ADD CONSTRAINT "bingo_tie_breaks_distinct_execution_check"
@@ -1676,10 +1681,25 @@ CREATE TRIGGER "bingo_card_assignments_guard"
 -- Reveal is only legal after the execution has officially closed.
 CREATE FUNCTION "bingo_guard_fairness_commitment"() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
-DECLARE execution_status "bingo_execution_status";
+DECLARE
+  execution_status "bingo_execution_status";
+  execution_fairness "bingo_fairness_mode";
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'Bingo fairness evidence cannot be deleted' USING ERRCODE = '23514';
+  END IF;
+  SELECT "status", "fairness_mode_snapshot" INTO execution_status, execution_fairness
+    FROM "bingo_round_executions"
+    WHERE "id" = NEW."execution_id" AND "event_id" = NEW."event_id" FOR SHARE;
+  IF TG_OP = 'INSERT' AND (
+    execution_status <> 'PLANNED'
+    OR execution_fairness <> 'CRYPTO_RNG_COMMIT_REVEAL'
+    OR NEW."revealed_seed" IS NOT NULL
+    OR NEW."revealed_by_user_id" IS NOT NULL
+    OR NEW."revealed_at" IS NOT NULL
+    OR NEW."reveal_evidence_hash" IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Commitment requires a planned commit-reveal execution and cannot be revealed on insert' USING ERRCODE = '23514';
   END IF;
   IF TG_OP = 'UPDATE' AND (
     NEW."event_id" IS DISTINCT FROM OLD."event_id"
@@ -1688,6 +1708,8 @@ BEGIN
     OR NEW."rng_algorithm" IS DISTINCT FROM OLD."rng_algorithm"
     OR NEW."protocol_version" IS DISTINCT FROM OLD."protocol_version"
     OR NEW."commitment_hash" IS DISTINCT FROM OLD."commitment_hash"
+    OR NEW."configuration_hash" IS DISTINCT FROM OLD."configuration_hash"
+    OR NEW."canonicalization_version" IS DISTINCT FROM OLD."canonicalization_version"
     OR NEW."seed_ciphertext" IS DISTINCT FROM OLD."seed_ciphertext"
     OR NEW."custody_key_id" IS DISTINCT FROM OLD."custody_key_id"
     OR NEW."committed_by_user_id" IS DISTINCT FROM OLD."committed_by_user_id"
@@ -1701,10 +1723,12 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Bingo fairness commitment is immutable' USING ERRCODE = '23514';
   END IF;
-  IF NEW."revealed_at" IS NOT NULL AND (TG_OP = 'INSERT' OR OLD."revealed_at" IS NULL) THEN
-    SELECT "status" INTO execution_status FROM "bingo_round_executions"
-      WHERE "id" = NEW."execution_id" AND "event_id" = NEW."event_id" FOR SHARE;
-    IF execution_status NOT IN ('COMPLETED', 'CANCELLED') THEN
+  IF TG_OP = 'UPDATE' AND NEW."published_at" IS NOT NULL AND OLD."published_at" IS NULL
+    AND execution_status <> 'PLANNED' THEN
+    RAISE EXCEPTION 'Commitment must be published while execution is planned' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW."revealed_at" IS NOT NULL AND OLD."revealed_at" IS NULL THEN
+    IF OLD."published_at" IS NULL OR execution_status NOT IN ('COMPLETED', 'CANCELLED') THEN
       RAISE EXCEPTION 'Bingo seed may only be revealed after execution closure' USING ERRCODE = '23514';
     END IF;
   END IF;
@@ -1734,9 +1758,32 @@ CREATE TRIGGER "bingo_draws_scope_guard"
   BEFORE INSERT ON "bingo_draws"
   FOR EACH ROW EXECUTE FUNCTION "bingo_guard_draw_scope"();
 
-CREATE FUNCTION "bingo_guard_candidate_decisive_ball"() RETURNS TRIGGER
+CREATE FUNCTION "bingo_guard_candidate_evidence"() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP = 'INSERT' AND NEW."status" <> 'PENDING' THEN
+    RAISE EXCEPTION 'A Bingo winner candidate must be created PENDING' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW."event_id" IS DISTINCT FROM OLD."event_id"
+    OR NEW."execution_id" IS DISTINCT FROM OLD."execution_id"
+    OR NEW."win_group_id" IS DISTINCT FROM OLD."win_group_id"
+    OR NEW."card_id" IS DISTINCT FROM OLD."card_id"
+    OR NEW."participant_id" IS DISTINCT FROM OLD."participant_id"
+    OR NEW."assignment_id" IS DISTINCT FROM OLD."assignment_id"
+    OR NEW."matched_numbers" IS DISTINCT FROM OLD."matched_numbers"
+    OR NEW."decisive_ball" IS DISTINCT FROM OLD."decisive_ball"
+    OR NEW."detected_at" IS DISTINCT FROM OLD."detected_at"
+    OR NEW."evidence_hash" IS DISTINCT FROM OLD."evidence_hash"
+  ) THEN
+    RAISE EXCEPTION 'Bingo winner candidate evidence is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NOT (
+    NEW."status" = OLD."status"
+    OR (OLD."status" = 'PENDING' AND NEW."status" IN ('VALIDATED', 'REJECTED'))
+  ) THEN
+    RAISE EXCEPTION 'Invalid Bingo winner candidate lifecycle transition' USING ERRCODE = '23514';
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM "bingo_win_groups" g
     JOIN "bingo_draws" d ON d."id" = g."decisive_draw_id"
@@ -1748,18 +1795,68 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER "bingo_winner_candidates_decisive_ball_guard"
-  BEFORE INSERT OR UPDATE OF "decisive_ball" ON "bingo_winner_candidates"
-  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_candidate_decisive_ball"();
+CREATE TRIGGER "bingo_winner_candidates_evidence_guard"
+  BEFORE INSERT OR UPDATE ON "bingo_winner_candidates"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_candidate_evidence"();
 
 CREATE FUNCTION "bingo_guard_winner_validation"() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
-DECLARE execution_row "bingo_round_executions"%ROWTYPE;
+DECLARE
+  execution_row "bingo_round_executions"%ROWTYPE;
+  candidate_status "bingo_candidate_status";
 BEGIN
   SELECT * INTO execution_row FROM "bingo_round_executions"
     WHERE "id" = NEW."execution_id" AND "round_id" = NEW."round_id" AND "event_id" = NEW."event_id" FOR SHARE;
   IF NEW."validation_policy_snapshot" <> execution_row."validation_policy_snapshot" THEN
     RAISE EXCEPTION 'Winner validation policy does not match execution' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'INSERT' AND NEW."status" <> 'PENDING_VALIDATION' THEN
+    RAISE EXCEPTION 'A Bingo winner must be created PENDING_VALIDATION' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW."event_id" IS DISTINCT FROM OLD."event_id"
+    OR NEW."round_id" IS DISTINCT FROM OLD."round_id"
+    OR NEW."execution_id" IS DISTINCT FROM OLD."execution_id"
+    OR NEW."win_group_id" IS DISTINCT FROM OLD."win_group_id"
+    OR NEW."candidate_id" IS DISTINCT FROM OLD."candidate_id"
+    OR NEW."prize_id" IS DISTINCT FROM OLD."prize_id"
+    OR NEW."validation_policy_snapshot" IS DISTINCT FROM OLD."validation_policy_snapshot"
+    OR NEW."evidence_hash" IS DISTINCT FROM OLD."evidence_hash"
+    OR NEW."public_display_snapshot" IS DISTINCT FROM OLD."public_display_snapshot"
+    OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+  ) THEN
+    RAISE EXCEPTION 'Bingo winner identity and evidence are immutable' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NOT (
+    NEW."status" = OLD."status"
+    OR (OLD."status" = 'PENDING_VALIDATION' AND NEW."status" IN ('CONFIRMED', 'REJECTED'))
+  ) THEN
+    RAISE EXCEPTION 'Invalid Bingo winner lifecycle transition' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD."status" <> 'PENDING_VALIDATION' AND (
+    NEW."status" IS DISTINCT FROM OLD."status"
+    OR NEW."validated_by_user_id" IS DISTINCT FROM OLD."validated_by_user_id"
+    OR NEW."validated_at" IS DISTINCT FROM OLD."validated_at"
+    OR NEW."rejected_by_user_id" IS DISTINCT FROM OLD."rejected_by_user_id"
+    OR NEW."rejected_at" IS DISTINCT FROM OLD."rejected_at"
+    OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason"
+    OR NEW."tie_resolution" IS DISTINCT FROM OLD."tie_resolution"
+  ) THEN
+    RAISE EXCEPTION 'Terminal Bingo winner resolution is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD."status" = 'PENDING_VALIDATION'
+    AND NEW."status" = 'PENDING_VALIDATION'
+    AND NEW."tie_resolution" IS DISTINCT FROM OLD."tie_resolution" THEN
+    RAISE EXCEPTION 'Tie resolution may only be recorded with terminal validation' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."status" IN ('CONFIRMED', 'REJECTED') THEN
+    SELECT "status" INTO candidate_status FROM "bingo_winner_candidates"
+      WHERE "id" = NEW."candidate_id" AND "win_group_id" = NEW."win_group_id"
+        AND "execution_id" = NEW."execution_id" AND "event_id" = NEW."event_id" FOR SHARE;
+    IF (NEW."status" = 'CONFIRMED' AND candidate_status <> 'VALIDATED')
+      OR (NEW."status" = 'REJECTED' AND candidate_status <> 'REJECTED') THEN
+      RAISE EXCEPTION 'Winner resolution must match candidate resolution' USING ERRCODE = '23514';
+    END IF;
   END IF;
   IF NEW."status" = 'CONFIRMED' AND NEW."validation_policy_snapshot" = 'DUAL_CONTROL'
     AND (execution_row."supervisor_user_id" IS NULL
@@ -1784,7 +1881,7 @@ END;
 $$;
 CREATE TRIGGER "bingo_round_executions_no_delete" BEFORE DELETE ON "bingo_round_executions"
   FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
-CREATE TRIGGER "bingo_win_groups_no_delete" BEFORE DELETE ON "bingo_win_groups"
+CREATE TRIGGER "bingo_win_groups_append_only" BEFORE UPDATE OR DELETE ON "bingo_win_groups"
   FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
 CREATE TRIGGER "bingo_winner_candidates_no_delete" BEFORE DELETE ON "bingo_winner_candidates"
   FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
