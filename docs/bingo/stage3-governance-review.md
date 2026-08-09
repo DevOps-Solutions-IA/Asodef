@@ -1,6 +1,6 @@
 # Bingo ASODEF — Revisión de governance del modelo físico ETAPA 3
 
-Estado: auditoría posterior a los commits de schema, integridad y pruebas, sobre `feature/bingo` en `ff9ccb1`. Esta revisión no implementa APIs, motor, importación, realtime ni borrado.
+Estado: auditoría final posterior a los commits de schema, integridad, hardening de evidencia y pruebas, sobre `feature/bingo` en `27afb28`. Esta revisión no implementa APIs, motor, importación, realtime ni borrado.
 
 ## 1. Alcance inspeccionado
 
@@ -57,7 +57,7 @@ Dictamen de retención: **modelo suficiente para configurar y bloquear**, no aut
 
 ### Hechos verificados
 
-- `BingoFairnessCommitment` guarda `hashAlgorithm`, `rngAlgorithm`, `protocolVersion`, `commitmentHash`, `seedCiphertext`, `custodyKeyId`, actores/timestamps, reveal y evidencia.
+- `BingoFairnessCommitment` guarda `hashAlgorithm`, `rngAlgorithm`, `protocolVersion`, `canonicalizationVersion`, `configurationHash`, `commitmentHash`, `seedCiphertext`, `custodyKeyId`, actores/timestamps, reveal y evidencia.
 - El check exige hash/reveal hash SHA-256 en hexadecimal minúsculo, identificadores no vacíos y campos de reveal completos o todos nulos.
 - Commitment, ciphertext, key-id, algoritmos e identidad son inmutables; publicación y reveal son transiciones one-way.
 - El reveal solo se admite en una ejecución `COMPLETED` o `CANCELLED`.
@@ -65,14 +65,15 @@ Dictamen de retención: **modelo suficiente para configurar y bloquear**, no aut
 - El commitment no se puede borrar y tiene retención/hold propios.
 - Las pruebas PostgreSQL cubren publicación previa, rechazo de reveal durante ejecución y reveal posterior al cierre.
 
-### Brechas bloqueantes encontradas — en corrección
+### Brechas bloqueantes cerradas
 
-1. El trigger permite insertar un commitment en una ejecución ya terminal y revelarlo en el mismo INSERT. Tampoco verifica que `fairnessModeSnapshot` sea `CRYPTO_RNG_COMMIT_REVEAL`. Esto permite fabricar evidencia retrospectiva para una ejecución RNG-only o finalizada.
-2. No existe `configurationHash` explícito. `protocolVersion` puede identificar canonicalización, pero la configuración exacta comprometida debe permanecer reconstruible e inmutable. El motor no debe avanzar hasta definir esta evidencia.
+1. `bingo_guard_fairness_commitment` exige en INSERT una ejecución `PLANNED`, con `fairnessModeSnapshot = CRYPTO_RNG_COMMIT_REVEAL`, y prohíbe cualquier campo de reveal inicial. Ya no puede fabricarse compromiso retrospectivo ni para modo RNG-only.
+2. `configurationHash` y `canonicalizationVersion` son obligatorios, validados e inmutables junto con algoritmos, protocolo, commitment, ciphertext y key-id.
+3. La publicación solo puede ocurrir mientras la ejecución sigue `PLANNED`; reveal requiere publicación previa y ejecución `COMPLETED` o `CANCELLED`.
 
-Hardening requerido: en INSERT, exigir ejecución `PLANNED` y `fairnessModeSnapshot = CRYPTO_RNG_COMMIT_REVEAL`; prohibir reveal inicial. Agregar prueba negativa para execution terminal/RNG-only. Antes del motor, persistir `configurationHash` o un artefacto equivalente, canónico, inmutable y verificable. El orquestador aceptó el hallazgo y lo asignó al propietario de integridad; este dictamen debe actualizarse tras reauditar su SHA.
+Las pruebas PostgreSQL verifican reveal-on-insert rechazado, inmutabilidad de `configurationHash`, reveal prematuro rechazado, reveal después del cierre aceptado y compromiso retrospectivo rechazado. La selección/generación criptográfica real sigue correctamente fuera de ETAPA 3.
 
-Dictamen commit-reveal: **estructura base adecuada, pero no cerrable para operación** hasta corregir la inserción retrospectiva y definir el hash de configuración.
+Dictamen commit-reveal: **modelo físico de ETAPA 3 aprobado**. La operación sigue bloqueada hasta implementar y probar custodia, algoritmo determinista, publicación y verificador en sus etapas autorizadas.
 
 ## 5. Inmutabilidad de evidencia
 
@@ -83,18 +84,17 @@ Dictamen commit-reveal: **estructura base adecuada, pero no cerrable para operac
 - Executions no se borran, validan transiciones y congelan snapshots/actores.
 - Win groups, candidates y winners rechazan delete.
 
-### Brecha bloqueante — en corrección
+### Brecha bloqueante cerrada
 
-Los triggers actuales no congelan completamente grupos, candidatos y ganadores después de alcanzar estados terminales. En particular, un `BingoWinner` confirmado/rechazado puede ser reescrito si el update vuelve a satisfacer el check de fila; `evidenceHash`, `publicDisplaySnapshot` y `tieResolution` tampoco son inmutables. Candidates y win groups presentan riesgo equivalente sobre evidencia de detección.
+`BingoWinGroup` ahora es completamente append-only. `BingoWinnerCandidate` congela identidad, relaciones, máscara/números, balota decisiva, timestamp y hash, y solo permite `PENDING -> VALIDATED|REJECTED`. `BingoWinner` congela identidad, relaciones, política, hash, snapshot público y creación; solo permite `PENDING_VALIDATION -> CONFIRMED|REJECTED`, exige coherencia con el estado del candidato y congela la resolución terminal.
 
-Hardening requerido antes de cerrar ETAPA 3:
+La migración y las pruebas PostgreSQL verifican:
 
-- identidad, relaciones, hashes, balota/máscara y timestamps de detección siempre inmutables;
-- candidate solo transita `PENDING -> VALIDATED|REJECTED`; terminal no vuelve atrás;
-- winner solo transita `PENDING_VALIDATION -> CONFIRMED|REJECTED`; terminal no vuelve atrás;
-- snapshot público/tie resolution quedan congelados al estado terminal, con correcciones mediante nueva evidencia/auditoría, no overwrite;
-- win group y conteo/hash no se reescriben;
-- pruebas PostgreSQL negativas para cada transición/mutación.
+- rechazo de reescritura del hash de win group y candidate;
+- rechazo de reescritura del snapshot/hash de winner;
+- transiciones legales a estados terminales;
+- rechazo de reversión de candidate/winner terminal;
+- rechazo de delete sobre todas estas evidencias.
 
 ## 6. Imports, outbox e idempotencia
 
@@ -115,16 +115,16 @@ Hardening requerido antes de cerrar ETAPA 3:
 
 ## 7. Clasificación consolidada
 
-| Hallazgo                                               | Clasificación                                                           | Gate                                          |
-| ------------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
-| Commitment insertable retrospectivamente o en RNG-only | Bloqueante ETAPA 3                                                      | Corregir schema/migración y test PostgreSQL   |
-| Winner/candidate/win-group terminal mutable            | Bloqueante ETAPA 3                                                      | Corregir triggers y tests PostgreSQL          |
-| `configurationHash` no persistido                      | Bloqueante antes del motor; decisión del orquestador para cierre físico | Definir evidencia canónica antes de ETAPA 4/5 |
-| Política de retención no versionada                    | No bloqueante ETAPA 3; bloqueante antes de disposición                  | Auditoría atómica/versionado                  |
-| JSON sin allowlist DB                                  | No bloqueante ETAPA 3; bloqueante antes de APIs/outbox                  | DTO/schema/tests de privacidad                |
-| Filename/payload cifrado sin contrato operacional      | No bloqueante ETAPA 3; bloqueante antes de imports                      | Sanitización y cifrado versionado             |
-| Mínimos legales/corporativos sin valores               | Esperado/no bloquea schema; bloquea disposición                         | Aprobación corporativa/jurídica               |
+| Hallazgo                                          | Clasificación                                          | Gate                                                       |
+| ------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| Commitment retrospectivo/RNG-only                 | Cerrado                                                | Trigger fail-closed; publicación/reveal one-way            |
+| Winner/candidate/win-group terminal mutable       | Cerrado                                                | Triggers de inmutabilidad y tests PostgreSQL               |
+| Hash/versión canónica de configuración            | Cerrado en modelo                                      | `configurationHash` y `canonicalizationVersion` inmutables |
+| Política de retención no versionada               | No bloqueante ETAPA 3; bloqueante antes de disposición | Auditoría atómica/versionado                               |
+| JSON sin allowlist DB                             | No bloqueante ETAPA 3; bloqueante antes de APIs/outbox | DTO/schema/tests de privacidad                             |
+| Filename/payload cifrado sin contrato operacional | No bloqueante ETAPA 3; bloqueante antes de imports     | Sanitización y cifrado versionado                          |
+| Mínimos legales/corporativos sin valores          | Esperado/no bloquea schema; bloquea disposición        | Aprobación corporativa/jurídica                            |
 
 ## 8. Recomendación
 
-Dictamen provisional: no declarar ETAPA 3 cerrada hasta integrar, probar y reauditar los hardenings de evidencia clasificados como bloqueantes. El resto del modelo cumple la separación de identidad, minimización estructural, retención parametrizable y base de custody esperadas, pero los controles de JSON/cifrado/retención deben convertirse en gates explícitos antes de sus superficies funcionales correspondientes.
+**Dictamen governance: ETAPA 3 puede cerrarse.** El modelo cumple separación de identidad, minimización estructural, retención parametrizable, evidencia inmutable y base de custody verificable. No quedan brechas bloqueantes de governance para el schema expand-only. Los controles de JSON, cifrado operacional, política jurídica y disposición están correctamente clasificados como gates de las futuras superficies funcionales; no autorizan ETAPA 4 ni jobs destructivos.

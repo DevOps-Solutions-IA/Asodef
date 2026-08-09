@@ -43,7 +43,7 @@ No se concatena texto ambiguamente. El compromiso se calcula sobre un envelope c
 commitment = lowercaseHex(SHA-256(canonicalEnvelopeBytes))
 ```
 
-En el modelo físico, `hashAlgorithm`, `rngAlgorithm` y `protocolVersion` identifican la suite. La versión de canonicalización debe formar parte inequívoca de `protocolVersion`, porque no existe una columna separada. `configurationHash` participa en el envelope, pero el esquema actual no lo persiste como campo independiente; esta carencia queda registrada como hardening previo al motor. Cambiar cualquiera exige nueva ejecución/revisión y nuevo compromiso; nunca se reescribe el anterior.
+En el modelo físico, `hashAlgorithm`, `rngAlgorithm`, `protocolVersion` y `canonicalizationVersion` identifican la suite. `configurationHash` persiste el hash de la configuración comprometida. Todos esos campos son obligatorios e inmutables. Cambiar cualquiera exige nueva ejecución/revisión y nuevo compromiso; nunca se reescribe el anterior.
 
 La forma exacta en que la semilla alimenta el algoritmo de selección pertenece al diseño del motor futuro y deberá evitar sesgo modular. No se considera aprobado un algoritmo por el solo hecho de producir el hash correcto.
 
@@ -217,17 +217,17 @@ Cada evento incluye actor o identidad del proceso, permiso/rol relevante, event/
 El modelo físico `BingoFairnessCommitment` expresa actualmente:
 
 - execution única;
-- `protocolVersion`, `hashAlgorithm` y `rngAlgorithm`; canonicalización debe quedar incluida en la versión de protocolo;
-- `commitmentHash` hexadecimal minúsculo;
+- `protocolVersion`, `hashAlgorithm`, `rngAlgorithm` y `canonicalizationVersion`;
+- `configurationHash` y `commitmentHash` hexadecimales minúsculos;
 - publicación/reveal mediante `publishedAt`, `revealedSeed`, `revealedByUserId`, `revealedAt` y `revealEvidenceHash`;
 - timestamps de commit, publicación y reveal;
 - actor/proceso responsable;
 - `seedCiphertext` y `custodyKeyId`, nunca expuestos en una superficie pública;
 - seed revelada únicamente después del cierre;
-- `revealEvidenceHash`, verification status/error;
-- clasificación de evidencia, `retentionUntil` y `legalHold` cuando corresponda.
+- `revealEvidenceHash`; verification status/error pertenecen al verificador futuro;
+- clasificación de evidencia mediante la política aplicable, `retentionUntil` y `legalHoldAt`.
 
-El esquema no tiene `configurationHash`, `canonicalizationVersion`, verification status/error ni una referencia de publicación externa como columnas separadas. Antes de implementar el motor se debe agregar lo estrictamente necesario o documentar un derivado canónico verificable que no dependa de JSON mutable. `seedCiphertext` no debe mezclarse con JSON genérico, outbox ni auditoría.
+El esquema no tiene verification status/error ni una referencia de publicación externa como columnas separadas; esas capacidades pueden agregarse con el verificador y el mecanismo de publicación futuros. `configurationHash` y `canonicalizationVersion` sí están persistidos y protegidos contra reescritura. `seedCiphertext` no debe mezclarse con JSON genérico, outbox ni auditoría.
 
 ## 11. Pruebas obligatorias antes de motor/producción
 
