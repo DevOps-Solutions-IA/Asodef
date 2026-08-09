@@ -581,10 +581,31 @@ model Affiliate {
   status          AffiliateStatus @default(ACTIVE)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer           Customer                    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  externalIdentities AffiliateExternalIdentity[]
 
   @@index([customerId])
   @@map("affiliates")
+}
+
+// Stable bridge between an opaque subject issued by the trusted external
+// identity source and ASODEF's internal Affiliate identity. The raw subject
+// is never persisted; subjectRefHash is a keyed, case-sensitive HMAC.
+model AffiliateExternalIdentity {
+  id                 String   @id @default(uuid()) @db.Uuid
+  affiliateId        String   @map("affiliate_id") @db.Uuid
+  issuer             String
+  subjectRefHash     String   @map("subject_ref_hash")
+  verifiedAt         DateTime @default(now()) @map("verified_at") @db.Timestamptz(3)
+  lastVerifiedAt     DateTime @default(now()) @map("last_verified_at") @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+
+  @@unique([issuer, subjectRefHash])
+  @@unique([issuer, affiliateId])
+  @@index([affiliateId])
+  @@map("affiliate_external_identities")
 }
 
 model Company {

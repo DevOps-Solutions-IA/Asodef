@@ -23,4 +23,10 @@ describe("SelfServiceCryptoService", () => {
     expect(service.matches(hash, service.hashOtp("challenge-a", "123456"))).toBe(true);
     expect(service.matches(hash, service.hashOtp("challenge-b", "123456"))).toBe(false);
   });
+
+  it("fingerprints opaque subject references without changing their case or whitespace", () => {
+    expect(service.fingerprintOpaque("Subject-ABC")).not.toBe(service.fingerprintOpaque("subject-abc"));
+    expect(service.fingerprintOpaque("Subject-ABC")).not.toBe(service.fingerprintOpaque(" Subject-ABC "));
+    expect(service.fingerprintOpaque("Subject-ABC")).toBe(service.fingerprintOpaque("Subject-ABC"));
+  });
 });

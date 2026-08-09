@@ -52,6 +52,8 @@ export const envSchema = z.object({
   SELF_SERVICE_OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
   SELF_SERVICE_OTP_COOLDOWN_SECONDS: z.coerce.number().int().min(30).max(600).default(60),
   EXTERNAL_CORE_PROVIDER: z.enum(["not_configured", "http"]).default("not_configured"),
+  EXTERNAL_CORE_IDENTITY_ISSUER: z.string().trim().max(200).default(""),
+  EXTERNAL_IDENTITY_HMAC_KEY: z.string().max(512).default(""),
   EXTERNAL_CORE_BASE_URL: z.string().default(""),
   EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
   EXTERNAL_CORE_CLIENT_SECRET: z.string().default(""),
@@ -214,6 +216,8 @@ export const envSchema = z.object({
   if (config.EXTERNAL_CORE_PROVIDER !== "http") return;
   const required: Array<keyof typeof config> = [
     "EXTERNAL_CORE_BASE_URL",
+    "EXTERNAL_CORE_IDENTITY_ISSUER",
+    "EXTERNAL_IDENTITY_HMAC_KEY",
     "EXTERNAL_CORE_CLIENT_ID",
     "EXTERNAL_CORE_CLIENT_SECRET",
     "EXTERNAL_CORE_WEBHOOK_SECRET",
@@ -222,6 +226,13 @@ export const envSchema = z.object({
     if (!config[field]) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required when EXTERNAL_CORE_PROVIDER=http` });
     }
+  }
+  if (config.EXTERNAL_IDENTITY_HMAC_KEY && config.EXTERNAL_IDENTITY_HMAC_KEY.length < 32) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EXTERNAL_IDENTITY_HMAC_KEY"],
+      message: "EXTERNAL_IDENTITY_HMAC_KEY must be at least 32 characters",
+    });
   }
   if (config.EXTERNAL_CORE_BASE_URL) {
     const parsed = z.string().url().safeParse(config.EXTERNAL_CORE_BASE_URL);

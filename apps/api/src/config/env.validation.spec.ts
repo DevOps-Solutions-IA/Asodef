@@ -128,4 +128,54 @@ describe("validateEnv", () => {
       expect(message).toContain("ENCRYPTION_KEY");
     }
   });
+
+  it("requires a stable identity issuer when the external HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_CORE_IDENTITY_ISSUER/);
+
+    const result = validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    });
+    expect(result.EXTERNAL_CORE_IDENTITY_ISSUER).toBe("https://identity.example.com");
+  });
+
+  it("rejects a short external identity HMAC key when the HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY: "too-short",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_KEY/);
+  });
+
+  it("rejects an all-whitespace external identity issuer", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "   ",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_CORE_IDENTITY_ISSUER/);
+  });
 });
