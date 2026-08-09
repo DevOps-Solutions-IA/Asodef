@@ -50,7 +50,8 @@ function patternCandidate(
           matchedPatternMasks: reverseMasks ? [...masks].reverse() : masks,
         },
         matched: true,
-        matchedMask: 1023,
+        matchedNumbersMask: 3n,
+        matchedPositionMask: 1023,
         pattern: { id: "pattern-line", kind: "LINE" },
       },
     },
@@ -127,7 +128,8 @@ describe("Bingo candidate evidence", () => {
     [{ matched: false }, "PATTERN_NOT_MATCHED"],
     [{ decisiveDrawSequence: 4 }, "DECISIVE_DRAW_MISMATCH"],
     [{ decisiveBall: 60 }, "DECISIVE_DRAW_MISMATCH"],
-    [{ matchedMask: 0 }, "INVALID_PATTERN_EVIDENCE"],
+    [{ matchedPositionMask: 0 }, "INVALID_PATTERN_EVIDENCE"],
+    [{ matchedNumbersMask: 0n }, "INVALID_PATTERN_EVIDENCE"],
   ] as const)("rejects candidate evidence mutation %#", (mutation, code) => {
     const base = patternCandidate("card-1");
     const result = createWinnerCandidate({
@@ -149,10 +151,14 @@ describe("Bingo candidate evidence", () => {
               ? mutation.decisiveDrawSequence
               : base.patternCandidate.evaluation.decisiveDrawSequence,
           matched: "matched" in mutation ? mutation.matched : true,
-          matchedMask:
-            "matchedMask" in mutation
-              ? mutation.matchedMask
-              : base.patternCandidate.evaluation.matchedMask,
+          matchedNumbersMask:
+            "matchedNumbersMask" in mutation
+              ? mutation.matchedNumbersMask
+              : base.patternCandidate.evaluation.matchedNumbersMask,
+          matchedPositionMask:
+            "matchedPositionMask" in mutation
+              ? mutation.matchedPositionMask
+              : base.patternCandidate.evaluation.matchedPositionMask,
         },
       },
     });

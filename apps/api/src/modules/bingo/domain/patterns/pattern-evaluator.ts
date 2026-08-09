@@ -17,9 +17,9 @@ import type {
 } from "./pattern-types";
 
 interface DrawIndex {
-  readonly ordered: readonly BingoDrawValue[];
-  readonly byBall: ReadonlyMap<number, BingoDrawValue>;
-  readonly bySequence: ReadonlyMap<number, BingoDrawValue>;
+  readonly sequenceByBall: readonly number[];
+  readonly ballBySequence: ReadonlyMap<number, number>;
+  readonly drawnMaskBySequence: ReadonlyMap<number, bigint>;
 }
 
 interface PreparedPattern {
@@ -49,72 +49,88 @@ function evaluatePreparedPattern(
   drawIndex: DrawIndex,
   pattern: PreparedPattern,
 ): PatternEvaluationResult {
-  const completedMasks = pattern.masks
-    .map((mask) => {
-      let requiredBallMask = 0n;
-      let completedAtDrawSequence = 0;
-      let complete = true;
+  const maskCount = pattern.masks.length;
+  const completionSequences = new Array<number>(maskCount).fill(0);
+  const earliestCompletions: number[] = [];
 
-      for (const position of mask.positions) {
-        if (position === BINGO_FREE_INDEX) continue;
-        const ball = card.numbers[position]!;
-        requiredBallMask |= 1n << BigInt(ball - 1);
-        const draw = drawIndex.byBall.get(ball);
-        if (!draw) {
-          complete = false;
-          break;
-        }
-        completedAtDrawSequence = Math.max(
-          completedAtDrawSequence,
-          draw.sequence,
-        );
+  for (let maskIndex = 0; maskIndex < maskCount; maskIndex += 1) {
+    const mask = pattern.masks[maskIndex]!;
+    let completedAtDrawSequence = 0;
+
+    for (const position of mask.positions) {
+      if (position === BINGO_FREE_INDEX) continue;
+      const ball = card.numbers[position]!;
+      const drawSequence = drawIndex.sequenceByBall[ball]!;
+      if (drawSequence === 0) {
+        completedAtDrawSequence = 0;
+        break;
       }
+      if (drawSequence > completedAtDrawSequence) {
+        completedAtDrawSequence = drawSequence;
+      }
+    }
 
-      return complete
-        ? ({
-            completedAtDrawSequence,
-            id: mask.id,
-            positionMask: mask.positionMask,
-            requiredBallMask,
-            sequence: mask.sequence,
-          } satisfies MatchedPatternMaskEvidence)
-        : null;
-    })
-    .filter((mask): mask is MatchedPatternMaskEvidence => mask !== null)
-    .sort(compareCompletedMasks);
+    if (completedAtDrawSequence === 0) continue;
+    completionSequences[maskIndex] = completedAtDrawSequence;
+    insertCompletion(
+      earliestCompletions,
+      completedAtDrawSequence,
+      pattern.definition.requiredMatchCount,
+    );
+  }
 
-  if (completedMasks.length < pattern.definition.requiredMatchCount) {
+  if (earliestCompletions.length < pattern.definition.requiredMatchCount) {
     return unmatchedResult(card, pattern.definition);
   }
 
   const decisiveDrawSequence =
-    completedMasks[pattern.definition.requiredMatchCount - 1]!
-      .completedAtDrawSequence;
-  const decisiveDraw = drawIndex.bySequence.get(decisiveDrawSequence)!;
-  const matchedAtDecision = completedMasks
-    .filter((mask) => mask.completedAtDrawSequence <= decisiveDrawSequence)
-    .sort((left, right) => left.sequence - right.sequence);
-  let matchedMask = 0;
-  for (const mask of matchedAtDecision) matchedMask |= mask.positionMask;
+    earliestCompletions[pattern.definition.requiredMatchCount - 1]!;
+  const matchedPatternMasks: MatchedPatternMaskEvidence[] = [];
+  let matchedPositionMask = 0;
+  let matchedNumbersMask = 0n;
+  for (let maskIndex = 0; maskIndex < maskCount; maskIndex += 1) {
+    const completedAtDrawSequence = completionSequences[maskIndex]!;
+    if (
+      completedAtDrawSequence === 0 ||
+      completedAtDrawSequence > decisiveDrawSequence
+    ) {
+      continue;
+    }
+    const mask = pattern.masks[maskIndex]!;
+    let requiredBallMask = 0n;
+    for (const position of mask.positions) {
+      if (position !== BINGO_FREE_INDEX) {
+        requiredBallMask |= 1n << BigInt(card.numbers[position]! - 1);
+      }
+    }
+    matchedPositionMask |= mask.positionMask;
+    matchedNumbersMask |= requiredBallMask;
+    matchedPatternMasks.push({
+      completedAtDrawSequence,
+      id: mask.id,
+      positionMask: mask.positionMask,
+      requiredBallMask,
+      sequence: mask.sequence,
+    });
+  }
 
-  return Object.freeze({
-    decisiveBall: decisiveDraw.ball,
+  return {
+    decisiveBall: drawIndex.ballBySequence.get(decisiveDrawSequence)!,
     decisiveDrawSequence,
-    evidence: Object.freeze({
+    evidence: {
       cardLayoutHash: card.layoutHash,
-      drawnBallMaskAtDecision: drawMaskThrough(
-        drawIndex.ordered,
-        decisiveDrawSequence,
-      ),
-      matchedPatternMasks: Object.freeze(matchedAtDecision),
-    }),
+      drawnBallMaskAtDecision:
+        drawIndex.drawnMaskBySequence.get(decisiveDrawSequence)!,
+      matchedPatternMasks,
+    },
     matched: true,
-    matchedMask,
-    pattern: Object.freeze({
+    matchedNumbersMask,
+    matchedPositionMask,
+    pattern: {
       id: pattern.definition.id,
       kind: pattern.definition.kind,
-    }),
-  });
+    },
+  };
 }
 
 export function evaluatePatternBatch(
@@ -137,20 +153,25 @@ export function evaluatePatternBatch(
   const preparedPattern = preparePattern(pattern);
   const drawIndex = indexDraws(draws);
 
-  return Object.freeze(
-    cards
-      .map((reference) => ({
+  const candidates: PatternCandidate[] = [];
+  for (const reference of cards) {
+    const evaluation = evaluatePreparedPattern(
+      reference.card,
+      drawIndex,
+      preparedPattern,
+    );
+    if (evaluation.matched) {
+      candidates.push({
         cardId: reference.cardId,
         cardLayoutHash: reference.card.layoutHash,
-        evaluation: evaluatePreparedPattern(
-          reference.card,
-          drawIndex,
-          preparedPattern,
-        ),
-      }))
-      .filter((candidate) => candidate.evaluation.matched)
-      .sort((left, right) => left.cardId.localeCompare(right.cardId)),
+        evaluation,
+      });
+    }
+  }
+  candidates.sort((left, right) =>
+    left.cardId < right.cardId ? -1 : left.cardId > right.cardId ? 1 : 0,
   );
+  return candidates;
 }
 
 function indexDraws(draws: readonly BingoDrawValue[]): DrawIndex {
@@ -158,8 +179,10 @@ function indexDraws(draws: readonly BingoDrawValue[]): DrawIndex {
     (left, right) => left.sequence - right.sequence,
   );
   const sequences = new Set<number>();
-  const byBall = new Map<number, BingoDrawValue>();
-  const bySequence = new Map<number, BingoDrawValue>();
+  const sequenceByBall = new Array<number>(76).fill(0);
+  const ballBySequence = new Map<number, number>();
+  const drawnMaskBySequence = new Map<number, bigint>();
+  let cumulativeDrawnMask = 0n;
   for (const draw of ordered) {
     if (
       !Number.isInteger(draw.sequence) ||
@@ -168,7 +191,7 @@ function indexDraws(draws: readonly BingoDrawValue[]): DrawIndex {
       !Number.isInteger(draw.ball) ||
       draw.ball < 1 ||
       draw.ball > 75 ||
-      byBall.has(draw.ball)
+      sequenceByBall[draw.ball] !== 0
     ) {
       throw new BingoPatternDomainError(
         BINGO_PATTERN_ERROR_CODES.INVALID_DRAW_SEQUENCE,
@@ -177,60 +200,56 @@ function indexDraws(draws: readonly BingoDrawValue[]): DrawIndex {
       );
     }
     sequences.add(draw.sequence);
-    byBall.set(draw.ball, draw);
-    bySequence.set(draw.sequence, draw);
+    sequenceByBall[draw.ball] = draw.sequence;
+    ballBySequence.set(draw.sequence, draw.ball);
+    cumulativeDrawnMask |= 1n << BigInt(draw.ball - 1);
+    drawnMaskBySequence.set(draw.sequence, cumulativeDrawnMask);
   }
-  return { byBall, bySequence, ordered: Object.freeze(ordered) };
+  return { ballBySequence, drawnMaskBySequence, sequenceByBall };
 }
 
 function preparePattern(pattern: BingoPatternDefinition): PreparedPattern {
   validatePatternDefinition(pattern);
   return {
     definition: pattern,
-    masks: pattern.masks.map((mask) => ({
-      ...mask,
-      positions: positionsFromMask(mask.positionMask),
-    })),
+    masks: pattern.masks
+      .map((mask) => ({
+        ...mask,
+        positions: positionsFromMask(mask.positionMask),
+      }))
+      .sort(
+        (left, right) =>
+          left.sequence - right.sequence || left.id.localeCompare(right.id),
+      ),
   };
 }
 
-function compareCompletedMasks(
-  left: MatchedPatternMaskEvidence,
-  right: MatchedPatternMaskEvidence,
-): number {
-  return (
-    left.completedAtDrawSequence - right.completedAtDrawSequence ||
-    left.sequence - right.sequence ||
-    left.id.localeCompare(right.id)
-  );
-}
-
-function drawMaskThrough(
-  draws: readonly BingoDrawValue[],
-  sequence: number,
-): bigint {
-  let mask = 0n;
-  for (const draw of draws) {
-    if (draw.sequence > sequence) break;
-    mask |= 1n << BigInt(draw.ball - 1);
-  }
-  return mask;
+function insertCompletion(
+  completions: number[],
+  value: number,
+  limit: number,
+): void {
+  let index = completions.length;
+  while (index > 0 && completions[index - 1]! > value) index -= 1;
+  completions.splice(index, 0, value);
+  if (completions.length > limit) completions.pop();
 }
 
 function unmatchedResult(
   card: CanonicalBingoCard,
   pattern: BingoPatternDefinition,
 ): PatternEvaluationResult {
-  return Object.freeze({
+  return {
     decisiveBall: null,
     decisiveDrawSequence: null,
-    evidence: Object.freeze({
+    evidence: {
       cardLayoutHash: card.layoutHash,
       drawnBallMaskAtDecision: 0n,
-      matchedPatternMasks: Object.freeze([]),
-    }),
+      matchedPatternMasks: [],
+    },
     matched: false,
-    matchedMask: 0,
-    pattern: Object.freeze({ id: pattern.id, kind: pattern.kind }),
-  });
+    matchedNumbersMask: 0n,
+    matchedPositionMask: 0,
+    pattern: { id: pattern.id, kind: pattern.kind },
+  };
 }

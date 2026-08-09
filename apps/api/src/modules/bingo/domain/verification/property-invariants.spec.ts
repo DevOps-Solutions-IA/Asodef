@@ -103,7 +103,9 @@ describe("Bingo domain deterministic properties", () => {
       );
       expect(forward.matched).toBe(true);
       expect(reverse.matched).toBe(true);
-      expect(forward.matchedMask).toBe(reverse.matchedMask);
+      expect(forward.matchedPositionMask).toBe(
+        reverse.matchedPositionMask,
+      );
       expect(forward.decisiveBall).toBe(required.at(-1));
       expect(reverse.decisiveBall).toBe(required[0]);
     }

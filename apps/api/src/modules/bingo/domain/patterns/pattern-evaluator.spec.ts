@@ -1,4 +1,4 @@
-import { createCanonicalCard } from "../cards";
+import { ballMask, createCanonicalCard } from "../cards";
 import {
   ALL_POSITIONS_MASK,
   DIAGONAL_LINE_MASKS,
@@ -30,7 +30,8 @@ describe("deterministic Bingo pattern evaluation", () => {
         decisiveBall: balls.at(-1),
         decisiveDrawSequence: balls.length,
         matched: true,
-        matchedMask: mask,
+        matchedNumbersMask: ballMask(...balls),
+        matchedPositionMask: mask,
       });
       expect(result.evidence.matchedPatternMasks).toHaveLength(1);
     },
@@ -105,7 +106,8 @@ describe("deterministic Bingo pattern evaluation", () => {
     expect(result).toMatchObject({
       matched: true,
       decisiveBall: 49,
-      matchedMask: custom,
+      matchedNumbersMask: ballMask(1, 17, 49),
+      matchedPositionMask: custom,
     });
   });
 

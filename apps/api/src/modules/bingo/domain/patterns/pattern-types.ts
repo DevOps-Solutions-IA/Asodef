@@ -51,7 +51,9 @@ export interface PatternEvaluationResult {
   readonly decisiveDrawSequence: number | null;
   readonly decisiveBall: number | null;
   /** Union of all pattern-position masks satisfied at the decisive draw. */
-  readonly matchedMask: number;
+  readonly matchedPositionMask: number;
+  /** Union of the card ball masks required by those satisfied patterns. */
+  readonly matchedNumbersMask: bigint;
   readonly evidence: PatternEvaluationEvidence;
 }
 

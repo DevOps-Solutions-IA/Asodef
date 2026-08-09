@@ -23,7 +23,8 @@ export interface PatternMatch {
   readonly patternId: string;
   readonly patternKind: PatternEvaluationResult["pattern"]["kind"];
   readonly decisiveDraw: DecisiveDrawReference;
-  readonly matchedMask: number;
+  readonly matchedPositionMask: number;
+  readonly matchedNumbersMask: bigint;
   readonly drawnBallMaskAtDecision: bigint;
   readonly matchedPatternMasks: readonly Readonly<{
     id: string;
@@ -84,8 +85,9 @@ export function createWinnerCandidate(
     !nonBlank(evaluation.pattern.id) ||
     !nonBlank(input.decisiveDraw.id) ||
     !nonBlank(input.decisiveDraw.evidenceHash) ||
-    !Number.isInteger(evaluation.matchedMask) ||
-    evaluation.matchedMask <= 0 ||
+    !Number.isInteger(evaluation.matchedPositionMask) ||
+    evaluation.matchedPositionMask <= 0 ||
+    evaluation.matchedNumbersMask <= 0n ||
     evaluation.evidence.matchedPatternMasks.length === 0
   ) {
     return { created: false, code: "INVALID_PATTERN_EVIDENCE" };
@@ -99,13 +101,26 @@ export function createWinnerCandidate(
       )
       .map((mask) => Object.freeze({ ...mask })),
   );
+  let evidencePositionMask = 0;
+  let evidenceNumbersMask = 0n;
+  for (const mask of matchedPatternMasks) {
+    evidencePositionMask |= mask.positionMask;
+    evidenceNumbersMask |= mask.requiredBallMask;
+  }
+  if (
+    evidencePositionMask !== evaluation.matchedPositionMask ||
+    evidenceNumbersMask !== evaluation.matchedNumbersMask
+  ) {
+    return { created: false, code: "INVALID_PATTERN_EVIDENCE" };
+  }
   const match: PatternMatch = Object.freeze({
     cardId: input.patternCandidate.cardId,
     cardLayoutHash: input.patternCandidate.cardLayoutHash,
     decisiveDraw: Object.freeze({ ...input.decisiveDraw }),
     drawnBallMaskAtDecision: evaluation.evidence.drawnBallMaskAtDecision,
     executionId: input.executionId,
-    matchedMask: evaluation.matchedMask,
+    matchedNumbersMask: evaluation.matchedNumbersMask,
+    matchedPositionMask: evaluation.matchedPositionMask,
     matchedPatternMasks,
     patternId: evaluation.pattern.id,
     patternKind: evaluation.pattern.kind,
@@ -121,7 +136,8 @@ export function createWinnerCandidate(
     },
     drawnBallMaskAtDecision: match.drawnBallMaskAtDecision,
     executionId: match.executionId,
-    matchedMask: match.matchedMask,
+    matchedNumbersMask: match.matchedNumbersMask,
+    matchedPositionMask: match.matchedPositionMask,
     matchedPatternMasks: match.matchedPatternMasks.map((mask) => ({
       completedAtDrawSequence: mask.completedAtDrawSequence,
       id: mask.id,
