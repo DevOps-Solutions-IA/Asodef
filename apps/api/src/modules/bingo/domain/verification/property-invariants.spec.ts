@@ -252,6 +252,7 @@ describe("Bingo domain mutation-directed guards", () => {
       identityKind: "AFFILIATE",
       status: "APPROVED",
       eligibilityCode: "ELIGIBLE",
+      approvedAt: new Date("2026-08-08T00:00:00.000Z"),
     };
     expect(
       canAssignCard({
