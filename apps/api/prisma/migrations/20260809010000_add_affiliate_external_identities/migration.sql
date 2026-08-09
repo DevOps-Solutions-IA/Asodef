@@ -49,8 +49,14 @@ CREATE TABLE "affiliate_external_identity_fingerprints" (
 CREATE UNIQUE INDEX "affiliate_external_identities_id_issuer_key"
   ON "affiliate_external_identities"("id", "issuer");
 
-CREATE UNIQUE INDEX "affiliate_external_identities_replaced_by_identity_id_key"
-  ON "affiliate_external_identities"("replaced_by_identity_id");
+-- The replacement scope is part of the referenced key so PostgreSQL, rather
+-- than only application code, guarantees that a successor belongs to the
+-- same affiliate and trusted issuer.
+CREATE UNIQUE INDEX "affiliate_external_identities_id_affiliate_id_issuer_key"
+  ON "affiliate_external_identities"("id", "affiliate_id", "issuer");
+
+CREATE UNIQUE INDEX "affiliate_external_identities_replacement_chain_key"
+  ON "affiliate_external_identities"("replaced_by_identity_id", "affiliate_id", "issuer");
 
 -- Historical identities remain present, while exactly one ACTIVE identity is
 -- allowed for an affiliate inside a given trusted issuer.
@@ -82,8 +88,9 @@ ALTER TABLE "affiliate_external_identities"
   ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "affiliate_external_identities"
-  ADD CONSTRAINT "affiliate_external_identities_replaced_by_identity_id_fkey"
-  FOREIGN KEY ("replaced_by_identity_id") REFERENCES "affiliate_external_identities"("id")
+  ADD CONSTRAINT "affiliate_external_identities_replacement_scope_fkey"
+  FOREIGN KEY ("replaced_by_identity_id", "affiliate_id", "issuer")
+  REFERENCES "affiliate_external_identities"("id", "affiliate_id", "issuer")
   ON DELETE RESTRICT ON UPDATE CASCADE
   DEFERRABLE INITIALLY DEFERRED;
 

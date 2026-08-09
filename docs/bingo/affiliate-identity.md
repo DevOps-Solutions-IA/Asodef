@@ -29,6 +29,7 @@ PostgreSQL garantiza:
 - coherencia entre `identityId` e `issuer` mediante FK compuesta;
 - estados y fechas coherentes mediante `CHECK`;
 - cadena de reemplazo uno-a-uno, sin autorreferencia;
+- alcance de reemplazo mediante FK compuesta: la sucesora debe conservar exactamente el mismo `affiliateId` y `issuer` que la identidad reemplazada; PostgreSQL rechaza directamente reemplazos entre afiliados o issuers distintos;
 - conservación del afiliado mediante `ON DELETE RESTRICT`.
 
 Las transacciones serializables, el bloqueo del afiliado y las restricciones anteriores trabajan conjuntamente. La aplicación nunca confía solamente en comprobaciones previas a una escritura.

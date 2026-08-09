@@ -607,15 +607,17 @@ model AffiliateExternalIdentity {
   verifiedAt           DateTime                        @default(now()) @map("verified_at") @db.Timestamptz(3)
   lastVerifiedAt       DateTime                        @default(now()) @map("last_verified_at") @db.Timestamptz(3)
   deactivatedAt        DateTime?                       @map("deactivated_at") @db.Timestamptz(3)
-  replacedByIdentityId String?                         @unique @map("replaced_by_identity_id") @db.Uuid
+  replacedByIdentityId String?                         @map("replaced_by_identity_id") @db.Uuid
   createdAt            DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
 
   affiliate    Affiliate                              @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
   fingerprints AffiliateExternalIdentityFingerprint[]
-  replacedBy   AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement", fields: [replacedByIdentityId], references: [id], onDelete: Restrict)
+  replacedBy   AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement", fields: [replacedByIdentityId, affiliateId, issuer], references: [id, affiliateId, issuer], onDelete: Restrict)
   replaces     AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement")
 
   @@unique([id, issuer])
+  @@unique([id, affiliateId, issuer])
+  @@unique([replacedByIdentityId, affiliateId, issuer])
   @@index([affiliateId, issuer, status])
   @@index([issuer, status])
   @@map("affiliate_external_identities")

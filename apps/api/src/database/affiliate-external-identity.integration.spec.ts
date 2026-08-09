@@ -225,6 +225,65 @@ describe("Affiliate identity lifecycle (integration, real Postgres)", () => {
     ).rejects.toMatchObject({ code: "P2003" });
   });
 
+  it("enforces replacement affiliate and issuer scope directly in PostgreSQL", async () => {
+    const firstAffiliate = await createAffiliate("replacement-scope-first");
+    const secondAffiliate = await createAffiliate("replacement-scope-second");
+    const predecessor = await prisma.affiliateExternalIdentity.create({
+      data: { affiliateId: firstAffiliate.id, issuer },
+    });
+    const crossAffiliateSuccessor = await prisma.affiliateExternalIdentity.create({
+      data: { affiliateId: secondAffiliate.id, issuer },
+    });
+    const crossIssuerSuccessor = await prisma.affiliateExternalIdentity.create({
+      data: { affiliateId: firstAffiliate.id, issuer: `${issuer}/other` },
+    });
+
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "affiliate_external_identities"
+        SET "status" = 'REPLACED',
+            "deactivated_at" = CURRENT_TIMESTAMP,
+            "replaced_by_identity_id" = ${crossAffiliateSuccessor.id}::uuid
+        WHERE "id" = ${predecessor.id}::uuid
+      `,
+    ).rejects.toBeDefined();
+
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "affiliate_external_identities"
+        SET "status" = 'REPLACED',
+            "deactivated_at" = CURRENT_TIMESTAMP,
+            "replaced_by_identity_id" = ${crossIssuerSuccessor.id}::uuid
+        WHERE "id" = ${predecessor.id}::uuid
+      `,
+    ).rejects.toBeDefined();
+
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "affiliate_external_identities"
+        SET "status" = 'REPLACED',
+            "deactivated_at" = CURRENT_TIMESTAMP,
+            "replaced_by_identity_id" = "id"
+        WHERE "id" = ${predecessor.id}::uuid
+      `,
+    ).rejects.toBeDefined();
+
+    await expect(
+      prisma.affiliateExternalIdentity.update({
+        where: { id: predecessor.id },
+        data: { status: AffiliateExternalIdentityStatus.REPLACED },
+      }),
+    ).rejects.toBeDefined();
+
+    await expect(
+      prisma.affiliateExternalIdentity.findUniqueOrThrow({ where: { id: predecessor.id } }),
+    ).resolves.toMatchObject({
+      status: AffiliateExternalIdentityStatus.ACTIVE,
+      replacedByIdentityId: null,
+      deactivatedAt: null,
+    });
+  });
+
   it("stores neither raw external subjects nor unversioned hashes", async () => {
     const identityColumns = await prisma.$queryRaw<{ column_name: string }[]>`
       SELECT column_name FROM information_schema.columns
