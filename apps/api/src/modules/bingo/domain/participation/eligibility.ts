@@ -11,6 +11,29 @@ export type EligibilityPolicy =
   | "COMBINED"
   | "CUSTOM_APPROVED";
 
+/** Mirrors the physical BingoEligibilityRuleKind enum. */
+export type BingoEligibilityRuleKind =
+  | "ACTIVE_AFFILIATE"
+  | "BENEFICIARY"
+  | "PARTNER_COMPANY_MEMBER"
+  | "AUTHORIZED_GUEST"
+  | "CUSTOM_APPROVED";
+
+export type CombinedEligibilityRule =
+  | Readonly<{ kind: "ACTIVE_AFFILIATE" }>
+  | Readonly<{ kind: "BENEFICIARY" }>
+  | Readonly<{
+      kind: "PARTNER_COMPANY_MEMBER";
+      allowedCompanyIds: readonly string[];
+    }>
+  | Readonly<{ kind: "AUTHORIZED_GUEST" }>
+  | Readonly<{ kind: "CUSTOM_APPROVED" }>;
+
+export type FrozenCombinedEligibilitySnapshot = Readonly<{
+  frozenAt: Date;
+  rules: readonly CombinedEligibilityRule[];
+}>;
+
 export type CustomApproval = Readonly<{
   eventId: string;
   subjectKey: string;
@@ -29,6 +52,7 @@ export type EligibilityContext = Readonly<{
   identity: IdentityResolution;
   allowedPartnerCompanyIds: readonly string[];
   customApproval?: CustomApproval;
+  combinedRules?: FrozenCombinedEligibilitySnapshot;
   eligibilityFrozenAt?: Date;
   operationStartedAt?: Date;
   now: Date;
@@ -44,7 +68,13 @@ export type EligibilityDecisionCode =
   | "CUSTOM_APPROVAL_EVIDENCE_INVALID"
   | "CUSTOM_APPROVAL_REVOKED"
   | "CUSTOM_APPROVAL_NOT_YET_VALID"
-  | "CUSTOM_APPROVAL_AFTER_FREEZE";
+  | "CUSTOM_APPROVAL_AFTER_FREEZE"
+  | "CUSTOM_APPROVAL_DATE_INVALID"
+  | "CUSTOM_APPROVAL_TEMPORAL_ORDER_INVALID"
+  | "ELIGIBILITY_DATE_INVALID"
+  | "ELIGIBILITY_TEMPORAL_ORDER_INVALID"
+  | "COMBINED_RULES_REQUIRED"
+  | "COMBINED_RULES_INVALID";
 
 export type EligibilityDecision = Readonly<{
   eligible: boolean;
@@ -67,6 +97,10 @@ function decision(
     eventId: context.eventId,
     subjectKey: context.identity.subjectKey,
   };
+}
+
+function validDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
 }
 
 function validatesCustomApproval(
@@ -96,7 +130,6 @@ function validatesCustomApproval(
     approval.source.trim() === "" ||
     approval.actorUserId.trim() === "" ||
     approval.referenceHash.trim() === "" ||
-    !Number.isFinite(approval.approvedAt.getTime()) ||
     approval.context === null ||
     Array.isArray(approval.context)
   ) {
@@ -104,6 +137,29 @@ function validatesCustomApproval(
       context,
       false,
       "CUSTOM_APPROVAL_EVIDENCE_INVALID",
+      "IDENTITY_VALID",
+    );
+  }
+  if (
+    !validDate(approval.approvedAt) ||
+    (approval.revokedAt !== undefined && !validDate(approval.revokedAt))
+  ) {
+    return decision(
+      context,
+      false,
+      "CUSTOM_APPROVAL_DATE_INVALID",
+      "IDENTITY_VALID",
+    );
+  }
+  if (
+    approval.revokedAt !== undefined &&
+    (approval.revokedAt.getTime() < approval.approvedAt.getTime() ||
+      approval.revokedAt.getTime() > context.now.getTime())
+  ) {
+    return decision(
+      context,
+      false,
+      "CUSTOM_APPROVAL_TEMPORAL_ORDER_INVALID",
       "IDENTITY_VALID",
     );
   }
@@ -141,6 +197,65 @@ function validatesCustomApproval(
   return decision(context, true, "ELIGIBLE", "IDENTITY_VALID");
 }
 
+function validateCombinedRules(context: EligibilityContext):
+  | Readonly<{ valid: true; rules: readonly CombinedEligibilityRule[] }>
+  | Readonly<{
+      valid: false;
+      code: "COMBINED_RULES_REQUIRED" | "COMBINED_RULES_INVALID";
+    }> {
+  const snapshot = context.combinedRules;
+  if (snapshot === undefined || snapshot === null) {
+    return { valid: false, code: "COMBINED_RULES_REQUIRED" };
+  }
+  if (
+    !validDate(snapshot.frozenAt) ||
+    snapshot.frozenAt.getTime() > context.now.getTime() ||
+    !Array.isArray(snapshot.rules) ||
+    snapshot.rules.length === 0
+  ) {
+    return { valid: false, code: "COMBINED_RULES_INVALID" };
+  }
+  const kinds = new Set<string>();
+  for (const rule of snapshot.rules) {
+    if (
+      rule === null ||
+      typeof rule !== "object" ||
+      kinds.has((rule as CombinedEligibilityRule).kind)
+    ) {
+      return { valid: false, code: "COMBINED_RULES_INVALID" };
+    }
+    const kind = (rule as CombinedEligibilityRule).kind;
+    kinds.add(kind);
+    switch (kind) {
+      case "ACTIVE_AFFILIATE":
+      case "BENEFICIARY":
+      case "AUTHORIZED_GUEST":
+      case "CUSTOM_APPROVED":
+        break;
+      case "PARTNER_COMPANY_MEMBER": {
+        const companyIds = (
+          rule as Extract<
+            CombinedEligibilityRule,
+            { kind: "PARTNER_COMPANY_MEMBER" }
+          >
+        ).allowedCompanyIds;
+        if (
+          !Array.isArray(companyIds) ||
+          companyIds.length === 0 ||
+          companyIds.some((id) => typeof id !== "string" || id.trim() === "") ||
+          new Set(companyIds).size !== companyIds.length
+        ) {
+          return { valid: false, code: "COMBINED_RULES_INVALID" };
+        }
+        break;
+      }
+      default:
+        return { valid: false, code: "COMBINED_RULES_INVALID" };
+    }
+  }
+  return { valid: true, rules: snapshot.rules };
+}
+
 export function evaluateEligibility(
   context: EligibilityContext,
 ): EligibilityDecision {
@@ -153,8 +268,71 @@ export function evaluateEligibility(
     return decision(context, false, "IDENTITY_INVALID", identity.code);
   }
 
+  const eligibilityDates = [
+    context.eligibilityFrozenAt,
+    context.operationStartedAt,
+  ];
+  if (
+    eligibilityDates.some((value) => value !== undefined && !validDate(value))
+  ) {
+    return decision(context, false, "ELIGIBILITY_DATE_INVALID", identity.code);
+  }
+  if (
+    eligibilityDates.some(
+      (value) => value !== undefined && value.getTime() > context.now.getTime(),
+    ) ||
+    (context.eligibilityFrozenAt !== undefined &&
+      context.operationStartedAt !== undefined &&
+      context.operationStartedAt.getTime() <
+        context.eligibilityFrozenAt.getTime())
+  ) {
+    return decision(
+      context,
+      false,
+      "ELIGIBILITY_TEMPORAL_ORDER_INVALID",
+      identity.code,
+    );
+  }
+
   if (context.policy === "CUSTOM_APPROVED") {
     return validatesCustomApproval(context);
+  }
+
+  if (context.policy === "COMBINED") {
+    const snapshot = validateCombinedRules(context);
+    if (!snapshot.valid) {
+      return decision(context, false, snapshot.code, identity.code);
+    }
+    const directRule = snapshot.rules.find((rule) => {
+      switch (context.identity.kind) {
+        case "AFFILIATE":
+          return rule.kind === "ACTIVE_AFFILIATE";
+        case "BENEFICIARY":
+          return rule.kind === "BENEFICIARY";
+        case "AUTHORIZED_GUEST":
+          return rule.kind === "AUTHORIZED_GUEST";
+        case "PARTNER_COMPANY_MEMBER":
+          return (
+            rule.kind === "PARTNER_COMPANY_MEMBER" &&
+            rule.allowedCompanyIds.includes(context.identity.companyId)
+          );
+      }
+    });
+    if (directRule !== undefined) {
+      return decision(context, true, "ELIGIBLE", identity.code);
+    }
+    if (snapshot.rules.some((rule) => rule.kind === "CUSTOM_APPROVED")) {
+      return validatesCustomApproval(context);
+    }
+    return decision(
+      context,
+      false,
+      context.identity.kind === "PARTNER_COMPANY_MEMBER" &&
+        snapshot.rules.some((rule) => rule.kind === "PARTNER_COMPANY_MEMBER")
+        ? "PARTNER_COMPANY_NOT_ALLOWED"
+        : "POLICY_DOES_NOT_ALLOW_SUBJECT",
+      identity.code,
+    );
   }
   if (
     context.identity.kind === "PARTNER_COMPANY_MEMBER" &&
@@ -169,7 +347,6 @@ export function evaluateEligibility(
   }
 
   const allowed =
-    context.policy === "COMBINED" ||
     (context.policy === "AFFILIATES" &&
       context.identity.kind === "AFFILIATE") ||
     (context.policy === "AFFILIATES_AND_BENEFICIARIES" &&

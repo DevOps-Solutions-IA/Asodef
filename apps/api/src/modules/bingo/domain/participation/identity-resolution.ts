@@ -47,6 +47,7 @@ export type IdentityResolution =
 
 export type IdentityResolutionCode =
   | "IDENTITY_VALID"
+  | "INVALID_REFERENCE_TIME"
   | "INVALID_SUBJECT_KEY"
   | "INVALID_AFFILIATE"
   | "AFFILIATE_NOT_ACTIVE"
@@ -55,6 +56,8 @@ export type IdentityResolutionCode =
   | "INVALID_COMPANY"
   | "AUTHORIZATION_EVENT_MISMATCH"
   | "AUTHORIZATION_EVIDENCE_INVALID"
+  | "AUTHORIZATION_DATE_INVALID"
+  | "AUTHORIZATION_TEMPORAL_ORDER_INVALID"
   | "AUTHORIZATION_NOT_YET_VALID"
   | "AUTHORIZATION_EXPIRED"
   | "AUTHORIZATION_REVOKED";
@@ -68,8 +71,8 @@ function nonBlank(value: string): boolean {
   return value.trim().length > 0;
 }
 
-function validDate(value: Date): boolean {
-  return Number.isFinite(value.getTime());
+function validDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
 }
 
 function validateAuthorization(
@@ -82,10 +85,32 @@ function validateAuthorization(
   }
   if (
     !nonBlank(authorization.source) ||
-    !nonBlank(authorization.referenceHash) ||
-    !validDate(authorization.authorizedAt)
+    !nonBlank(authorization.referenceHash)
   ) {
     return { valid: false, code: "AUTHORIZATION_EVIDENCE_INVALID" };
+  }
+  if (
+    !validDate(authorization.authorizedAt) ||
+    (authorization.expiresAt !== undefined &&
+      !validDate(authorization.expiresAt)) ||
+    (authorization.revokedAt !== undefined &&
+      !validDate(authorization.revokedAt))
+  ) {
+    return { valid: false, code: "AUTHORIZATION_DATE_INVALID" };
+  }
+  if (
+    (authorization.expiresAt !== undefined &&
+      authorization.expiresAt.getTime() <=
+        authorization.authorizedAt.getTime()) ||
+    (authorization.revokedAt !== undefined &&
+      (authorization.revokedAt.getTime() <
+        authorization.authorizedAt.getTime() ||
+        authorization.revokedAt.getTime() > now.getTime()))
+  ) {
+    return {
+      valid: false,
+      code: "AUTHORIZATION_TEMPORAL_ORDER_INVALID",
+    };
   }
   if (authorization.authorizedAt.getTime() > now.getTime()) {
     return { valid: false, code: "AUTHORIZATION_NOT_YET_VALID" };
@@ -109,6 +134,9 @@ export function validateIdentityResolution(
     now: Date;
   }>,
 ): IdentityResolutionDecision {
+  if (!validDate(input.now)) {
+    return { valid: false, code: "INVALID_REFERENCE_TIME" };
+  }
   if (!nonBlank(input.identity.subjectKey)) {
     return { valid: false, code: "INVALID_SUBJECT_KEY" };
   }

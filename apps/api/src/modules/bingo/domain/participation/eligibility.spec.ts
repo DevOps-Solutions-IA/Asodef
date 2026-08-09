@@ -83,6 +83,21 @@ function context(
     allowedPartnerCompanyIds: ["company-1"],
     customApproval:
       policy === "CUSTOM_APPROVED" ? approval(identity) : undefined,
+    combinedRules:
+      policy === "COMBINED"
+        ? {
+            frozenAt: new Date("2026-08-08T00:00:00.000Z"),
+            rules: [
+              { kind: "ACTIVE_AFFILIATE" },
+              { kind: "BENEFICIARY" },
+              {
+                kind: "PARTNER_COMPANY_MEMBER",
+                allowedCompanyIds: ["company-1"],
+              },
+              { kind: "AUTHORIZED_GUEST" },
+            ],
+          }
+        : undefined,
     now: NOW,
     ...overrides,
   };
@@ -145,6 +160,79 @@ describe("Bingo participation eligibility", () => {
     ).toEqual({ valid: false, code: "INVALID_AFFILIATE" });
   });
 
+  it("evaluates only the frozen physical rules enabled by COMBINED", () => {
+    const affiliateOnly = {
+      frozenAt: new Date("2026-08-08T00:00:00.000Z"),
+      rules: [{ kind: "ACTIVE_AFFILIATE" as const }],
+    };
+    expect(
+      evaluateEligibility(
+        context("COMBINED", identities.AFFILIATE, {
+          combinedRules: affiliateOnly,
+        }),
+      ),
+    ).toMatchObject({ eligible: true, code: "ELIGIBLE" });
+    expect(
+      evaluateEligibility(
+        context("COMBINED", identities.AUTHORIZED_GUEST, {
+          combinedRules: affiliateOnly,
+        }),
+      ),
+    ).toMatchObject({
+      eligible: false,
+      code: "POLICY_DOES_NOT_ALLOW_SUBJECT",
+    });
+  });
+
+  it("uses CUSTOM_APPROVED in COMBINED only when that frozen rule is present", () => {
+    const combinedRules = {
+      frozenAt: new Date("2026-08-08T00:00:00.000Z"),
+      rules: [{ kind: "CUSTOM_APPROVED" as const }],
+    };
+    expect(
+      evaluateEligibility(
+        context("COMBINED", identities.AUTHORIZED_GUEST, {
+          combinedRules,
+          customApproval: approval(identities.AUTHORIZED_GUEST),
+        }),
+      ),
+    ).toMatchObject({ eligible: true, code: "ELIGIBLE" });
+    expect(
+      evaluateEligibility(
+        context("COMBINED", identities.AUTHORIZED_GUEST, {
+          combinedRules,
+          customApproval: undefined,
+        }),
+      ),
+    ).toMatchObject({ eligible: false, code: "CUSTOM_APPROVAL_REQUIRED" });
+  });
+
+  it.each([
+    [undefined, "COMBINED_RULES_REQUIRED"],
+    [
+      { frozenAt: new Date("2026-08-08T00:00:00.000Z"), rules: [] },
+      "COMBINED_RULES_INVALID",
+    ],
+    [
+      {
+        frozenAt: new Date("2026-08-08T00:00:00.000Z"),
+        rules: [{ kind: "PARTNER_COMPANY_MEMBER", allowedCompanyIds: [] }],
+      },
+      "COMBINED_RULES_INVALID",
+    ],
+  ] as const)(
+    "fails closed for malformed COMBINED snapshot %#",
+    (combinedRules, code) => {
+      expect(
+        evaluateEligibility(
+          context("COMBINED", identities.AFFILIATE, {
+            combinedRules,
+          }),
+        ),
+      ).toMatchObject({ eligible: false, code });
+    },
+  );
+
   it.each([
     [{ eventId: "other" }, "AUTHORIZATION_EVENT_MISMATCH"],
     [
@@ -155,6 +243,17 @@ describe("Bingo participation eligibility", () => {
     [
       { revokedAt: new Date("2026-08-08T00:00:00.000Z") },
       "AUTHORIZATION_REVOKED",
+    ],
+    [{ authorizedAt: new Date(Number.NaN) }, "AUTHORIZATION_DATE_INVALID"],
+    [{ expiresAt: new Date(Number.NaN) }, "AUTHORIZATION_DATE_INVALID"],
+    [{ revokedAt: new Date(Number.NaN) }, "AUTHORIZATION_DATE_INVALID"],
+    [
+      { expiresAt: new Date("2026-07-31T00:00:00.000Z") },
+      "AUTHORIZATION_TEMPORAL_ORDER_INVALID",
+    ],
+    [
+      { revokedAt: new Date("2026-07-31T00:00:00.000Z") },
+      "AUTHORIZATION_TEMPORAL_ORDER_INVALID",
     ],
   ] as const)("rejects mutated external authorization %#", (mutation, code) => {
     const identity: IdentityResolution = {
@@ -167,6 +266,16 @@ describe("Bingo participation eligibility", () => {
       valid: false,
       code,
     });
+  });
+
+  it("rejects a non-finite identity reference time", () => {
+    expect(
+      validateIdentityResolution({
+        identity: identities.AFFILIATE,
+        eventId: EVENT_ID,
+        now: new Date(Number.NaN),
+      }),
+    ).toEqual({ valid: false, code: "INVALID_REFERENCE_TIME" });
   });
 
   it("requires the partner company to be allowed by the event", () => {
@@ -200,6 +309,27 @@ describe("Bingo participation eligibility", () => {
       },
       "CUSTOM_APPROVAL_NOT_YET_VALID",
     ],
+    [
+      {
+        ...approval(identities.AFFILIATE),
+        approvedAt: new Date(Number.NaN),
+      },
+      "CUSTOM_APPROVAL_DATE_INVALID",
+    ],
+    [
+      {
+        ...approval(identities.AFFILIATE),
+        revokedAt: new Date(Number.NaN),
+      },
+      "CUSTOM_APPROVAL_DATE_INVALID",
+    ],
+    [
+      {
+        ...approval(identities.AFFILIATE),
+        revokedAt: new Date("2026-08-07T00:00:00.000Z"),
+      },
+      "CUSTOM_APPROVAL_TEMPORAL_ORDER_INVALID",
+    ],
   ] as const)("rejects invalid custom approval %#", (customApproval, code) => {
     expect(
       evaluateEligibility(
@@ -221,6 +351,65 @@ describe("Bingo participation eligibility", () => {
         }),
       ),
     ).toMatchObject({ eligible: false, code: "CUSTOM_APPROVAL_AFTER_FREEZE" });
+  });
+
+  it.each([
+    [{ eligibilityFrozenAt: new Date(Number.NaN) }, "ELIGIBILITY_DATE_INVALID"],
+    [{ operationStartedAt: new Date(Number.NaN) }, "ELIGIBILITY_DATE_INVALID"],
+    [
+      { eligibilityFrozenAt: new Date("2026-08-10T00:00:00.000Z") },
+      "ELIGIBILITY_TEMPORAL_ORDER_INVALID",
+    ],
+    [
+      {
+        eligibilityFrozenAt: new Date("2026-08-08T12:00:00.000Z"),
+        operationStartedAt: new Date("2026-08-08T10:00:00.000Z"),
+      },
+      "ELIGIBILITY_TEMPORAL_ORDER_INVALID",
+    ],
+  ] as const)(
+    "fails closed for malformed eligibility timeline %#",
+    (mutation, code) => {
+      expect(
+        evaluateEligibility(
+          context("AFFILIATES", identities.AFFILIATE, mutation),
+        ),
+      ).toMatchObject({ eligible: false, code });
+    },
+  );
+
+  it("fails closed across a deterministic Invalid Date mutation matrix", () => {
+    const invalid = () => new Date(Number.NaN);
+    const mutations: readonly Partial<EligibilityContext>[] = [
+      { now: invalid() },
+      { eligibilityFrozenAt: invalid() },
+      { operationStartedAt: invalid() },
+      {
+        combinedRules: {
+          frozenAt: invalid(),
+          rules: [{ kind: "ACTIVE_AFFILIATE" }],
+        },
+      },
+    ];
+    for (const mutation of mutations) {
+      const first = evaluateEligibility(
+        context(
+          mutation.combinedRules === undefined ? "AFFILIATES" : "COMBINED",
+          identities.AFFILIATE,
+          mutation,
+        ),
+      );
+      expect(first.eligible).toBe(false);
+      expect(
+        evaluateEligibility(
+          context(
+            mutation.combinedRules === undefined ? "AFFILIATES" : "COMBINED",
+            identities.AFFILIATE,
+            mutation,
+          ),
+        ),
+      ).toEqual(first);
+    }
   });
 
   it("is deterministic across a seeded mutation fuzz matrix", () => {

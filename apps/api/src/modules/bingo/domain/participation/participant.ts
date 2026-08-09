@@ -25,7 +25,8 @@ export type ParticipantDecision =
       code:
         | "ELIGIBILITY_DENIED"
         | "ELIGIBILITY_SCOPE_MISMATCH"
-        | "INVALID_PARTICIPANT_ID";
+        | "INVALID_PARTICIPANT_ID"
+        | "INVALID_PARTICIPANT_TIMESTAMP";
     }>;
 
 export function approveParticipant(
@@ -39,6 +40,9 @@ export function approveParticipant(
 ): ParticipantDecision {
   if (input.participantId.trim() === "") {
     return { accepted: false, code: "INVALID_PARTICIPANT_ID" };
+  }
+  if (!(input.now instanceof Date) || !Number.isFinite(input.now.getTime())) {
+    return { accepted: false, code: "INVALID_PARTICIPANT_TIMESTAMP" };
   }
   if (
     input.eligibility.eventId !== input.eventId ||

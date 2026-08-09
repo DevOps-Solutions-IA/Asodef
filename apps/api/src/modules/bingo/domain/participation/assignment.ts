@@ -13,7 +13,12 @@ export type AssignmentBlockCode =
   | "EXECUTION_ALREADY_STARTED"
   | "CURRENT_ASSIGNMENT_NOT_ACTIVE"
   | "CURRENT_ASSIGNMENT_SCOPE_MISMATCH"
-  | "REASSIGNMENT_REASON_REQUIRED";
+  | "REASSIGNMENT_REASON_REQUIRED"
+  | "INVALID_ASSIGNMENT_TIMESTAMP"
+  | "INVALID_EXECUTION_TIMELINE"
+  | "REASSIGNMENT_SCOPE_INVALID"
+  | "REASSIGNMENT_SCOPE_UNRESOLVED"
+  | "REASSIGNMENT_TARGET_UNCHANGED";
 
 export type AssignmentDecision =
   | Readonly<{ allowed: true; code: "ASSIGNMENT_ALLOWED" }>
@@ -53,9 +58,23 @@ function denied(code: AssignmentBlockCode): AssignmentDecision {
   return { allowed: false, code };
 }
 
+function validDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
 function validateCommon(context: CardAssignmentContext): AssignmentDecision {
+  if (!validDate(context.now)) {
+    return denied("INVALID_ASSIGNMENT_TIMESTAMP");
+  }
   if (context.participant.status !== "APPROVED") {
     return denied("PARTICIPANT_NOT_APPROVED");
+  }
+  if (
+    context.participant.approvedAt === undefined ||
+    !validDate(context.participant.approvedAt) ||
+    context.participant.approvedAt.getTime() > context.now.getTime()
+  ) {
+    return denied("INVALID_ASSIGNMENT_TIMESTAMP");
   }
   if (context.participant.eventId !== context.eventId) {
     return denied("PARTICIPANT_EVENT_MISMATCH");
@@ -89,6 +108,20 @@ function validateCommon(context: CardAssignmentContext): AssignmentDecision {
     return denied("ROUND_NOT_ASSIGNABLE");
   }
   if (
+    context.execution?.startedAt !== undefined &&
+    (!validDate(context.execution.startedAt) ||
+      context.execution.startedAt.getTime() > context.now.getTime())
+  ) {
+    return denied("INVALID_EXECUTION_TIMELINE");
+  }
+  if (
+    context.execution !== undefined &&
+    ["RUNNING", "PAUSED", "COMPLETED"].includes(context.execution.status) &&
+    context.execution.startedAt === undefined
+  ) {
+    return denied("INVALID_EXECUTION_TIMELINE");
+  }
+  if (
     (context.execution?.startedAt !== undefined &&
       context.execution.startedAt.getTime() <= context.now.getTime()) ||
     (context.execution !== undefined &&
@@ -116,7 +149,18 @@ export type ReassignmentContext = CardAssignmentContext &
     currentAssignment: Readonly<{
       eventId: string;
       cardEventId: string;
+      participantId: string;
+      roundContextId: string;
+      assignedAt: Date;
       status: "ACTIVE" | "SUPERSEDED" | "REVOKED";
+    }>;
+    scope: Readonly<{
+      roundContextId: string;
+      currentParticipantId: string;
+      targetParticipantId: string;
+      executionScopeResolved: boolean;
+      anyApplicableExecutionStarted: boolean;
+      resolvedAt: Date;
     }>;
     reason: string;
   }>;
@@ -124,14 +168,54 @@ export type ReassignmentContext = CardAssignmentContext &
 export function canReassignCard(
   context: ReassignmentContext,
 ): AssignmentDecision {
+  if (!validDate(context.now)) {
+    return denied("INVALID_ASSIGNMENT_TIMESTAMP");
+  }
+  const scope = context.scope as ReassignmentContext["scope"] | undefined;
+  if (scope === undefined || scope === null || typeof scope !== "object") {
+    return denied("REASSIGNMENT_SCOPE_INVALID");
+  }
   if (context.currentAssignment.status !== "ACTIVE") {
     return denied("CURRENT_ASSIGNMENT_NOT_ACTIVE");
   }
   if (
     context.currentAssignment.eventId !== context.eventId ||
-    context.currentAssignment.cardEventId !== context.cardEventId
+    context.currentAssignment.cardEventId !== context.cardEventId ||
+    context.currentAssignment.roundContextId !== scope.roundContextId ||
+    context.currentAssignment.participantId !== scope.currentParticipantId ||
+    context.participant.id !== scope.targetParticipantId
   ) {
     return denied("CURRENT_ASSIGNMENT_SCOPE_MISMATCH");
+  }
+  if (
+    typeof scope.roundContextId !== "string" ||
+    scope.roundContextId.trim() === "" ||
+    typeof scope.currentParticipantId !== "string" ||
+    scope.currentParticipantId.trim() === "" ||
+    typeof scope.targetParticipantId !== "string" ||
+    scope.targetParticipantId.trim() === "" ||
+    typeof scope.executionScopeResolved !== "boolean" ||
+    typeof scope.anyApplicableExecutionStarted !== "boolean"
+  ) {
+    return denied("REASSIGNMENT_SCOPE_INVALID");
+  }
+  if (!scope.executionScopeResolved) {
+    return denied("REASSIGNMENT_SCOPE_UNRESOLVED");
+  }
+  if (
+    !validDate(context.currentAssignment.assignedAt) ||
+    !validDate(scope.resolvedAt) ||
+    context.currentAssignment.assignedAt.getTime() > context.now.getTime() ||
+    scope.resolvedAt.getTime() > context.now.getTime() ||
+    context.currentAssignment.assignedAt.getTime() > scope.resolvedAt.getTime()
+  ) {
+    return denied("INVALID_ASSIGNMENT_TIMESTAMP");
+  }
+  if (scope.currentParticipantId === scope.targetParticipantId) {
+    return denied("REASSIGNMENT_TARGET_UNCHANGED");
+  }
+  if (scope.anyApplicableExecutionStarted) {
+    return denied("EXECUTION_ALREADY_STARTED");
   }
   if (context.reason.trim() === "") {
     return denied("REASSIGNMENT_REASON_REQUIRED");

@@ -2,6 +2,7 @@ import {
   canAssignCard,
   canReassignCard,
   CardAssignmentContext,
+  ReassignmentContext,
 } from "./assignment";
 import { evaluateEligibility } from "./eligibility";
 import { approveParticipant, Participant } from "./participant";
@@ -29,6 +30,24 @@ const assignable: CardAssignmentContext = {
   roundStatus: "READY",
   execution: { status: "PLANNED" },
   now: NOW,
+};
+
+const activeAssignment = {
+  eventId: "event-1",
+  cardEventId: "event-1",
+  participantId: "participant-old",
+  roundContextId: "ALL_ROUNDS",
+  assignedAt: new Date("2026-08-07T00:00:00.000Z"),
+  status: "ACTIVE" as const,
+};
+
+const resolvedScope = {
+  roundContextId: "ALL_ROUNDS",
+  currentParticipantId: "participant-old",
+  targetParticipantId: participant.id,
+  executionScopeResolved: true,
+  anyApplicableExecutionStarted: false,
+  resolvedAt: new Date("2026-08-09T11:59:00.000Z"),
 };
 
 describe("Bingo participant creation", () => {
@@ -72,6 +91,18 @@ describe("Bingo participant creation", () => {
       }),
     ).toEqual({ accepted: false, code: "ELIGIBILITY_SCOPE_MISMATCH" });
   });
+
+  it("rejects participant approval with a non-finite timestamp", () => {
+    expect(
+      approveParticipant({
+        participantId: "participant-1",
+        eventId: "event-1",
+        identity,
+        eligibility,
+        now: new Date(Number.NaN),
+      }),
+    ).toEqual({ accepted: false, code: "INVALID_PARTICIPANT_TIMESTAMP" });
+  });
 });
 
 describe("Bingo card assignment decisions", () => {
@@ -81,23 +112,11 @@ describe("Bingo card assignment decisions", () => {
       code: "ASSIGNMENT_ALLOWED",
     });
     expect(
-      canAssignCard({
-        ...assignable,
-        execution: {
-          status: "PLANNED",
-          startedAt: new Date("2026-08-10T00:00:00.000Z"),
-        },
-      }),
-    ).toEqual({ allowed: true, code: "ASSIGNMENT_ALLOWED" });
-    expect(
       canReassignCard({
         ...assignable,
         cardHasActiveAssignment: true,
-        currentAssignment: {
-          eventId: "event-1",
-          cardEventId: "event-1",
-          status: "ACTIVE",
-        },
+        currentAssignment: activeAssignment,
+        scope: resolvedScope,
         reason: "Authorized correction",
       }),
     ).toEqual({ allowed: true, code: "ASSIGNMENT_ALLOWED" });
@@ -127,6 +146,25 @@ describe("Bingo card assignment decisions", () => {
       { execution: { status: "CANCELLED", startedAt: NOW } },
       "EXECUTION_ALREADY_STARTED",
     ],
+    [{ now: new Date(Number.NaN) }, "INVALID_ASSIGNMENT_TIMESTAMP"],
+    [
+      { participant: { ...participant, approvedAt: new Date(Number.NaN) } },
+      "INVALID_ASSIGNMENT_TIMESTAMP",
+    ],
+    [
+      { execution: { status: "PLANNED", startedAt: new Date(Number.NaN) } },
+      "INVALID_EXECUTION_TIMELINE",
+    ],
+    [
+      {
+        execution: {
+          status: "PLANNED",
+          startedAt: new Date("2026-08-10T00:00:00.000Z"),
+        },
+      },
+      "INVALID_EXECUTION_TIMELINE",
+    ],
+    [{ execution: { status: "RUNNING" } }, "INVALID_EXECUTION_TIMELINE"],
   ] as const)("blocks assignment mutation %#", (mutation, code) => {
     expect(
       canAssignCard({ ...assignable, ...mutation } as CardAssignmentContext),
@@ -145,26 +183,21 @@ describe("Bingo card assignment decisions", () => {
       canReassignCard({
         ...assignable,
         currentAssignment: {
-          eventId: "event-1",
-          cardEventId: "event-1",
-          status: "ACTIVE",
+          ...activeAssignment,
           ...mutation,
         },
+        scope: resolvedScope,
         reason: "Correction",
       }),
     ).toEqual({ allowed: false, code });
   });
 
   it("requires a reassignment reason and rejects operation after start", () => {
-    const currentAssignment = {
-      eventId: "event-1",
-      cardEventId: "event-1",
-      status: "ACTIVE" as const,
-    };
     expect(
       canReassignCard({
         ...assignable,
-        currentAssignment,
+        currentAssignment: activeAssignment,
+        scope: resolvedScope,
         reason: "  ",
       }),
     ).toEqual({ allowed: false, code: "REASSIGNMENT_REASON_REQUIRED" });
@@ -172,10 +205,113 @@ describe("Bingo card assignment decisions", () => {
       canReassignCard({
         ...assignable,
         execution: { status: "PAUSED", startedAt: NOW },
-        currentAssignment,
+        currentAssignment: activeAssignment,
+        scope: resolvedScope,
         reason: "Too late",
       }),
     ).toEqual({ allowed: false, code: "EXECUTION_ALREADY_STARTED" });
+  });
+
+  it.each(["ALL_ROUNDS", "round-2"])(
+    "blocks %s reassignment when any applicable execution has started",
+    (roundContextId) => {
+      expect(
+        canReassignCard({
+          ...assignable,
+          currentAssignment: { ...activeAssignment, roundContextId },
+          scope: {
+            ...resolvedScope,
+            roundContextId,
+            anyApplicableExecutionStarted: true,
+          },
+          reason: "Requested after another applicable round started",
+        }),
+      ).toEqual({ allowed: false, code: "EXECUTION_ALREADY_STARTED" });
+    },
+  );
+
+  it("requires a complete resolved execution scope and a different target", () => {
+    expect(
+      canReassignCard({
+        ...assignable,
+        currentAssignment: activeAssignment,
+        scope: { ...resolvedScope, executionScopeResolved: false },
+        reason: "Incomplete query",
+      }),
+    ).toEqual({ allowed: false, code: "REASSIGNMENT_SCOPE_UNRESOLVED" });
+    expect(
+      canReassignCard({
+        ...assignable,
+        participant: { ...participant, id: "participant-old" },
+        currentAssignment: activeAssignment,
+        scope: {
+          ...resolvedScope,
+          targetParticipantId: "participant-old",
+        },
+        reason: "No effective change",
+      }),
+    ).toEqual({ allowed: false, code: "REASSIGNMENT_TARGET_UNCHANGED" });
+    expect(
+      canReassignCard({
+        ...assignable,
+        currentAssignment: activeAssignment,
+        reason: "Scope omitted by caller",
+      } as unknown as ReassignmentContext),
+    ).toEqual({ allowed: false, code: "REASSIGNMENT_SCOPE_INVALID" });
+  });
+
+  it.each([
+    [
+      { assignedAt: new Date(Number.NaN) },
+      resolvedScope,
+      "INVALID_ASSIGNMENT_TIMESTAMP",
+    ],
+    [
+      activeAssignment,
+      { ...resolvedScope, resolvedAt: new Date(Number.NaN) },
+      "INVALID_ASSIGNMENT_TIMESTAMP",
+    ],
+    [
+      { roundContextId: "" },
+      { ...resolvedScope, roundContextId: "" },
+      "REASSIGNMENT_SCOPE_INVALID",
+    ],
+  ] as const)(
+    "fails closed for malformed reassignment time/scope %#",
+    (assignmentMutation, scope, code) => {
+      expect(
+        canReassignCard({
+          ...assignable,
+          currentAssignment: {
+            ...activeAssignment,
+            ...assignmentMutation,
+          },
+          scope,
+          reason: "Correction",
+        }),
+      ).toEqual({ allowed: false, code });
+    },
+  );
+
+  it("fails closed across Invalid Date assignment fuzz", () => {
+    for (let index = 0; index < 50; index += 1) {
+      const invalid = new Date(Number.NaN);
+      expect(canAssignCard({ ...assignable, now: invalid }).allowed).toBe(
+        false,
+      );
+      expect(
+        canAssignCard({
+          ...assignable,
+          participant: { ...participant, approvedAt: invalid },
+        }).allowed,
+      ).toBe(false);
+      expect(
+        canAssignCard({
+          ...assignable,
+          execution: { status: "PLANNED", startedAt: invalid },
+        }).allowed,
+      ).toBe(false);
+    }
   });
 
   it("never allows a malformed active count in deterministic fuzz", () => {
