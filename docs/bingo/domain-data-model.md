@@ -1,18 +1,51 @@
 # ETAPA 3 — Diseño del dominio y modelo de datos de Bingo
 
-Estado: especificación técnica para revisión. No representa una migración aplicada ni autoriza la implementación del motor.
+Estado: modelo físico de ETAPA 3 implementado y validado en `feature/bingo`. No autoriza ETAPA 4 ni implementa motor, APIs, SSE o frontend.
 
-Base inspeccionada: `feature/bingo-domain-design` en `310ce18ecf8970ebf1b17c0ee1a72691a8d8ca33`.
+Diseño conceptual original: `feature/bingo-domain-design` en `310ce18ecf8970ebf1b17c0ee1a72691a8d8ca33`.
+
+Implementación física: `apps/api/prisma/schema.prisma` y migración expand-only `20260809180000_add_bingo_domain`.
 
 ## 1. Alcance y lenguaje de certeza
 
-Este documento define el modelo conceptual y físico propuesto para la ETAPA 3. No modifica `schema.prisma`, no crea migraciones y no implementa motor, APIs, SSE ni frontend.
+Este documento conserva el razonamiento conceptual que precedió la implementación y registra debajo el resultado físico autoritativo. Las propuestas históricas de las secciones posteriores solo siguen vigentes cuando coinciden con la sección 1.1 y con `schema.prisma`/la migración.
 
 Se usan tres etiquetas:
 
 - **DECISIÓN CERRADA**: requisito ya aprobado por el propietario.
 - **RECOMENDACIÓN**: diseño propuesto a partir de la arquitectura real inspeccionada.
-- **CONFIRMACIÓN PENDIENTE**: dato que no existe o no puede inferirse responsablemente del repositorio.
+- **GATE FUTURO**: decisión operativa o jurídica que no bloquea la estructura de ETAPA 3, pero debe cerrarse antes de habilitar la funcionalidad correspondiente.
+
+### 1.1 Implementación física autoritativa
+
+**HECHO VERIFICADO:** ETAPA 3 materializa 28 modelos y 26 enums Bingo sin alterar destructivamente tablas ASODEF existentes. PostgreSQL aplica checks, claves compuestas, índices parciales, triggers y `RESTRICT` adicionales que Prisma no puede expresar por sí solo.
+
+Agregados y nombres finales:
+
+- Configuración: `BingoEvent`, `BingoEligibilityRule`, `BingoRound`, `BingoPrize`, `BingoPattern`, `BingoPatternMask` y `BingoRoundPattern`.
+- Identidad autorizada y participación: `BingoAuthorizedExternalSubject`, `BingoParticipant` y `BingoEligibilityApproval`.
+- Operación/evidencia preparada: `BingoRoundExecution`, `BingoExecutionActor`, `BingoFairnessCommitment`, `BingoDraw`, `BingoWinGroup`, `BingoWinnerCandidate`, `BingoWinner` y `BingoTieBreak`.
+- Cartones: `BingoCard`, `BingoCardPatternMask` y `BingoCardAssignment`.
+- Soporte durable: `BingoCommandIdempotency`, `BingoOutboxEvent`, `BingoImportBatch`, `BingoImportRow`, `BingoImportApplicationChunk`, `BingoAuditEvent` y `BingoRetentionPolicy`.
+
+Las seis decisiones adicionales quedaron cerradas físicamente así:
+
+1. Beneficiarios: Bingo no crea un maestro. `BingoAuthorizedExternalSubject` conserva una referencia verificable event-scoped, enlaza al afiliado titular cuando corresponde y nunca guarda el `subjectRef` en claro.
+2. Participantes empresariales/invitados: la misma entidad autorizada conserva `issuer`, `keyId`, fingerprint HMAC y fuente; puede enlazar `Company` y, únicamente si fue resuelto formalmente, `Customer`. No crea `Affiliate`, `Customer`, usuario ni beneficiario.
+3. Commit-reveal: `BingoFairnessCommitment` conserva algoritmos/versiones, `commitmentHash`, `configurationHash`, `canonicalizationVersion`, semilla cifrada y key-id de custodia; la semilla revelada solo se admite después del cierre oficial. El protocolo completo vive en `commit-reveal-protocol.md`.
+4. Cartones: el benchmark seleccionó `smallint[25]` canónico con centro libre en posición 13 y `bit(75)` derivado/precalculado en `BingoCardPatternMask`. El array permite reconstrucción y constraints; el bitset acelera patrones sin convertirse en segunda fuente de verdad. La evidencia está en `card-representation-benchmark.md`.
+5. Retención: `BingoRetentionPolicy` separa configuración, mínimo corporativo y valor efectivo por categoría. Los artefactos relevantes conservan `retentionUntil` y `legalHoldAt`; no existe job de borrado en ETAPA 3. Las duraciones jurídicas concretas siguen siendo un gate de cumplimiento, no una omisión estructural.
+6. `CUSTOM_APPROVED` y desempates: `BingoEligibilityApproval` exige fuente, actor, fecha, referencia/razón y contexto; `BingoWinGroup` conserva todos los candidatos simultáneos y `BingoTieBreak` enlaza una ejecución posterior sin borrar el grupo original.
+
+Decisiones conceptuales sustituidas:
+
+- `BingoGuestAuthorization` fue reemplazado por `BingoAuthorizedExternalSubject` más `BingoEligibilityApproval`.
+- `BingoIdempotencyRecord` se implementó como `BingoCommandIdempotency`.
+- `BingoRetentionRule` se implementó como `BingoRetentionPolicy`.
+- No se implementaron `BingoCardNumber` ni `BingoExecutionCardState`: el benchmark descartó la normalización por celda como representación principal. La propiedad histórica usada por un candidato queda anclada mediante su FK compuesta a `BingoCardAssignment`.
+- El modelo usa `BingoOutboxEvent`, no una infraestructura realtime; Redis/SSE permanecen fuera de ETAPA 3.
+
+La migración `20260809180000_add_bingo_domain` es expand-only. Crea únicamente tipos, tablas, funciones, constraints, índices y triggers Bingo; no transforma ni elimina datos existentes. Los comandos operativos, transiciones transaccionales, generación RNG y publicación outbox corresponden a etapas posteriores.
 
 ## 2. Hechos verificados en ASODEF
 
@@ -38,7 +71,7 @@ Se usan tres etiquetas:
 7. **RECOMENDACIÓN:** la configuración que afecta el resultado se congela mediante snapshots/versiones antes de iniciar la ronda.
 8. **RECOMENDACIÓN:** las tablas de operación incorporan `eventId` aun cuando pueda derivarse por joins. Permite FKs compuestas que impiden mezclar eventos y acelera consultas de aislamiento.
 9. **RECOMENDACIÓN:** los estados se validan en servicio y con checks SQL; las transiciones críticas se ejecutan bajo lock de ejecución y transacción.
-10. **RECOMENDACIÓN:** la primera migración será expand-only: tablas, enums, índices y FKs nuevos; no transformará datos actuales de ASODEF.
+10. **HECHO VERIFICADO:** la migración de ETAPA 3 es expand-only: añade tablas, enums, índices, funciones, triggers y FKs; no transforma datos actuales de ASODEF.
 
 ## 4. Mapa de agregados y cardinalidades
 
@@ -52,9 +85,9 @@ BingoEvent 1 ── n BingoRound 1 ── n BingoRoundExecution
      ├── n BingoParticipant                                  └── n BingoWinner
      ├── n BingoCard 1 ── n BingoCardAssignment
      ├── n BingoImportBatch ── n BingoImportRow
-     ├── n BingoRetentionRule
+     ├── n BingoRetentionPolicy
      ├── n BingoAuditEvent
-     ├── n BingoIdempotencyRecord
+     ├── n BingoCommandIdempotency
      └── n BingoOutboxEvent
 ```
 
@@ -62,29 +95,29 @@ BingoEvent 1 ── n BingoRound 1 ── n BingoRoundExecution
 
 ## 5. Catálogo de estados y políticas
 
-Los nombres son la propuesta inicial siguiendo el estilo de enums existente; se validarán antes de crear Prisma.
+Esta tabla refleja el catálogo físico implementado. `schema.prisma` continúa siendo la fuente autoritativa.
 
-| Enum propuesto | Valores | Finalidad |
-| --- | --- | --- |
-| `BingoEventStatus` | `DRAFT`, `CONFIGURED`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, `ARCHIVED` | Lifecycle del evento |
-| `BingoEventVisibility` | `PUBLIC`, `AUTHENTICATED_AFFILIATES`, `AUTHORIZED_PARTICIPANTS` | Acceso a `/bingo/:eventSlug` |
-| `BingoParticipantStatus` | `STAGED`, `ELIGIBLE`, `APPROVED`, `REJECTED`, `WITHDRAWN` | Resultado de elegibilidad y admisión |
-| `BingoParticipantKind` | `AFFILIATE`, `BENEFICIARY`, `PARTNER_COMPANY_MEMBER`, `AUTHORIZED_GUEST` | Fuente de identidad/elegibilidad |
-| `BingoRoundStatus` | `DRAFT`, `READY`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` | Estado lógico de la ronda |
-| `BingoExecutionStatus` | `PLANNED`, `RUNNING`, `PAUSED`, `COMPLETED`, `CANCELLED` | Estado de cada revisión/ejecución |
-| `BingoValidationPolicy` | `SIMPLE`, `DUAL_CONTROL` | Quién valida ganadores |
-| `BingoTiePolicy` | `SPLIT_PRIZE`, `FULL_PRIZE_EACH`, `TIE_BREAK`, `CUSTOM_APPROVED` | Resolución preconfigurada de empates |
-| `BingoFairnessMode` | `CRYPTO_RNG`, `CRYPTO_RNG_COMMIT_REVEAL` | Evidencia de imparcialidad |
-| `BingoPublicWinnerVisibility` | `CARD_ONLY`, `PARTIAL_NAME_AND_CARD` | Allowlist pública; el detalle privado se autoriza por permisos, no por este enum |
-| `BingoAssignmentStatus` | `ACTIVE`, `SUPERSEDED`, `REVOKED` | Historial de asignación |
-| `BingoCandidateStatus` | `PENDING`, `VALIDATED`, `REJECTED` | Validación de candidatos |
-| `BingoImportStatus` | `UPLOADED`, `VALIDATING`, `STAGED`, `READY_FOR_APPROVAL`, `APPROVED`, `APPLYING`, `COMPLETED`, `REJECTED`, `FAILED`, `EXPIRED` | Pipeline de importación |
-| `BingoImportRowStatus` | `VALID`, `INVALID`, `UNRESOLVED`, `APPLIED`, `SKIPPED` | Resultado por fila |
-| `BingoRetentionCategory` | `TEMPORARY_FILE`, `ORIGINAL_IMPORT`, `IMPORT_STAGING`, `PARTICIPATION_CARD`, `DRAW`, `WINNER`, `AUDIT`, `CRITICAL_EVIDENCE` | Retención por evento/tipo |
+| Enum implementado             | Valores                                                                                                                                                                           | Finalidad                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `BingoEventStatus`            | `DRAFT`, `CONFIGURED`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, `ARCHIVED`                                                                                           | Lifecycle del evento                                                             |
+| `BingoEventVisibility`        | `PUBLIC`, `AUTHENTICATED_AFFILIATES`, `AUTHORIZED_PARTICIPANTS`                                                                                                                   | Acceso a `/bingo/:eventSlug`                                                     |
+| `BingoParticipantStatus`      | `PENDING`, `APPROVED`, `REJECTED`, `WITHDRAWN`                                                                                                                                    | Resultado de elegibilidad y admisión                                             |
+| `BingoParticipantKind`        | `AFFILIATE`, `BENEFICIARY`, `PARTNER_COMPANY_MEMBER`, `AUTHORIZED_GUEST`                                                                                                          | Fuente de identidad/elegibilidad                                                 |
+| `BingoRoundStatus`            | `DRAFT`, `READY`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`                                                                                                                         | Estado lógico de la ronda                                                        |
+| `BingoExecutionStatus`        | `PLANNED`, `RUNNING`, `PAUSED`, `COMPLETED`, `CANCELLED`                                                                                                                          | Estado de cada revisión/ejecución                                                |
+| `BingoValidationPolicy`       | `SIMPLE`, `DUAL_CONTROL`                                                                                                                                                          | Quién valida ganadores                                                           |
+| `BingoTiePolicy`              | `SPLIT_PRIZE`, `FULL_PRIZE_EACH`, `TIE_BREAK`, `PRECONFIGURED_SPECIAL_RULE`                                                                                                       | Resolución preconfigurada de empates                                             |
+| `BingoFairnessMode`           | `CRYPTO_RNG`, `CRYPTO_RNG_COMMIT_REVEAL`                                                                                                                                          | Evidencia de imparcialidad                                                       |
+| `BingoPublicWinnerVisibility` | `CARD_ONLY`, `PARTIAL_NAME_AND_CARD`                                                                                                                                              | Allowlist pública; el detalle privado se autoriza por permisos, no por este enum |
+| `BingoAssignmentStatus`       | `ACTIVE`, `SUPERSEDED`, `REVOKED`                                                                                                                                                 | Historial de asignación                                                          |
+| `BingoCandidateStatus`        | `PENDING`, `VALIDATED`, `REJECTED`                                                                                                                                                | Validación de candidatos                                                         |
+| `BingoImportStatus`           | `UPLOADED`, `VALIDATING`, `STAGED`, `READY_FOR_APPROVAL`, `APPROVED`, `APPLYING`, `COMPLETED`, `REJECTED`, `FAILED`, `EXPIRED`                                                    | Pipeline de importación                                                          |
+| `BingoImportRowStatus`        | `VALID`, `INVALID`, `UNRESOLVED`, `APPLIED`, `SKIPPED`                                                                                                                            | Resultado por fila                                                               |
+| `BingoRetentionCategory`      | `TEMPORARY_FILE`, `ORIGINAL_IMPORT`, `IMPORT_STAGING`, `PARTICIPATION`, `CARD`, `ASSIGNMENT`, `ROUND_EXECUTION`, `DRAW`, `CANDIDATE`, `WINNER`, `AUDIT`, `CRYPTOGRAPHIC_EVIDENCE` | Retención por evento/tipo                                                        |
 
 Checks SQL deben impedir combinaciones imposibles de estados y timestamps; no se confiará solo en enums.
 
-## 6. Entidades propuestas
+## 6. Entidades e invariantes implementadas
 
 ### 6.1 `BingoEvent`
 
@@ -125,35 +158,36 @@ Reglas combinables y versionadas del evento.
 Campos:
 
 - `id`, `eventId`, `kind`, `enabled`.
-- `partnerCompanyId?` FK a `Company` solo para reglas de empresa.
 - `parameters Json` para parámetros pequeños con DTO/versionado estricto, nunca código ejecutable ni PII.
-- `version`, `createdByUserId`, `createdAt`.
+- `version`, `lockedAt?`, `createdByUserId`, `createdAt`.
 
 Invariantes:
 
-- Regla de empresa exige `partnerCompanyId`; los demás tipos lo prohíben.
+- Los vínculos concretos a empresa o afiliado titular pertenecen al sujeto externo autorizado, no a la regla reusable.
 - Las reglas usadas no se editan: se crea una versión y se congela al publicar.
 - La elegibilidad observada se registra después en la participación como evidencia mínima, no como copia de datos personales.
-- Índice `(event_id, enabled, kind)` y unicidad por combinación material de regla.
+- Índice `(event_id, enabled, kind)` y unicidad `(event_id, kind, version)`.
 
-**CONFIRMACIÓN PENDIENTE:** cómo ASODEF acredita formalmente un beneficiario o la vinculación de una persona a una empresa. Hasta existir una fuente verificable, esas reglas pueden modelarse pero no aprobar participantes automáticamente.
+**DECISIÓN FÍSICA CERRADA:** la resolución usa `BingoAuthorizedExternalSubject` y exige una fuente verificable. La integración con un adaptador real de `ExternalCoreProvider` es un gate funcional posterior; si el proveedor no está disponible, la resolución falla cerrada y no fabrica identidades.
 
-### 6.3 `BingoGuestAuthorization`
+### 6.3 `BingoAuthorizedExternalSubject`
 
-Solo para personas que legítimamente no existen en un maestro ASODEF. No sustituye `Affiliate`, `Customer` ni `User`.
+Referencia event-scoped para beneficiarios, miembros de empresas aliadas e invitados cuya identidad maestra vive fuera de Bingo. Sustituye la propuesta conceptual `BingoGuestAuthorization`.
 
-Campos mínimos:
+Campos:
 
-- `id`, `eventId`, `partnerCompanyId?`.
-- `lookupHash` de token/invitación de alta entropía.
-- `displayNameEncrypted?` y `contactEncrypted?` únicamente si la operación aprobada lo necesita.
-- `authorizedByUserId`, `authorizedAt`, `revokedAt`, `expiresAt`.
+- `id`, `eventId`, `kind`, `issuer`, `keyId`, `subjectRefFingerprint`.
+- `sourceReferenceHash?` como evidencia minimizada de la autorización.
+- `ownerAffiliateId?`, `companyId?`, `linkedCustomerId?` cuando la fuente oficial resolvió formalmente esas relaciones.
+- `resolvedByUserId?`, `verifiedAt`, `lastVerifiedAt`, `revokedAt?`, `createdAt`.
 
 Invariantes:
 
-- Nunca guardar documento/teléfono en claro ni crear automáticamente `Customer`/`Affiliate`.
-- `lookupHash` único; vencido o revocado no permite participación.
-- Datos sujetos a retención específica y minimización.
+- `UNIQUE (event_id, issuer, key_id, subject_ref_fingerprint)` evita duplicar la misma identidad autorizada dentro del evento.
+- La FK compuesta `(id, event_id, kind)` obliga al participante a conservar evento y clase de sujeto.
+- No almacena `subjectRef` en claro, documento, teléfono, correo ni una copia libre de PII.
+- `BENEFICIARY` exige afiliado titular; `PARTNER_COMPANY_MEMBER` exige empresa; los checks SQL rechazan combinaciones incompatibles.
+- Revocar conserva la fila y bloquea su uso futuro; no crea ni modifica automáticamente `Affiliate`, `Customer`, beneficiarios o usuarios.
 
 ### 6.4 `BingoParticipant`
 
@@ -163,11 +197,11 @@ Campos:
 
 - `id`, `eventId`, `kind`, `status`.
 - `affiliateId?` FK a `Affiliate`.
-- `customerId?` FK a `Customer`, condicionado a confirmar el modelo de beneficiarios.
-- `guestAuthorizationId?` FK a `BingoGuestAuthorization`.
-- `eligibilityRuleId`, `eligibilityEvidence Json`, `eligibilityCheckedAt`.
-- `approvedByUserId?`, `approvedAt?`, `rejectedAt?`, `reason?`.
-- `createdAt`, `updatedAt`.
+- `externalSubjectId?` FK compuesta a `BingoAuthorizedExternalSubject` para cualquier sujeto no afiliado.
+- `approvedAt?`, `rejectedAt?`, `withdrawnAt?`, `reason?`.
+- `retentionUntil?`, `legalHoldAt?`, `createdAt`, `updatedAt`.
+
+La regla, fuente, actor, contexto y decisión de elegibilidad no se duplican en esta fila: se preservan en `BingoEligibilityApproval`. El vínculo opcional a `Customer`, cuando una fuente autorizada lo resuelve formalmente, pertenece a `BingoAuthorizedExternalSubject`.
 
 Invariantes:
 
@@ -181,8 +215,7 @@ Invariantes:
 Índices:
 
 - único parcial `(event_id, affiliate_id) WHERE affiliate_id IS NOT NULL`.
-- único parcial `(event_id, customer_id) WHERE customer_id IS NOT NULL`.
-- único parcial `(event_id, guest_authorization_id) WHERE guest_authorization_id IS NOT NULL`.
+- unicidad referencial de `externalSubjectId` y FK compuesta `(externalSubjectId, eventId, kind)`.
 - `(event_id, status, id)` para listados estables y aplicación por lotes.
 
 ### 6.5 `BingoRound`
@@ -195,22 +228,22 @@ Campos:
 - `validationPolicy BingoValidationPolicy`.
 - `tiePolicy BingoTiePolicy` y `tiePolicyConfiguration Json?`.
 - `configurationVersion`, `configurationLockedAt?`.
-- `currentExecutionId?` como puntero opcional a la revisión vigente.
+- No persiste `currentExecutionId`; la revisión vigente se deriva del lifecycle protegido por índice parcial.
 - `createdByUserId`, `createdAt`, `updatedAt`.
 
 Invariantes:
 
 - `UNIQUE (event_id, sequence)` y `UNIQUE (id, event_id)` para FKs compuestas.
 - La política de empate, validación y patrones se bloquea antes de `READY`/inicio.
-- `CUSTOM_APPROVED` exige configuración validada y texto de política aprobado antes de iniciar.
-- `currentExecutionId` debe pertenecer a la misma ronda mediante FK compuesta.
+- `PRECONFIGURED_SPECIAL_RULE` exige configuración validada y texto de política aprobado antes de iniciar.
+- La ejecución vigente se determina por lifecycle; un índice parcial impide dos ejecuciones `RUNNING`/`PAUSED` para la misma ronda. No se implementó un puntero mutable `currentExecutionId`.
 
 ### 6.6 `BingoPrize`
 
 Campos:
 
 - `id`, `eventId`, `roundId`, `sequence`, `name`, `description?`.
-- `valueCents?` si es monetario; nunca decimal flotante.
+- `amountMinor?` y `currency?` si es monetario; nunca decimal flotante.
 - `quantity`, `metadata Json?` con schema/allowlist.
 - `createdAt`.
 
@@ -225,18 +258,18 @@ Invariantes:
 
 Definición inmutable y versionada de modalidad.
 
-`BingoPattern` contiene `id`, `eventId?`, `code`, `name`, `kind`, `version`, `requiredMaskCount`, `createdAt`. Un patrón global aprobado puede tener `eventId NULL`; uno personalizado pertenece al evento.
+`BingoPattern` contiene `id`, `eventId`, `code`, `name`, `kind`, `version`, `requiredMatchCount`, `createdAt`. La implementación inicial mantiene incluso los patrones estándar dentro del evento para reforzar aislamiento y congelamiento.
 
-`BingoPatternMask` contiene `patternId`, `sequence`, `cellMask BigInt` (25 bits; el centro libre se considera marcado) y `createdAt`.
+`BingoPatternMask` contiene `patternId`, `sequence`, `positionMask Int` (25 bits; el centro libre se considera marcado) y `createdAt`.
 
 `BingoRoundPattern` vincula ronda/patrón y congela la versión usada.
 
 Invariantes:
 
 - Soporte mínimo: línea, dos líneas, cuatro esquinas, cartón lleno y patrones configurables.
-- `cellMask > 0` y no usa bits fuera de la cuadrícula 5x5.
+- `positionMask > 0` y no usa bits fuera de la cuadrícula 5x5.
 - `UNIQUE (pattern_id, sequence)` y `UNIQUE (round_id, pattern_id)`.
-- `requiredMaskCount=2` expresa dos líneas sin ocultar cuáles se completaron.
+- `requiredMatchCount=2` expresa dos líneas sin ocultar cuáles se completaron.
 - Un patrón utilizado no se actualiza; se crea nueva versión.
 
 ### 6.8 `BingoCard`
@@ -246,7 +279,7 @@ Cartón canónico perteneciente al evento.
 Campos:
 
 - `id`, `eventId`, `displayNumber` (identificador público no autenticador).
-- `numbers Int[]` con 24 números; el centro es libre y no se almacena como número sorteable.
+- `numbers Int[] @db.SmallInt` con exactamente 25 posiciones; el centro libre se representa canónicamente como `0` en la posición 13.
 - `layoutHash` SHA-256 de la representación canónica.
 - `generationVersion`, `createdAt`.
 
@@ -256,20 +289,20 @@ Invariantes:
 - Sin números repetidos dentro del cartón.
 - `UNIQUE (event_id, display_number)` y `UNIQUE (event_id, layout_hash)`.
 - `displayNumber` nunca autentica una consulta y no debe ser un secreto enumerable usado solo.
-- Validación de forma/rangos mediante función/check SQL inmutable o generación única de dominio más prueba de constraint; la alternativa exacta se benchmarkea antes de migrar.
+- Validación de longitud, centro, rangos por columna y unicidad mediante la función PostgreSQL inmutable `bingo_valid_card` y un `CHECK` de tabla.
 
 **RECOMENDACIÓN DE ESCALA:** mantener la representación compacta en una fila y precalcular masks. No recorrer matrices React ni deserializar 50.000 matrices completas por comando.
 
-### 6.9 Índice de números y estado de evaluación
+### 6.9 Propuestas de evaluación sustituidas por el benchmark
 
-Para evitar un scan ingenuo se proponen dos estructuras, condicionadas a benchmark:
+Antes del benchmark se evaluaron estas estructuras:
 
 - `BingoCardNumber(eventId, cardId, ballNumber, cellBit)`, 24 filas por cartón, con PK `(card_id, ball_number)` e índice `(event_id, ball_number, card_id)`. Permite localizar solo cartones afectados por la balota.
 - `BingoExecutionCardState(executionId, cardId, participantId, markedMask BigInt, version Int)`, con PK `(execution_id, card_id)` e índice `(execution_id, participant_id)`.
 
-La FK al participante captura el dueño al iniciar la ejecución y aísla el motor de reasignaciones posteriores. Con 50.000 cartones son 1,2 millones de entradas de índice numérico por evento y 50.000 estados por ejecución. Deben medirse tamaño, write amplification y latencia frente a `Int[]` + GIN antes de cerrar el diseño físico.
+La normalización por celda implicaba 1,2 millones de filas para 50.000 cartones. La medición demostró que no debía ser la representación principal.
 
-**CONFIRMACIÓN PENDIENTE:** elegir `BingoCardNumber` o una estrategia array/GIN final según benchmarks de 5k/10k/25k/50k. La API conceptual no cambia.
+**DECISIÓN FÍSICA CERRADA:** `BingoCard.numbers` es el array canónico `smallint[25]`; `BingoCardPatternMask.requiredNumbers` conserva máscaras `bit(75)` derivadas y verificables por cartón/patrón. No se crearon `BingoCardNumber` ni `BingoExecutionCardState`. La FK compuesta del candidato hacia `BingoCardAssignment` conserva la asignación histórica exacta usada como evidencia.
 
 ### 6.10 `BingoCardAssignment`
 
@@ -289,7 +322,7 @@ Invariantes:
 - Reasignar crea una nueva fila y cambia la anterior a `SUPERSEDED`; nunca hace `DELETE` ni sobrescribe participante.
 - La sucesora debe compartir `eventId` y `cardId`, garantizado con FK compuesta.
 - El conteo de asignaciones activas de un participante no puede superar `event.maxCardsPerParticipant`; se garantiza bajo lock del participante/evento y transacción. Un trigger diferible es opcional si el benchmark demuestra que no penaliza importaciones.
-- No hay reasignación después de que una ejecución aplicable quede `RUNNING`; el snapshot `BingoExecutionCardState` conserva el dueño operativo.
+- No hay reasignación después de que una ejecución aplicable quede `RUNNING`; el candidato referencia la asignación histórica exacta mediante `assignmentId` y FK compuesta.
 - Actor, timestamp, motivo, evento, contexto y requestId son obligatorios.
 
 Índices:
@@ -325,7 +358,8 @@ Evidencia de commit-reveal cuando el evento lo habilita.
 
 Campos:
 
-- `id`, `executionId` único, `algorithm`, `commitmentHash`, `commitmentVersion`.
+- `id`, `executionId` único, `hashAlgorithm`, `rngAlgorithm`, `protocolVersion`, `canonicalizationVersion`, `configurationHash` y `commitmentHash`.
+- `seedCiphertext` y `custodyKeyId`; nunca semilla previa al reveal en claro.
 - `committedAt`, `committedByUserId`.
 - `revealedSeed?`, `revealedAt?`, `revealEvidenceHash?`.
 
@@ -336,7 +370,7 @@ Invariantes:
 - La semilla no se revela antes del cierre permitido y el commitment no cambia.
 - La secuencia completa debe ser verificable contra algoritmo/versiones registradas.
 
-**CONFIRMACIÓN PENDIENTE:** protocolo exacto, custodia de la semilla previa al reveal y fuente de entropía pública. No debe improvisarse guardando una semilla legible en PostgreSQL.
+**DECISIÓN FÍSICA CERRADA:** el contrato de custodia, publicación, cierre, revelación y verificación está documentado en `commit-reveal-protocol.md`. La integración futura con el gestor operativo de secretos y el publicador del compromiso es un gate de ETAPA 5/operación, no un bloqueo del modelo.
 
 ### 6.13 `BingoDraw`
 
@@ -387,7 +421,7 @@ Registro normalizado de quién operó una ejecución: `executionId`, `userId`, `
 
 Un constraint trigger debe rechazar una validación dual si `(execution_id, validated_by_user_id)` aparece en esta tabla.
 
-### 6.16 `BingoIdempotencyRecord`
+### 6.16 `BingoCommandIdempotency`
 
 Campos:
 
@@ -456,7 +490,7 @@ Invariantes:
 
 - `id`, `batchId`, `rowNumber`, `sheetName?`, `status`.
 - `normalizedPayloadEncrypted` o columnas mínimas tipadas; nunca PII libre en logs.
-- `affiliateId?`, `guestAuthorizationId?`, `participantId?`.
+- `externalSubjectId?` y `participantId?`; una fila no resuelta no crea una identidad maestra.
 - `errorCodes String[]`, `appliedAt?`.
 
 `BingoImportApplicationChunk`:
@@ -477,9 +511,9 @@ Invariantes:
 
 ### 6.20 Retención
 
-`BingoRetentionRule` contiene `eventId`, `category`, `retentionDays`, `effectiveMinimumDays`, `legalHold`, `configuredByUserId`, `createdAt`, con `UNIQUE (event_id, category)`.
+`BingoRetentionPolicy` contiene `eventId`, `category`, `configuredRetentionDays`, `corporateMinimumDays`, `effectiveRetentionDays`, `legalHold`, `configuredByUserId` y timestamps, con `UNIQUE (event_id, category)`.
 
-Cada artefacto eliminable lleva `retainUntil` calculado al crearse. Cambiar la regla nunca acorta retroactivamente por debajo del mínimo efectivo ya registrado.
+Los artefactos gobernados llevan `retentionUntil` y `legalHoldAt`. Cambiar la política nunca puede acortar retroactivamente evidencia por debajo del mínimo efectivo ya registrado.
 
 - Temporales, originales y staging pueden expirar y eliminarse mediante job auditado.
 - Participación/cartones pueden anonimizarse según política, preservando claves/evidencia no personal.
@@ -488,7 +522,7 @@ Cada artefacto eliminable lleva `retainUntil` calculado al crearse. Cambiar la r
 
 **RECOMENDACIÓN:** extender posteriormente `RetentionRecordCategory` solo para categorías corporativas de alto nivel o mantener reglas Bingo específicas conectadas al mismo servicio. No reutilizar una sola categoría para duraciones distintas.
 
-**CONFIRMACIÓN PENDIENTE:** valores mínimos corporativos definitivos para cada categoría y tratamiento legal de ganadores/premios.
+**GATE JURÍDICO FUTURO:** Cumplimiento debe aprobar los valores corporativos concretos y el tratamiento legal de ganadores/premios antes de producción. El modelo no inventa plazos legales y ya impide configurar una retención efectiva inferior al mínimo corporativo persistido.
 
 ## 7. Constraints compuestos y aislamiento entre eventos
 
@@ -534,23 +568,23 @@ Congelamientos:
 
 ## 9. Índices prioritarios para la capacidad objetivo
 
-| Consulta crítica | Índice recomendado |
-| --- | --- |
-| evento por URL | único `events(slug)` |
-| eventos operables | parcial `events(scheduled_start_at) WHERE status IN (...)` |
-| participante afiliado | único parcial `(event_id, affiliate_id)` |
-| participantes por estado | `(event_id, status, id)` |
-| cartón por número | único `(event_id, display_number)` |
-| cartón duplicado | único `(event_id, layout_hash)` |
-| cartones afectados por balota | `(event_id, ball_number, card_id)` si gana la opción normalizada |
-| asignación activa | único parcial `(event_id, card_id) WHERE status='ACTIVE'` |
-| cartones de participante | `(event_id, participant_id, status)` |
-| ejecución actual | único parcial `(round_id) WHERE status IN ('RUNNING','PAUSED')` |
-| secuencia/balota | únicos `(execution_id, sequence)` y `(execution_id, ball_number)` |
-| snapshot/reconexión | `(execution_id, sequence)` y outbox `(event_id, sequence)` |
-| candidatos simultáneos | `(win_group_id, card_id)` único |
-| auditoría | `(event_id, created_at)`, `(execution_id, created_at)` |
-| import preview | `(batch_id, status, row_number)` |
+| Consulta crítica         | Índice recomendado                                                |
+| ------------------------ | ----------------------------------------------------------------- |
+| evento por URL           | único `events(slug)`                                              |
+| eventos operables        | parcial `events(scheduled_start_at) WHERE status IN (...)`        |
+| participante afiliado    | único parcial `(event_id, affiliate_id)`                          |
+| participantes por estado | `(event_id, status, id)`                                          |
+| cartón por número        | único `(event_id, display_number)`                                |
+| cartón duplicado         | único `(event_id, layout_hash)`                                   |
+| máscaras para evaluación | `card_pattern_masks(event_id, pattern_id, card_id)`               |
+| asignación activa        | único parcial `(event_id, card_id) WHERE status='ACTIVE'`         |
+| cartones de participante | `(event_id, participant_id, status)`                              |
+| ejecución actual         | único parcial `(round_id) WHERE status IN ('RUNNING','PAUSED')`   |
+| secuencia/balota         | únicos `(execution_id, sequence)` y `(execution_id, ball_number)` |
+| snapshot/reconexión      | `(execution_id, sequence)` y outbox `(event_id, sequence)`        |
+| candidatos simultáneos   | `(win_group_id, card_id)` único                                   |
+| auditoría                | `(event_id, created_at)`, `(execution_id, created_at)`            |
+| import preview           | `(batch_id, status, row_number)`                                  |
 
 50.000 participantes/cartones no requieren particionamiento desde el primer despliegue, pero todas las tablas voluminosas incluyen `eventId` para permitir particionamiento PostgreSQL futuro sin cambiar contratos de dominio. La necesidad real se decide con `EXPLAIN (ANALYZE, BUFFERS)`, tamaño de índices y pruebas de carga.
 
@@ -603,7 +637,8 @@ No deben quedar como validaciones exclusivas de frontend.
 5. Reasignación: historial con sucesión, actor, motivo, contexto y requestId.
 6. Visibilidad: enum configurable por evento.
 7. Consulta segura: número de cartón no autentica; sesión/token/OTP queda en capa de acceso.
-8–9. Herramientas y rutas admin: no alteran el modelo; el dominio permanece independiente del launcher.
+8. Launcher administrativo: Herramientas no contiene técnicamente el dominio Bingo.
+9. Rutas administrativas: el modelo permanece independiente de `/admin/herramientas` y `/admin/bingo`.
 10. Roles especializados: FKs a `User`; autorización futura por permisos.
 11. Validación simple/doble: snapshot y `BingoExecutionActor`.
 12. Empates: `BingoWinGroup` conserva todos los simultáneos y política congelada.
@@ -616,29 +651,27 @@ No deben quedar como validaciones exclusivas de frontend.
 19. Feature flags: responsabilidad de configuración/API, sin contaminar evidencia de dominio.
 20. Una VPS inicialmente: modelo no depende de proceso único; idempotencia/outbox permiten réplicas futuras.
 
-## 14. Plan de implementación de ETAPA 3 después de aprobación
+## 14. Implementación y validación de ETAPA 3
 
-1. Confirmar preguntas de la sección 15 y resultados del benchmark de cartones.
-2. Rebasar sobre `feature/bingo` después de integrar identidad y RBAC.
-3. Crear enums/modelos Prisma por agregados, sin editar datos existentes.
-4. Generar una migración expand-only y completar manualmente checks, FKs compuestas, índices parciales y triggers aprobados.
-5. Añadir pruebas PostgreSQL de cada constraint, aislamiento entre eventos y migración desde base vacía.
-6. Añadir factories de prueba sin insertar datos Bingo en seeds productivos salvo catálogo explícitamente aprobado.
-7. Ejecutar Prisma validate/format, migraciones, seeds repetidos, API/packages/web/build/E2E y CI.
-8. Mantener el motor fuera de ETAPA 3; los tests de esta fase verifican estructura e invariantes, no simulan sorteos como funcionalidad terminada.
+1. El benchmark reproducible comparó modelo normalizado, arrays/GIN, bitsets y `bytea` sobre 5k/10k/25k/50k cartones.
+2. Prisma incorporó los agregados finales sin datos seed Bingo ni alteraciones destructivas de dominios existentes.
+3. La migración `20260809180000_add_bingo_domain` añadió checks de lifecycle, FKs compuestas anti-cross-event, índices parciales, validación canónica de cartón y triggers de evidencia/configuración.
+4. Las pruebas PostgreSQL cubren integridad, referencias cruzadas, lifecycle, concurrencia de asignación/participación/idempotencia/ejecución/draws, privacidad, commit-reveal y migración.
+5. Los documentos `retention-policy.md`, `commit-reveal-protocol.md` y `stage3-governance-review.md` registran las decisiones de governance.
+6. El motor, los comandos funcionales, las APIs, Redis/SSE, la importación ejecutable y las interfaces continúan deliberadamente fuera de ETAPA 3.
 
-## 15. Confirmaciones pendientes antes de crear Prisma
+## 15. Gates futuros no estructurales
 
-Bloqueantes para cerrar el modelo físico:
+Las seis decisiones que antes bloqueaban Prisma ya están resueltas. Permanecen como gates de etapas posteriores, no como lagunas del modelo:
 
-1. Fuente autoritativa y FK real para beneficiarios.
-2. Fuente autoritativa para personas vinculadas a empresas aliadas; `Company` por sí sola no identifica a una persona.
-3. Protocolo commit-reveal, custodia de semilla y momento exacto de reveal.
-4. Resultado del benchmark `BingoCardNumber` frente a array/GIN y representación final de masks.
-5. Mínimos corporativos de retención por categoría y legal hold.
-6. Semántica de `CUSTOM_APPROVED` y del desempate: nueva ronda visible o ejecución técnica vinculada.
+- conectar la capa de resolución con la fuente oficial real de beneficiarios y miembros empresariales;
+- configurar custodia de secretos y publicación externa según el protocolo commit-reveal;
+- obtener aprobación jurídica de los días mínimos corporativos concretos;
+- implementar en servicio las transiciones, locks y límites dinámicos que requieren consultas multi-fila;
+- volver a medir el modelo híbrido con WAL, presión real y configuración de staging/VPS;
+- definir DTOs públicos/privados por allowlist antes de exponer cualquier superficie.
 
-No bloqueantes para crear el núcleo si se aíslan detrás de campos/versiones:
+Decisiones operativas no bloqueantes para el esquema:
 
 - contenido exacto de premios no monetarios;
 - nombre parcial público concreto;
@@ -647,20 +680,20 @@ No bloqueantes para crear el núcleo si se aíslan detrás de campos/versiones:
 
 ## 16. Riesgos y mitigaciones
 
-| Riesgo | Nivel | Mitigación propuesta |
-| --- | --- | --- |
-| Inventar identidad de beneficiario/empleado | Alto | No implementar resolución hasta tener fuente/FK verificable |
-| Mezcla de IDs entre eventos (IDOR interno) | Alto | `eventId` y FKs compuestas en tablas operativas |
-| Dos extracciones o secuencias duplicadas | Alto | lock, SERIALIZABLE, uniques e idempotencia |
-| Ocultar ganadores simultáneos | Alto | grupo único por balota decisiva y candidatos 1:n atómicos |
-| Reasignar durante operación | Alto | lock de ejecución, snapshot y constraint/servicio |
-| Doble control solo en frontend | Alto | actor normalizado + constraint trigger y transacción |
-| Crecimiento del índice de números | Medio | benchmark, índices event-scoped y particionamiento futuro |
-| JSON sin contrato | Medio | JSON solo para extensiones pequeñas, DTO versionado y allowlist |
-| PII en evidencia/SSE | Alto | snapshots mínimos, cifrado staging y DTO público dedicado |
-| Retención que borra evidencia | Alto | mínimos efectivos, legal hold, FKs Restrict y jobs auditados |
-| Commit-reveal impropio | Alto | no implementar hasta aprobar protocolo/custodia |
+| Riesgo                                      | Nivel | Mitigación propuesta                                                                                                   |
+| ------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------- |
+| Inventar identidad de beneficiario/empleado | Alto  | `BingoAuthorizedExternalSubject`, fingerprint y resolución fail-closed; nunca crear persona automáticamente            |
+| Mezcla de IDs entre eventos (IDOR interno)  | Alto  | `eventId` y FKs compuestas en tablas operativas                                                                        |
+| Dos extracciones o secuencias duplicadas    | Alto  | lock, SERIALIZABLE, uniques e idempotencia                                                                             |
+| Ocultar ganadores simultáneos               | Alto  | grupo único por balota decisiva y candidatos 1:n atómicos                                                              |
+| Reasignar durante operación                 | Alto  | lock de ejecución y candidato anclado a la asignación histórica mediante FK compuesta                                  |
+| Doble control solo en frontend              | Alto  | actor normalizado + constraint trigger y transacción                                                                   |
+| Evaluación de 50.000 cartones               | Medio | array canónico + máscaras `bit(75)` benchmarkeadas; repetir medición en staging                                        |
+| JSON sin contrato                           | Medio | JSON solo para extensiones pequeñas, DTO versionado y allowlist                                                        |
+| PII en evidencia/SSE                        | Alto  | snapshots mínimos, cifrado staging y DTO público dedicado                                                              |
+| Retención que borra evidencia               | Alto  | mínimos efectivos, legal hold, FKs Restrict y jobs auditados                                                           |
+| Commit-reveal impropio                      | Alto  | protocolo versionado, `configurationHash`, canonicalización y semilla cifrada; custodia operativa antes de habilitarlo |
 
 ## 17. Criterio de preparación
 
-El diseño está listo para revisión arquitectónica, no para migración automática. ETAPA 3 podrá implementarse cuando identidad final esté integrada, RBAC esté actualizado, el coordinador asigne propiedad exclusiva de `schema.prisma`/migraciones y se resuelvan los bloqueantes de la sección 15 o se reduzca explícitamente el primer alcance a afiliados autorizados con RNG criptográfico sin commit-reveal.
+El modelo físico de ETAPA 3 está implementado. Su cierre formal depende de que la rama integrada complete todos los quality gates —migraciones limpia y upgrade, seeds, pruebas PostgreSQL, lint, typecheck, suites, build, E2E y GitHub Actions—. Este documento no autoriza ETAPA 4 ni convierte las estructuras de persistencia en un motor funcional.
