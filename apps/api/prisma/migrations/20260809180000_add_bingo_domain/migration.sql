@@ -1050,6 +1050,14 @@ ALTER TABLE "bingo_card_assignments" ADD CONSTRAINT "bingo_card_assignments_acto
 -- AddForeignKey
 ALTER TABLE "bingo_card_assignments" ADD CONSTRAINT "bingo_card_assignments_superseded_by_assignment_id_event_i_fkey" FOREIGN KEY ("superseded_by_assignment_id", "event_id", "card_id") REFERENCES "bingo_card_assignments"("id", "event_id", "card_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- Reassignment is a two-row state transition: the old row points to the new
+-- row while the partial unique index permits only one ACTIVE assignment.  A
+-- deferred FK lets the transaction deactivate the old row before inserting
+-- its successor without ever weakening the final referential invariant.
+ALTER TABLE "bingo_card_assignments"
+  ALTER CONSTRAINT "bingo_card_assignments_superseded_by_assignment_id_event_i_fkey"
+  DEFERRABLE INITIALLY DEFERRED;
+
 -- AddForeignKey
 ALTER TABLE "bingo_execution_actors" ADD CONSTRAINT "bingo_execution_actors_execution_id_fkey" FOREIGN KEY ("execution_id") REFERENCES "bingo_round_executions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -1344,7 +1352,9 @@ ALTER TABLE "bingo_import_batches" ADD CONSTRAINT "bingo_import_batches_file_che
   "sha256" ~ '^[0-9a-f]{64}$' AND "size_bytes" > 0
   AND COALESCE("sheet_count", 0) >= 0 AND COALESCE("row_count", 0) >= 0
   AND "valid_count" >= 0 AND "error_count" >= 0 AND "unresolved_count" >= 0
+  AND ("row_count" IS NULL OR "valid_count" + "error_count" + "unresolved_count" <= "row_count")
   AND (("approved_by_user_id" IS NULL AND "approved_at" IS NULL) OR ("approved_by_user_id" IS NOT NULL AND "approved_at" IS NOT NULL))
+  AND ("status" NOT IN ('APPROVED', 'APPLYING', 'COMPLETED') OR "approved_at" IS NOT NULL)
 );
 ALTER TABLE "bingo_import_rows" ADD CONSTRAINT "bingo_import_rows_lifecycle_check" CHECK (
   "row_number" > 0
@@ -1372,6 +1382,414 @@ CREATE INDEX "bingo_events_operable_idx" ON "bingo_events"("scheduled_start_at")
   WHERE "status" IN ('PUBLISHED', 'IN_PROGRESS');
 CREATE INDEX "bingo_outbox_pending_idx" ON "bingo_outbox_events"("created_at")
   WHERE "status" IN ('PENDING', 'FAILED');
+
+-- PostgreSQL does not create indexes for foreign keys.  These indexes cover
+-- the remaining FK leading columns not already covered by a PK/unique/other
+-- operational index, keeping RESTRICT checks and parent maintenance bounded.
+CREATE INDEX "bingo_eligibility_rules_created_by_user_id_idx" ON "bingo_eligibility_rules"("created_by_user_id");
+CREATE INDEX "bingo_external_subjects_resolved_by_user_id_idx" ON "bingo_authorized_external_subjects"("resolved_by_user_id");
+CREATE INDEX "bingo_rounds_created_by_user_id_idx" ON "bingo_rounds"("created_by_user_id");
+CREATE INDEX "bingo_round_executions_operator_user_id_idx" ON "bingo_round_executions"("operator_user_id");
+CREATE INDEX "bingo_round_executions_supervisor_user_id_idx" ON "bingo_round_executions"("supervisor_user_id");
+CREATE INDEX "bingo_round_executions_created_by_user_id_idx" ON "bingo_round_executions"("created_by_user_id");
+CREATE INDEX "bingo_fairness_commitments_committed_by_user_id_idx" ON "bingo_fairness_commitments"("committed_by_user_id");
+CREATE INDEX "bingo_fairness_commitments_revealed_by_user_id_idx" ON "bingo_fairness_commitments"("revealed_by_user_id");
+CREATE INDEX "bingo_draws_drawn_by_user_id_idx" ON "bingo_draws"("drawn_by_user_id");
+CREATE INDEX "bingo_winners_validated_by_user_id_idx" ON "bingo_winners"("validated_by_user_id");
+CREATE INDEX "bingo_winners_rejected_by_user_id_idx" ON "bingo_winners"("rejected_by_user_id");
+CREATE INDEX "bingo_command_idempotency_execution_event_idx" ON "bingo_command_idempotency"("execution_id", "event_id");
+CREATE INDEX "bingo_outbox_events_execution_event_idx" ON "bingo_outbox_events"("execution_id", "event_id");
+CREATE INDEX "bingo_import_batches_uploaded_by_user_id_idx" ON "bingo_import_batches"("uploaded_by_user_id");
+CREATE INDEX "bingo_import_batches_approved_by_user_id_idx" ON "bingo_import_batches"("approved_by_user_id");
+
+-- Event and round configuration that affects eligibility or outcomes is
+-- immutable after lock. Status/timestamps remain mutable so the explicit
+-- lifecycle can progress without rewriting the frozen policy.
+CREATE FUNCTION "bingo_guard_event_configuration"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD."configuration_locked_at" IS NOT NULL AND (
+    NEW."eligibility_policy" IS DISTINCT FROM OLD."eligibility_policy"
+    OR NEW."max_cards_per_participant" IS DISTINCT FROM OLD."max_cards_per_participant"
+    OR NEW."public_winner_visibility" IS DISTINCT FROM OLD."public_winner_visibility"
+    OR NEW."default_validation_policy" IS DISTINCT FROM OLD."default_validation_policy"
+    OR NEW."fairness_mode" IS DISTINCT FROM OLD."fairness_mode"
+    OR NEW."configuration_version" IS DISTINCT FROM OLD."configuration_version"
+    OR NEW."metadata" IS DISTINCT FROM OLD."metadata"
+  ) THEN
+    RAISE EXCEPTION 'Bingo event configuration is locked' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_events_configuration_guard"
+  BEFORE UPDATE ON "bingo_events"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_event_configuration"();
+
+CREATE FUNCTION "bingo_guard_round_configuration"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF (OLD."configuration_locked_at" IS NOT NULL
+      OR EXISTS (SELECT 1 FROM "bingo_round_executions" e WHERE e."round_id" = OLD."id"))
+    AND (
+      NEW."sequence" IS DISTINCT FROM OLD."sequence"
+      OR NEW."validation_policy" IS DISTINCT FROM OLD."validation_policy"
+      OR NEW."tie_policy" IS DISTINCT FROM OLD."tie_policy"
+      OR NEW."tie_policy_configuration" IS DISTINCT FROM OLD."tie_policy_configuration"
+      OR NEW."configuration_version" IS DISTINCT FROM OLD."configuration_version"
+      OR NEW."configuration_locked_at" IS DISTINCT FROM OLD."configuration_locked_at"
+    ) THEN
+    RAISE EXCEPTION 'Bingo round configuration is locked' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_rounds_configuration_guard"
+  BEFORE UPDATE ON "bingo_rounds"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_round_configuration"();
+
+-- Child configuration cannot be added, rewritten or removed after its event
+-- or round is locked. New pattern versions may still be authored in an
+-- unlocked event, but a pattern already bound to a locked round is immutable.
+CREATE FUNCTION "bingo_guard_event_configuration_child"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE scoped_event UUID;
+BEGIN
+  scoped_event := CASE WHEN TG_OP = 'DELETE' THEN OLD."event_id" ELSE NEW."event_id" END;
+  IF EXISTS (SELECT 1 FROM "bingo_events" WHERE "id" = scoped_event AND "configuration_locked_at" IS NOT NULL) THEN
+    RAISE EXCEPTION 'Bingo event child configuration is locked' USING ERRCODE = '23514';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+CREATE TRIGGER "bingo_eligibility_rules_configuration_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_eligibility_rules"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_event_configuration_child"();
+CREATE TRIGGER "bingo_rounds_event_configuration_guard"
+  BEFORE INSERT OR DELETE ON "bingo_rounds"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_event_configuration_child"();
+
+CREATE FUNCTION "bingo_guard_round_configuration_child"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE scoped_round UUID;
+BEGIN
+  scoped_round := CASE WHEN TG_OP = 'DELETE' THEN OLD."round_id" ELSE NEW."round_id" END;
+  IF EXISTS (
+    SELECT 1 FROM "bingo_rounds" r
+    WHERE r."id" = scoped_round AND (r."configuration_locked_at" IS NOT NULL
+      OR EXISTS (SELECT 1 FROM "bingo_round_executions" e WHERE e."round_id" = r."id"))
+  ) THEN
+    RAISE EXCEPTION 'Bingo round child configuration is locked' USING ERRCODE = '23514';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+CREATE TRIGGER "bingo_prizes_configuration_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_prizes"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_round_configuration_child"();
+CREATE TRIGGER "bingo_round_patterns_configuration_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_round_patterns"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_round_configuration_child"();
+
+CREATE FUNCTION "bingo_guard_bound_pattern"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE scoped_pattern UUID;
+BEGIN
+  scoped_pattern := CASE WHEN TG_OP = 'DELETE' THEN OLD."pattern_id" ELSE NEW."pattern_id" END;
+  IF EXISTS (
+    SELECT 1 FROM "bingo_round_patterns" rp
+    JOIN "bingo_rounds" r ON r."id" = rp."round_id" AND r."event_id" = rp."event_id"
+    WHERE rp."pattern_id" = scoped_pattern AND r."configuration_locked_at" IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Bingo pattern is bound to a locked round' USING ERRCODE = '23514';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+CREATE TRIGGER "bingo_pattern_masks_configuration_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_pattern_masks"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_bound_pattern"();
+CREATE FUNCTION "bingo_guard_pattern_definition"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "bingo_round_patterns" rp
+    JOIN "bingo_rounds" r ON r."id" = rp."round_id" AND r."event_id" = rp."event_id"
+    WHERE rp."pattern_id" = OLD."id" AND r."configuration_locked_at" IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Bingo pattern definition is bound to a locked round' USING ERRCODE = '23514';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+CREATE TRIGGER "bingo_patterns_configuration_guard"
+  BEFORE UPDATE OR DELETE ON "bingo_patterns"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_pattern_definition"();
+
+-- Validate immutable execution snapshots against the locked configuration and
+-- require the two distinct actors before a dual-control execution can start.
+CREATE FUNCTION "bingo_guard_execution"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE
+  round_row "bingo_rounds"%ROWTYPE;
+  event_fairness "bingo_fairness_mode";
+BEGIN
+  -- Serializes assignment changes with the transition that starts operation
+  -- for this event; otherwise both transactions could pass their checks from
+  -- pre-commit snapshots.
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW."event_id"::text, 0));
+  SELECT * INTO round_row FROM "bingo_rounds" WHERE "id" = NEW."round_id" AND "event_id" = NEW."event_id" FOR SHARE;
+  SELECT "fairness_mode" INTO event_fairness FROM "bingo_events" WHERE "id" = NEW."event_id" FOR SHARE;
+
+  IF round_row."configuration_locked_at" IS NULL
+    OR NEW."validation_policy_snapshot" <> round_row."validation_policy"
+    OR NEW."tie_policy_snapshot" <> round_row."tie_policy"
+    OR NEW."configuration_version" <> round_row."configuration_version"
+    OR NEW."fairness_mode_snapshot" <> event_fairness THEN
+    RAISE EXCEPTION 'Bingo execution snapshot does not match locked configuration' USING ERRCODE = '23514';
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND (
+    NEW."event_id" IS DISTINCT FROM OLD."event_id"
+    OR NEW."round_id" IS DISTINCT FROM OLD."round_id"
+    OR NEW."revision" IS DISTINCT FROM OLD."revision"
+    OR NEW."previous_execution_id" IS DISTINCT FROM OLD."previous_execution_id"
+    OR NEW."validation_policy_snapshot" IS DISTINCT FROM OLD."validation_policy_snapshot"
+    OR NEW."tie_policy_snapshot" IS DISTINCT FROM OLD."tie_policy_snapshot"
+    OR NEW."fairness_mode_snapshot" IS DISTINCT FROM OLD."fairness_mode_snapshot"
+    OR NEW."configuration_version" IS DISTINCT FROM OLD."configuration_version"
+  ) THEN
+    RAISE EXCEPTION 'Bingo execution identity and snapshots are immutable' USING ERRCODE = '23514';
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW."status" <> 'PLANNED' THEN
+    RAISE EXCEPTION 'A Bingo execution must be created PLANNED' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NOT (
+    NEW."status" = OLD."status"
+    OR (OLD."status" = 'PLANNED' AND NEW."status" IN ('RUNNING', 'CANCELLED'))
+    OR (OLD."status" = 'RUNNING' AND NEW."status" IN ('PAUSED', 'COMPLETED', 'CANCELLED'))
+    OR (OLD."status" = 'PAUSED' AND NEW."status" IN ('RUNNING', 'COMPLETED', 'CANCELLED'))
+  ) THEN
+    RAISE EXCEPTION 'Invalid Bingo execution lifecycle transition' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD."started_at" IS NOT NULL AND (
+    NEW."operator_user_id" IS DISTINCT FROM OLD."operator_user_id"
+    OR NEW."supervisor_user_id" IS DISTINCT FROM OLD."supervisor_user_id"
+  ) THEN
+    RAISE EXCEPTION 'Execution actors are frozen after start' USING ERRCODE = '23514';
+  END IF;
+
+  IF NEW."status" IN ('RUNNING', 'PAUSED', 'COMPLETED') THEN
+    IF NEW."operator_user_id" IS NULL THEN
+      RAISE EXCEPTION 'A started Bingo execution requires an operator' USING ERRCODE = '23514';
+    END IF;
+    IF NEW."validation_policy_snapshot" = 'DUAL_CONTROL'
+      AND (NEW."supervisor_user_id" IS NULL OR NEW."supervisor_user_id" = NEW."operator_user_id") THEN
+      RAISE EXCEPTION 'Dual control requires distinct operator and supervisor' USING ERRCODE = '23514';
+    END IF;
+    IF NEW."fairness_mode_snapshot" = 'CRYPTO_RNG_COMMIT_REVEAL'
+      AND NOT EXISTS (
+        SELECT 1 FROM "bingo_fairness_commitments" c
+        WHERE c."execution_id" = NEW."id" AND c."event_id" = NEW."event_id" AND c."published_at" IS NOT NULL
+      ) THEN
+      RAISE EXCEPTION 'Commit-reveal execution requires a published commitment before start' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_round_executions_guard"
+  BEFORE INSERT OR UPDATE ON "bingo_round_executions"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_execution"();
+
+-- Serialize active assignment counts on the participant row. This closes the
+-- race where concurrent cards individually observe a count below the event
+-- maximum. Operational assignment fields freeze permanently after the first
+-- execution for the event has started; retention/legal-hold fields may still
+-- be maintained by governance processes.
+CREATE FUNCTION "bingo_guard_card_assignment"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE
+  maximum_cards INTEGER;
+  active_cards INTEGER;
+  subject_id UUID;
+  scoped_event UUID;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Bingo assignment history cannot be deleted' USING ERRCODE = '23514';
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW."status" <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'A Bingo assignment must be created ACTIVE' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW."event_id" IS DISTINCT FROM OLD."event_id"
+    OR NEW."card_id" IS DISTINCT FROM OLD."card_id"
+    OR NEW."participant_id" IS DISTINCT FROM OLD."participant_id"
+    OR NEW."assigned_at" IS DISTINCT FROM OLD."assigned_at"
+  ) THEN
+    RAISE EXCEPTION 'Bingo assignment identity is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD."status" <> 'ACTIVE' AND NEW."status" IS DISTINCT FROM OLD."status" THEN
+    RAISE EXCEPTION 'A terminal Bingo assignment cannot be reactivated or rewritten' USING ERRCODE = '23514';
+  END IF;
+
+  scoped_event := NEW."event_id";
+  PERFORM pg_advisory_xact_lock(hashtextextended(scoped_event::text, 0));
+  IF EXISTS (
+    SELECT 1 FROM "bingo_round_executions"
+    WHERE "event_id" = scoped_event AND "started_at" IS NOT NULL
+  ) AND (TG_OP = 'INSERT' OR
+    NEW."round_context_id" IS DISTINCT FROM OLD."round_context_id"
+    OR NEW."status" IS DISTINCT FROM OLD."status"
+    OR NEW."deactivated_at" IS DISTINCT FROM OLD."deactivated_at"
+    OR NEW."superseded_by_assignment_id" IS DISTINCT FROM OLD."superseded_by_assignment_id"
+    OR NEW."actor_user_id" IS DISTINCT FROM OLD."actor_user_id"
+    OR NEW."reason" IS DISTINCT FROM OLD."reason"
+    OR NEW."request_id" IS DISTINCT FROM OLD."request_id") THEN
+    RAISE EXCEPTION 'Bingo assignments are frozen after operation starts' USING ERRCODE = '23514';
+  END IF;
+
+  IF NEW."status" = 'ACTIVE' THEN
+    subject_id := NEW."participant_id";
+    PERFORM 1 FROM "bingo_participants" WHERE "id" = subject_id AND "event_id" = scoped_event AND "status" = 'APPROVED' FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Only an approved participant can receive a Bingo card' USING ERRCODE = '23514';
+    END IF;
+    SELECT "max_cards_per_participant" INTO maximum_cards FROM "bingo_events" WHERE "id" = scoped_event FOR SHARE;
+    SELECT count(*) INTO active_cards FROM "bingo_card_assignments"
+      WHERE "event_id" = scoped_event AND "participant_id" = subject_id AND "status" = 'ACTIVE'
+        AND "id" <> NEW."id";
+    IF active_cards >= maximum_cards THEN
+      RAISE EXCEPTION 'Bingo participant card limit exceeded' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_card_assignments_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_card_assignments"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_card_assignment"();
+
+-- A commitment is immutable except for its one-way publication/reveal fields.
+-- Reveal is only legal after the execution has officially closed.
+CREATE FUNCTION "bingo_guard_fairness_commitment"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE execution_status "bingo_execution_status";
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Bingo fairness evidence cannot be deleted' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    NEW."event_id" IS DISTINCT FROM OLD."event_id"
+    OR NEW."execution_id" IS DISTINCT FROM OLD."execution_id"
+    OR NEW."hash_algorithm" IS DISTINCT FROM OLD."hash_algorithm"
+    OR NEW."rng_algorithm" IS DISTINCT FROM OLD."rng_algorithm"
+    OR NEW."protocol_version" IS DISTINCT FROM OLD."protocol_version"
+    OR NEW."commitment_hash" IS DISTINCT FROM OLD."commitment_hash"
+    OR NEW."seed_ciphertext" IS DISTINCT FROM OLD."seed_ciphertext"
+    OR NEW."custody_key_id" IS DISTINCT FROM OLD."custody_key_id"
+    OR NEW."committed_by_user_id" IS DISTINCT FROM OLD."committed_by_user_id"
+    OR NEW."committed_at" IS DISTINCT FROM OLD."committed_at"
+    OR (OLD."published_at" IS NOT NULL AND NEW."published_at" IS DISTINCT FROM OLD."published_at")
+    OR (OLD."revealed_at" IS NOT NULL AND (
+      NEW."revealed_seed" IS DISTINCT FROM OLD."revealed_seed"
+      OR NEW."revealed_by_user_id" IS DISTINCT FROM OLD."revealed_by_user_id"
+      OR NEW."revealed_at" IS DISTINCT FROM OLD."revealed_at"
+      OR NEW."reveal_evidence_hash" IS DISTINCT FROM OLD."reveal_evidence_hash"))
+  ) THEN
+    RAISE EXCEPTION 'Bingo fairness commitment is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."revealed_at" IS NOT NULL AND (TG_OP = 'INSERT' OR OLD."revealed_at" IS NULL) THEN
+    SELECT "status" INTO execution_status FROM "bingo_round_executions"
+      WHERE "id" = NEW."execution_id" AND "event_id" = NEW."event_id" FOR SHARE;
+    IF execution_status NOT IN ('COMPLETED', 'CANCELLED') THEN
+      RAISE EXCEPTION 'Bingo seed may only be revealed after execution closure' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_fairness_commitments_guard"
+  BEFORE INSERT OR UPDATE OR DELETE ON "bingo_fairness_commitments"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_fairness_commitment"();
+
+-- Cross-row evidence consistency that cannot be represented by Prisma FKs.
+CREATE FUNCTION "bingo_guard_draw_scope"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM "bingo_command_idempotency" i
+    WHERE i."id" = NEW."idempotency_record_id"
+      AND i."event_id" = NEW."event_id"
+      AND i."execution_id" = NEW."execution_id"
+  ) THEN
+    RAISE EXCEPTION 'Draw idempotency record belongs to another scope' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_draws_scope_guard"
+  BEFORE INSERT ON "bingo_draws"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_draw_scope"();
+
+CREATE FUNCTION "bingo_guard_candidate_decisive_ball"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM "bingo_win_groups" g
+    JOIN "bingo_draws" d ON d."id" = g."decisive_draw_id"
+    WHERE g."id" = NEW."win_group_id" AND g."execution_id" = NEW."execution_id"
+      AND g."event_id" = NEW."event_id" AND d."ball_number" = NEW."decisive_ball"
+  ) THEN
+    RAISE EXCEPTION 'Candidate decisive ball does not match its win group draw' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_winner_candidates_decisive_ball_guard"
+  BEFORE INSERT OR UPDATE OF "decisive_ball" ON "bingo_winner_candidates"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_candidate_decisive_ball"();
+
+CREATE FUNCTION "bingo_guard_winner_validation"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE execution_row "bingo_round_executions"%ROWTYPE;
+BEGIN
+  SELECT * INTO execution_row FROM "bingo_round_executions"
+    WHERE "id" = NEW."execution_id" AND "round_id" = NEW."round_id" AND "event_id" = NEW."event_id" FOR SHARE;
+  IF NEW."validation_policy_snapshot" <> execution_row."validation_policy_snapshot" THEN
+    RAISE EXCEPTION 'Winner validation policy does not match execution' USING ERRCODE = '23514';
+  END IF;
+  IF NEW."status" = 'CONFIRMED' AND NEW."validation_policy_snapshot" = 'DUAL_CONTROL'
+    AND (execution_row."supervisor_user_id" IS NULL
+      OR NEW."validated_by_user_id" <> execution_row."supervisor_user_id"
+      OR NEW."validated_by_user_id" = execution_row."operator_user_id") THEN
+    RAISE EXCEPTION 'Dual-control winner requires the distinct execution supervisor' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "bingo_winners_validation_guard"
+  BEFORE INSERT OR UPDATE ON "bingo_winners"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_guard_winner_validation"();
+
+-- Empty executions and assignments are still historical revisions/evidence;
+-- cancellation/revocation creates state, never physical deletion.
+CREATE FUNCTION "bingo_reject_evidence_delete"() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'Bingo domain evidence cannot be deleted' USING ERRCODE = '23514';
+END;
+$$;
+CREATE TRIGGER "bingo_round_executions_no_delete" BEFORE DELETE ON "bingo_round_executions"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
+CREATE TRIGGER "bingo_win_groups_no_delete" BEFORE DELETE ON "bingo_win_groups"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
+CREATE TRIGGER "bingo_winner_candidates_no_delete" BEFORE DELETE ON "bingo_winner_candidates"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
+CREATE TRIGGER "bingo_winners_no_delete" BEFORE DELETE ON "bingo_winners"
+  FOR EACH ROW EXECUTE FUNCTION "bingo_reject_evidence_delete"();
 
 -- Draws and audit events are append-only evidence. Corrections are expressed
 -- as new domain/audit rows, never by rewriting confirmed evidence.
