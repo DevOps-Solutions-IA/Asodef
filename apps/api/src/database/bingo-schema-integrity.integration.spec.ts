@@ -476,7 +476,10 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
     await expect(
       prisma.bingoWinner.update({
         where: { id: winner.id },
-        data: { status: "PENDING_VALIDATION", tieResolution: { changed: true } },
+        data: {
+          status: "PENDING_VALIDATION",
+          tieResolution: { changed: true },
+        },
       }),
     ).rejects.toBeDefined();
     await expect(
@@ -652,7 +655,11 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
     );
     await prisma.bingoRoundExecution.update({
       where: { id: retrospective.id },
-      data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "test" },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        cancelReason: "test",
+      },
     });
     await expect(
       prisma.bingoFairnessCommitment.create({
@@ -665,6 +672,40 @@ describe("Bingo schema integrity (integration, real PostgreSQL)", () => {
           commitmentHash: sha256("retrospective"),
           configurationHash: sha256(`configuration:${event.id}:1`),
           canonicalizationVersion: "jcs-v1",
+          seedCiphertext: "encrypted-test-seed",
+          custodyKeyId: "test-custody-v1",
+          committedByUserId: fixture.user.id,
+          committedAt: new Date(),
+        },
+      }),
+    ).rejects.toBeDefined();
+  });
+
+  it("rejects commitment evidence for an RNG-only execution", async () => {
+    const fixture = await createBingoFixture(prisma, "rng-only-commitment");
+    const event = await fixture.createEvent("rng-only-commitment", {
+      fairnessMode: BingoFairnessMode.CRYPTO_RNG,
+    });
+    const configured = await fixture.createConfiguredRound(event.id);
+    const execution = await fixture.createExecution(
+      event.id,
+      configured.round.id,
+      {
+        fairnessMode: BingoFairnessMode.CRYPTO_RNG,
+      },
+    );
+
+    await expect(
+      prisma.bingoFairnessCommitment.create({
+        data: {
+          eventId: event.id,
+          executionId: execution.id,
+          hashAlgorithm: "SHA-256",
+          rngAlgorithm: "asodef-bingo-draw-v1",
+          protocolVersion: "asodef-bingo-commit-reveal-v1",
+          commitmentHash: sha256("rng-only-must-reject"),
+          configurationHash: sha256(`configuration:${event.id}:1`),
+          canonicalizationVersion: "RFC8785-JCS-v1",
           seedCiphertext: "encrypted-test-seed",
           custodyKeyId: "test-custody-v1",
           committedByUserId: fixture.user.id,
