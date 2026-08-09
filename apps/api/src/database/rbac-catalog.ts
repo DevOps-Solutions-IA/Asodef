@@ -22,6 +22,8 @@ export const ROLE_NAMES = [
   "AFFILIATE",
   "CUSTOMER",
   "AUDITOR",
+  "BINGO_OPERATOR",
+  "BINGO_SUPERVISOR",
 ] as const;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
@@ -89,6 +91,14 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "retention.manage", description: "Aprobar retención, anonimización o eliminación de datos" },
   { key: "pqr.manage", description: "Gestionar casos de PQR" },
   { key: "approvals.manage", description: "Administrar aprobaciones legales y comerciales de producción" },
+  { key: "bingo.read", description: "Consultar eventos, rondas y operación de Bingo" },
+  { key: "bingo.create", description: "Crear eventos de Bingo" },
+  { key: "bingo.manage", description: "Configurar y administrar eventos de Bingo" },
+  { key: "bingo.operate", description: "Operar rondas y sorteos de Bingo" },
+  { key: "bingo.validate", description: "Validar candidatos y ganadores de Bingo bajo control supervisor" },
+  { key: "bingo.import", description: "Importar participantes y asignaciones de Bingo" },
+  { key: "bingo.export", description: "Exportar reportes y evidencias de Bingo" },
+  { key: "bingo.audit.read", description: "Consultar auditoría y evidencia sensible de Bingo" },
 ];
 
 export const ROLE_CATALOG: RoleDefinition[] = [
@@ -101,6 +111,8 @@ export const ROLE_CATALOG: RoleDefinition[] = [
   { name: "AFFILIATE", description: "Acceso limitado de un afiliado a su propia información" },
   { name: "CUSTOMER", description: "Acceso limitado de un cliente a su propia información" },
   { name: "AUDITOR", description: "Acceso de solo lectura a auditoría y reportes" },
+  { name: "BINGO_OPERATOR", description: "Operación controlada de eventos y sorteos de Bingo" },
+  { name: "BINGO_SUPERVISOR", description: "Supervisión, configuración y validación de eventos de Bingo" },
 ];
 
 const ALL_PERMISSION_KEYS = PERMISSION_CATALOG.map((p) => p.key);
@@ -209,5 +221,16 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "contracts.read",
     "documents.read",
     "crm.read",
+  ],
+  BINGO_OPERATOR: ["bingo.read", "bingo.operate", "bingo.import", "bingo.export"],
+  BINGO_SUPERVISOR: [
+    "bingo.read",
+    "bingo.create",
+    "bingo.manage",
+    "bingo.operate",
+    "bingo.validate",
+    "bingo.import",
+    "bingo.export",
+    "bingo.audit.read",
   ],
 };
