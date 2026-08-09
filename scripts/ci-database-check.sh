@@ -228,8 +228,8 @@ for seed_run in 1 2 3; do
   [[ "$(db_scalar "$natural_key_duplicate_sql")" == "0" ]] || fail "seed run $seed_run created a duplicate natural key"
 done
 
-[[ "$(db_scalar "SELECT count(*) FROM roles;")" == "9" ]] || fail "seeded role count is not 9"
-[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "45" ]] || fail "seeded permission count is not 45"
+[[ "$(db_scalar "SELECT count(*) FROM roles;")" == "11" ]] || fail "seeded role count is not 11"
+[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "53" ]] || fail "seeded permission count is not 53"
 [[ "$(db_scalar "SELECT count(*) FROM content_entries;")" == "38" ]] || fail "seeded content count is not 38"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents;")" == "21" ]] || fail "legal seed must create exactly 21 documents"
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version=1 AND status='DRAFT';")" == "21" ]] || fail "legal seed must create 21 version-1 DRAFT records"
