@@ -8,6 +8,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import type { Request, Response } from "express";
 
 import { BingoDrawError } from "../application/draws";
 import { BingoIdempotencyError } from "../application/idempotency";
@@ -32,27 +33,49 @@ type StructuredBingoError =
 export class BingoAdminErrorFilter implements ExceptionFilter {
   catch(error: StructuredBingoError, host: ArgumentsHost): void {
     const code = error.code;
-    const body = { code: publicCode(code), message: safeMessage(code) };
-    const exception = toHttpException(code, body);
-    const response = host.switchToHttp().getResponse();
-    response.status(exception.getStatus()).json(exception.getResponse());
+    const context = host.switchToHttp();
+    const request = context.getRequest<Request & { requestId?: string }>();
+    const response = context.getResponse<Response>();
+    const exception = toHttpException(code);
+    const statusCode = exception.getStatus();
+    response.status(statusCode).json({
+      statusCode,
+      error: errorName(statusCode),
+      message: safeMessage(code),
+      code: publicCode(code),
+      path: request.originalUrl ?? request.url,
+      timestamp: new Date().toISOString(),
+      requestId: request.requestId,
+    });
   }
 }
 
-function toHttpException(code: string, body: object) {
-  if (code.includes("FORBIDDEN")) return new ForbiddenException(body);
-  if (code.includes("NOT_FOUND")) return new NotFoundException(body);
+function toHttpException(code: string) {
+  if (code.includes("FORBIDDEN")) return new ForbiddenException();
+  if (code.includes("NOT_FOUND")) return new NotFoundException();
   if (
     code.includes("IN_PROGRESS") ||
     code.includes("IDEMPOTENCY") ||
     code.includes("ACTIVE_EXECUTION")
   ) {
-    return new ConflictException(body);
+    return new ConflictException();
   }
   if (code.includes("SEED_CUSTODY") || code.includes("FAIRNESS")) {
-    return new ServiceUnavailableException(body);
+    return new ServiceUnavailableException();
   }
-  return new UnprocessableEntityException(body);
+  return new UnprocessableEntityException();
+}
+
+function errorName(statusCode: number): string {
+  return (
+    {
+      403: "Forbidden",
+      404: "Not Found",
+      409: "Conflict",
+      422: "Unprocessable Entity",
+      503: "Service Unavailable",
+    }[statusCode] ?? "Error"
+  );
 }
 
 function publicCode(code: string): string {
