@@ -31,6 +31,7 @@ export type BingoCommandResult = Readonly<{
   revision?: number;
   sequence?: number;
   ballNumber?: number;
+  candidateCount?: number;
 }>;
 
 export interface AcquireIdempotencyInput {

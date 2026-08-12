@@ -30,6 +30,20 @@ export interface DrawNextBallResult {
   readonly candidateCount: number;
 }
 
+export type DrawTransactionCheckpoint =
+  "AFTER_DRAW" | "AFTER_CANDIDATES" | "AFTER_AUDIT" | "AFTER_OUTBOX";
+
+export interface DrawTransactionFaultPort {
+  checkpoint(
+    checkpoint: DrawTransactionCheckpoint,
+    context: Readonly<{ executionId: string; drawId: string }>,
+  ): Promise<void>;
+}
+
+const NO_DRAW_FAULTS: DrawTransactionFaultPort = {
+  checkpoint: async () => undefined,
+};
+
 export class BingoDrawError extends Error {
   constructor(
     readonly code:
@@ -54,6 +68,7 @@ export class DrawNextBallService {
     private readonly audit: PrismaBingoAuditRepository,
     private readonly outbox: PrismaBingoOutboxRepository,
     private readonly selector: BallSelector,
+    private readonly faults: DrawTransactionFaultPort = NO_DRAW_FAULTS,
   ) {}
 
   execute(
@@ -74,6 +89,10 @@ export class DrawNextBallService {
       },
       async (tx) => {
         const now = context.clock.now();
+        // Lock the aggregate before creating the idempotency row: its foreign
+        // keys otherwise take KEY SHARE first and concurrent commands can
+        // deadlock while later upgrading to the canonical event lock.
+        await this.locks.acquire(tx, command);
         const acquired = await this.idempotency.acquire(tx, {
           eventId: command.eventId,
           executionId: command.executionId,
@@ -103,11 +122,9 @@ export class DrawNextBallService {
             sequence: result.sequence,
             ballNumber: result.ballNumber,
             stateVersion: BigInt(result.sequence),
-            candidateCount: 0,
+            candidateCount: result.candidateCount ?? 0,
           };
         }
-
-        await this.locks.acquire(tx, command);
         const execution = await tx.bingoRoundExecution.findFirst({
           where: {
             id: command.executionId,
@@ -186,6 +203,10 @@ export class DrawNextBallService {
         await tx.bingoRoundExecution.update({
           where: { id: execution.id },
           data: { stateVersion: nextVersion },
+        });
+        await this.faults.checkpoint("AFTER_DRAW", {
+          executionId: execution.id,
+          drawId: draw.id,
         });
 
         const lastOutbox = await tx.bingoOutboxEvent.findFirst({
@@ -355,6 +376,10 @@ export class DrawNextBallService {
             }
           }
         }
+        await this.faults.checkpoint("AFTER_CANDIDATES", {
+          executionId: execution.id,
+          drawId: draw.id,
+        });
         await this.audit.append(tx, {
           eventId: execution.eventId,
           roundId: execution.roundId,
@@ -363,10 +388,14 @@ export class DrawNextBallService {
           actorPermission: "bingo.operate",
           action: "bingo.draw.created.v1",
           result: BingoAuditResult.SUCCEEDED,
-          previousState: {
-            sequence: sequence - 1,
-            stateVersion: Number(execution.stateVersion),
-          },
+          ...(sequence === 1
+            ? {}
+            : {
+                previousState: {
+                  sequence: sequence - 1,
+                  stateVersion: Number(execution.stateVersion),
+                },
+              }),
           newState: {
             sequence,
             ballNumber: selected.ball,
@@ -383,6 +412,14 @@ export class DrawNextBallService {
           },
           occurredAt: now,
         });
+        await this.faults.checkpoint("AFTER_AUDIT", {
+          executionId: execution.id,
+          drawId: draw.id,
+        });
+        await this.faults.checkpoint("AFTER_OUTBOX", {
+          executionId: execution.id,
+          drawId: draw.id,
+        });
         await this.idempotency.succeed(
           tx,
           acquired.recordId,
@@ -394,6 +431,7 @@ export class DrawNextBallService {
             executionId: execution.id,
             sequence,
             ballNumber: selected.ball,
+            candidateCount,
           },
           now,
         );

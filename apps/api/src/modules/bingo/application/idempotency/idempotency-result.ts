@@ -17,6 +17,7 @@ const ALLOWED_KEYS = new Set([
   "revision",
   "sequence",
   "ballNumber",
+  "candidateCount",
 ]);
 const RESOURCE_TYPES = new Set(["EXECUTION", "DRAW", "CANDIDATE", "WINNER"]);
 
@@ -41,7 +42,8 @@ export function assertCommandResult(
         !UUID.test(record.executionId))) ||
     !optionalPositiveInteger(record.revision) ||
     !optionalPositiveInteger(record.sequence) ||
-    !optionalIntegerInRange(record.ballNumber, 1, 75)
+    !optionalIntegerInRange(record.ballNumber, 1, 75) ||
+    !optionalIntegerInRange(record.candidateCount, 0, 50_000)
   ) {
     throw new BingoIdempotencyError(BingoIdempotencyErrorCode.INVALID_RESULT);
   }
