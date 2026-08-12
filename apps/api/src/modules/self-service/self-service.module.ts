@@ -14,6 +14,8 @@ import { SelfServiceGatewayService } from "./self-service-gateway.service";
 import { SelfServiceProviderController } from "./self-service-provider.controller";
 import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-service-provider.registry";
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
+import { AffiliateIdentityService } from "./affiliate-identity.service";
+import { ExternalIdentityFingerprintService } from "./external-identity-fingerprint.service";
 
 @Module({
   imports: [AuthModule],
@@ -28,6 +30,8 @@ import { SelfServiceContactUpdateService } from "./self-service-contact-update.s
     SelfServiceGatewayService,
     SelfServiceProviderRegistry,
     SelfServiceContactUpdateService,
+    AffiliateIdentityService,
+    ExternalIdentityFingerprintService,
     NotConfiguredExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
     {
@@ -37,6 +41,11 @@ import { SelfServiceContactUpdateService } from "./self-service-contact-update.s
     },
     { provide: SELF_SERVICE_MESSAGE_PROVIDER, useExisting: NotConfiguredSelfServiceMessageProvider },
   ],
-  exports: [EXTERNAL_CORE_PROVIDER],
+  exports: [
+    EXTERNAL_CORE_PROVIDER,
+    AffiliateIdentityService,
+    SelfServiceSessionService,
+    SelfServiceSessionGuard,
+  ],
 })
 export class SelfServiceModule {}

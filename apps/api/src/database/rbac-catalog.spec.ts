@@ -12,7 +12,7 @@ describe("RBAC catalog data integrity", () => {
     expect(roleNames.size).toBe(ROLE_CATALOG.length);
   });
 
-  it("seeds exactly the 9 roles required by the PRD", () => {
+  it("seeds exactly the platform roles and the two specialized Bingo roles", () => {
     expect(roleNames).toEqual(
       new Set([
         "SUPER_ADMIN",
@@ -24,6 +24,8 @@ describe("RBAC catalog data integrity", () => {
         "AFFILIATE",
         "CUSTOMER",
         "AUDITOR",
+        "BINGO_OPERATOR",
+        "BINGO_SUPERVISOR",
       ]),
     );
   });
@@ -47,6 +49,60 @@ describe("RBAC catalog data integrity", () => {
 
   it("grants SUPER_ADMIN every permission in the catalog", () => {
     expect(new Set(ROLE_PERMISSIONS.SUPER_ADMIN)).toEqual(permissionKeys);
+  });
+
+  describe("Bingo capability matrix", () => {
+    const BINGO_PERMISSION_KEYS = [
+      "bingo.read",
+      "bingo.create",
+      "bingo.manage",
+      "bingo.operate",
+      "bingo.validate",
+      "bingo.import",
+      "bingo.export",
+      "bingo.audit.read",
+    ];
+
+    it("defines the complete approved Bingo permission catalog", () => {
+      expect(PERMISSION_CATALOG.filter(({ key }) => key.startsWith("bingo.")).map(({ key }) => key)).toEqual(
+        BINGO_PERMISSION_KEYS,
+      );
+    });
+
+    it("limits BINGO_OPERATOR to operational capabilities and withholds supervisor validation", () => {
+      expect(ROLE_PERMISSIONS.BINGO_OPERATOR).toEqual(["bingo.read", "bingo.operate", "bingo.import", "bingo.export"]);
+      expect(ROLE_PERMISSIONS.BINGO_OPERATOR).not.toContain("bingo.validate");
+      expect(ROLE_PERMISSIONS.BINGO_OPERATOR).not.toContain("bingo.create");
+      expect(ROLE_PERMISSIONS.BINGO_OPERATOR).not.toContain("bingo.manage");
+      expect(ROLE_PERMISSIONS.BINGO_OPERATOR).not.toContain("bingo.audit.read");
+    });
+
+    it("grants BINGO_SUPERVISOR all approved Bingo capabilities and no unrelated platform capability", () => {
+      expect(ROLE_PERMISSIONS.BINGO_SUPERVISOR).toEqual(BINGO_PERMISSION_KEYS);
+      expect(ROLE_PERMISSIONS.BINGO_SUPERVISOR.every((key) => key.startsWith("bingo."))).toBe(true);
+    });
+
+    it("keeps ADMIN and SUPER_ADMIN authorized for all Bingo capabilities", () => {
+      for (const key of BINGO_PERMISSION_KEYS) {
+        expect(ROLE_PERMISSIONS.ADMIN).toContain(key);
+        expect(ROLE_PERMISSIONS.SUPER_ADMIN).toContain(key);
+      }
+    });
+
+    it("does not grant Bingo capabilities to pre-existing specialized or portal roles", () => {
+      const preExistingSpecializedRoles = [
+        "FINANCE",
+        "COMMERCIAL",
+        "CUSTOMER_SERVICE",
+        "COMPANY_PARTNER",
+        "AFFILIATE",
+        "CUSTOMER",
+        "AUDITOR",
+      ] as const;
+      for (const role of preExistingSpecializedRoles) {
+        expect(ROLE_PERMISSIONS[role].some((key) => key.startsWith("bingo."))).toBe(false);
+      }
+    });
   });
 
   it("withholds the eight platform-governance permissions from ADMIN (US-008: legal.approve, US-009: users.unlock, US-011: users.roles.manage/users.security.read)", () => {

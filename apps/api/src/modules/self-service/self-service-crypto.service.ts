@@ -8,7 +8,8 @@ export class SelfServiceCryptoService {
   private readonly key: Buffer;
 
   constructor(config: ConfigService<EnvConfig, true>) {
-    this.key = createHash("sha256").update(config.get("ENCRYPTION_KEY", { infer: true })).digest();
+    const encryptionKey = config.get("ENCRYPTION_KEY", { infer: true });
+    this.key = createHash("sha256").update(encryptionKey).digest();
   }
 
   generateToken(): string { return randomBytes(32).toString("base64url"); }

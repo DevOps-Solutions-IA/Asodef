@@ -67,4 +67,43 @@ describe("RBAC seed (integration, real Postgres)", () => {
 
     expect(customer.permissions.map((rp) => rp.permission.key)).toEqual(["payments.read"]);
   });
+
+  it("persists the exact Bingo operator and supervisor capability boundaries", async () => {
+    await seedRbac(prisma);
+
+    const roles = await prisma.role.findMany({
+      where: { name: { in: ["BINGO_OPERATOR", "BINGO_SUPERVISOR"] } },
+      include: { permissions: { include: { permission: true } } },
+    });
+    const keysByRole = new Map(
+      roles.map((role) => [role.name, role.permissions.map(({ permission }) => permission.key).sort()]),
+    );
+
+    expect(keysByRole.get("BINGO_OPERATOR")).toEqual([...ROLE_PERMISSIONS.BINGO_OPERATOR].sort());
+    expect(keysByRole.get("BINGO_SUPERVISOR")).toEqual([...ROLE_PERMISSIONS.BINGO_SUPERVISOR].sort());
+  });
+
+  it("adds Bingo capabilities without changing any pre-existing role mapping", async () => {
+    await seedRbac(prisma);
+
+    const preExistingRoleNames = [
+      "FINANCE",
+      "COMMERCIAL",
+      "CUSTOMER_SERVICE",
+      "COMPANY_PARTNER",
+      "AFFILIATE",
+      "CUSTOMER",
+      "AUDITOR",
+    ] as const;
+    const roles = await prisma.role.findMany({
+      where: { name: { in: [...preExistingRoleNames] } },
+      include: { permissions: { include: { permission: true } } },
+    });
+
+    for (const role of roles) {
+      const expected = [...ROLE_PERMISSIONS[role.name as (typeof preExistingRoleNames)[number]]].sort();
+      expect(role.permissions.map(({ permission }) => permission.key).sort()).toEqual(expected);
+      expect(expected.some((key) => key.startsWith("bingo."))).toBe(false);
+    }
+  });
 });

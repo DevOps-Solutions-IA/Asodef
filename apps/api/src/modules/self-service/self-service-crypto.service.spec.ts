@@ -23,4 +23,5 @@ describe("SelfServiceCryptoService", () => {
     expect(service.matches(hash, service.hashOtp("challenge-a", "123456"))).toBe(true);
     expect(service.matches(hash, service.hashOtp("challenge-b", "123456"))).toBe(false);
   });
+
 });

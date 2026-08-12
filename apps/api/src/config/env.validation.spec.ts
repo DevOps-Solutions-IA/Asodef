@@ -19,7 +19,42 @@ describe("validateEnv", () => {
     expect(result.APP_TIMEZONE).toBe("America/Bogota");
     expect(result.BOLD_MODE).toBe("mock");
     expect(result.PRODUCTION_PAYMENTS_ENABLED).toBe(false);
+    expect(result.BINGO_ENABLED).toBe(false);
+    expect(result.BINGO_ADMIN_ENABLED).toBe(false);
+    expect(result.BINGO_AFFILIATE_ENABLED).toBe(false);
+    expect(result.BINGO_PUBLIC_ENABLED).toBe(false);
+    expect(result.BINGO_REALTIME_ENABLED).toBe(false);
     expect(result.DATABASE_URL).toBe(VALID_ENV.DATABASE_URL);
+  });
+
+  it("coerces explicit Bingo flags and allows gradual surfaces behind the master flag", () => {
+    const result = validateEnv({
+      ...VALID_ENV,
+      BINGO_ENABLED: "true",
+      BINGO_ADMIN_ENABLED: "true",
+      BINGO_AFFILIATE_ENABLED: "false",
+      BINGO_PUBLIC_ENABLED: "false",
+      BINGO_REALTIME_ENABLED: "true",
+    });
+
+    expect(result.BINGO_ENABLED).toBe(true);
+    expect(result.BINGO_ADMIN_ENABLED).toBe(true);
+    expect(result.BINGO_AFFILIATE_ENABLED).toBe(false);
+    expect(result.BINGO_PUBLIC_ENABLED).toBe(false);
+    expect(result.BINGO_REALTIME_ENABLED).toBe(true);
+  });
+
+  it.each([
+    "BINGO_ADMIN_ENABLED",
+    "BINGO_AFFILIATE_ENABLED",
+    "BINGO_PUBLIC_ENABLED",
+    "BINGO_REALTIME_ENABLED",
+  ])("rejects %s=true while the Bingo master flag is disabled", (flag) => {
+    expect(() => validateEnv({ ...VALID_ENV, [flag]: "true" })).toThrow(new RegExp(flag));
+  });
+
+  it("rejects ambiguous non-boolean Bingo flag values", () => {
+    expect(() => validateEnv({ ...VALID_ENV, BINGO_ENABLED: "1" })).toThrow(/BINGO_ENABLED/);
   });
 
   it("fails fast with a clear message naming DATABASE_URL when it is missing", () => {
@@ -127,5 +162,104 @@ describe("validateEnv", () => {
       expect(message).toContain("JWT_SECRET");
       expect(message).toContain("ENCRYPTION_KEY");
     }
+  });
+
+  it("requires a stable identity issuer when the external HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_CORE_IDENTITY_ISSUER/);
+
+    const result = validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    });
+    expect(result.EXTERNAL_CORE_IDENTITY_ISSUER).toBe("https://identity.example.com");
+  });
+
+  it("rejects a short external identity HMAC key when the HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
+      EXTERNAL_IDENTITY_HMAC_KEY: "too-short",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_KEY/);
+  });
+
+  it("requires a fingerprint key id when the HTTP core is enabled", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_KEY_ID/);
+  });
+
+  it("validates the transition keyring and forbids reusing the active key id", () => {
+    const base = {
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "https://identity.example.com",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v2",
+      EXTERNAL_IDENTITY_HMAC_KEY: "active-dedicated-identity-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    };
+    expect(() => validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: "not-json",
+    })).toThrow(/EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS/);
+    expect(() => validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: JSON.stringify({
+        v2: "different-secret-that-is-nevertheless-at-least-32-characters",
+      }),
+    })).toThrow(/active EXTERNAL_IDENTITY_HMAC_KEY_ID/);
+    expect(validateEnv({
+      ...base,
+      EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS: JSON.stringify({
+        v1: "previous-dedicated-identity-key-at-least-32-characters",
+      }),
+    }).EXTERNAL_IDENTITY_HMAC_PREVIOUS_KEYS).toEqual({
+      v1: "previous-dedicated-identity-key-at-least-32-characters",
+    });
+  });
+
+  it("rejects an all-whitespace external identity issuer", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "http",
+      EXTERNAL_CORE_IDENTITY_ISSUER: "   ",
+      EXTERNAL_IDENTITY_HMAC_KEY_ID: "v1",
+      EXTERNAL_IDENTITY_HMAC_KEY: "a-dedicated-identity-hmac-key-at-least-32-characters",
+      EXTERNAL_CORE_BASE_URL: "https://core.example.com",
+      EXTERNAL_CORE_CLIENT_ID: "client-id",
+      EXTERNAL_CORE_CLIENT_SECRET: "client-secret",
+      EXTERNAL_CORE_WEBHOOK_SECRET: "webhook-secret",
+    })).toThrow(/EXTERNAL_CORE_IDENTITY_ISSUER/);
   });
 });

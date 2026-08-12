@@ -58,22 +58,44 @@ model User {
   loginAttempts                     LoginAttempt[]
   securityEvents                    SecurityEvent[]
   notificationJobs                  NotificationJob[]
-  approvedLegalDocumentVersions     LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
-  auditLogActions                   AuditLog[]                 @relation("AuditLogActor")
+  approvedLegalDocumentVersions     LegalDocumentVersion[]           @relation("LegalDocumentVersionApprover")
+  auditLogActions                   AuditLog[]                       @relation("AuditLogActor")
   consentRecords                    ConsentRecord[]
-  assignedDataSubjectRequests       DataSubjectRequest[]       @relation("DataSubjectRequestAssignee")
+  assignedDataSubjectRequests       DataSubjectRequest[]             @relation("DataSubjectRequestAssignee")
   anonymizationLogActions           AnonymizationLog[]
-  assignedProspects                 Prospect[]                 @relation("ProspectAssignee")
-  assignedOpportunities             Opportunity[]              @relation("OpportunityAssignee")
-  opportunityStageChanges           OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
-  assignedCommercialActivities      CommercialActivity[]       @relation("CommercialActivityAssignee")
-  uploadedContractVersions          ContractVersion[]          @relation("ContractVersionUploader")
-  issuedContractDownloadTokens      ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
-  approvedRefunds                   Refund[]                   @relation("RefundApprover")
+  assignedProspects                 Prospect[]                       @relation("ProspectAssignee")
+  assignedOpportunities             Opportunity[]                    @relation("OpportunityAssignee")
+  opportunityStageChanges           OpportunityStatusHistory[]       @relation("OpportunityStatusChangedBy")
+  assignedCommercialActivities      CommercialActivity[]             @relation("CommercialActivityAssignee")
+  uploadedContractVersions          ContractVersion[]                @relation("ContractVersionUploader")
+  issuedContractDownloadTokens      ContractDownloadToken[]          @relation("ContractDownloadTokenIssuer")
+  approvedRefunds                   Refund[]                         @relation("RefundApprover")
   reconciliationRuns                Reconciliation[]
-  resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
+  resolvedReconciliationDifferences ReconciliationDifference[]       @relation("ReconciliationDifferenceResolver")
   requestedExportJobs               ExportJob[]
   approvedApprovalGates             ApprovalGate[]
+  bingoEventsCreated                BingoEvent[]                     @relation("BingoEventCreator")
+  bingoEventsUpdated                BingoEvent[]                     @relation("BingoEventUpdater")
+  bingoEligibilityRulesCreated      BingoEligibilityRule[]           @relation("BingoEligibilityRuleCreator")
+  bingoExternalSubjectsResolved     BingoAuthorizedExternalSubject[] @relation("BingoExternalSubjectResolver")
+  bingoEligibilityApprovals         BingoEligibilityApproval[]       @relation("BingoEligibilityApprovalActor")
+  bingoRoundsCreated                BingoRound[]                     @relation("BingoRoundCreator")
+  bingoExecutionsCreated            BingoRoundExecution[]            @relation("BingoExecutionCreator")
+  bingoExecutionOperators           BingoRoundExecution[]            @relation("BingoExecutionOperator")
+  bingoExecutionSupervisors         BingoRoundExecution[]            @relation("BingoExecutionSupervisor")
+  bingoFairnessCommitments          BingoFairnessCommitment[]        @relation("BingoCommitmentCreator")
+  bingoFairnessReveals              BingoFairnessCommitment[]        @relation("BingoCommitmentRevealer")
+  bingoAssignments                  BingoCardAssignment[]            @relation("BingoAssignmentActor")
+  bingoDraws                        BingoDraw[]                      @relation("BingoDrawActor")
+  bingoWinnersValidated             BingoWinner[]                    @relation("BingoWinnerValidator")
+  bingoWinnersRejected              BingoWinner[]                    @relation("BingoWinnerRejector")
+  bingoExecutionActors              BingoExecutionActor[]
+  bingoIdempotencyRecords           BingoCommandIdempotency[]
+  bingoImportsUploaded              BingoImportBatch[]               @relation("BingoImportUploader")
+  bingoImportsApproved              BingoImportBatch[]               @relation("BingoImportApprover")
+  bingoAuditEvents                  BingoAuditEvent[]
+  bingoRetentionPolicies            BingoRetentionPolicy[]
+  bingoTieBreaksCreated             BingoTieBreak[]
 
   @@map("users")
 }
@@ -559,12 +581,13 @@ model Customer {
   phone          String
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  affiliates     Affiliate[]
-  obligations    Obligation[]
-  paymentOrders  PaymentOrder[]
-  consentRecords ConsentRecord[]
-  pqrCases       PqrCase[]
-  contracts      Contract[]
+  affiliates            Affiliate[]
+  obligations           Obligation[]
+  paymentOrders         PaymentOrder[]
+  consentRecords        ConsentRecord[]
+  pqrCases              PqrCase[]
+  contracts             Contract[]
+  bingoExternalSubjects BingoAuthorizedExternalSubject[]
 
   // Natural business key: US-021's own Example queries "the seeded demo
   // customer's document number", implying (type, number) uniquely
@@ -581,10 +604,67 @@ model Affiliate {
   status          AffiliateStatus @default(ACTIVE)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer              Customer                         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  externalIdentities    AffiliateExternalIdentity[]
+  bingoParticipants     BingoParticipant[]
+  bingoExternalSubjects BingoAuthorizedExternalSubject[]
 
   @@index([customerId])
   @@map("affiliates")
+}
+
+enum AffiliateExternalIdentityStatus {
+  ACTIVE
+  REPLACED
+  REVOKED
+
+  @@map("affiliate_external_identity_status")
+}
+
+// Stable bridge between an opaque subject issued by the trusted external
+// identity source and ASODEF's internal Affiliate identity. The raw subject
+// is never persisted; versioned, keyed fingerprints live in the child model.
+model AffiliateExternalIdentity {
+  id                   String                          @id @default(uuid()) @db.Uuid
+  affiliateId          String                          @map("affiliate_id") @db.Uuid
+  issuer               String
+  status               AffiliateExternalIdentityStatus @default(ACTIVE)
+  verifiedAt           DateTime                        @default(now()) @map("verified_at") @db.Timestamptz(3)
+  lastVerifiedAt       DateTime                        @default(now()) @map("last_verified_at") @db.Timestamptz(3)
+  deactivatedAt        DateTime?                       @map("deactivated_at") @db.Timestamptz(3)
+  replacedByIdentityId String?                         @map("replaced_by_identity_id") @db.Uuid
+  createdAt            DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  affiliate    Affiliate                              @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+  fingerprints AffiliateExternalIdentityFingerprint[]
+  replacedBy   AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement", fields: [replacedByIdentityId, affiliateId, issuer], references: [id, affiliateId, issuer], onDelete: Restrict)
+  replaces     AffiliateExternalIdentity?             @relation("AffiliateIdentityReplacement")
+
+  @@unique([id, issuer])
+  @@unique([id, affiliateId, issuer])
+  @@unique([replacedByIdentityId, affiliateId, issuer])
+  @@index([affiliateId, issuer, status])
+  @@index([issuer, status])
+  @@map("affiliate_external_identities")
+}
+
+model AffiliateExternalIdentityFingerprint {
+  id             String    @id @default(uuid()) @db.Uuid
+  identityId     String    @map("identity_id") @db.Uuid
+  issuer         String
+  keyId          String    @map("key_id")
+  subjectRefHash String    @map("subject_ref_hash")
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz(3)
+  retiredAt      DateTime? @map("retired_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  identity AffiliateExternalIdentity @relation(fields: [identityId, issuer], references: [id, issuer], onDelete: Restrict)
+
+  @@unique([issuer, keyId, subjectRefHash])
+  @@unique([identityId, keyId])
+  @@index([identityId])
+  @@index([keyId, retiredAt])
+  @@map("affiliate_external_identity_fingerprints")
 }
 
 model Company {
@@ -597,11 +677,12 @@ model Company {
   status       CompanyStatus @default(ACTIVE)
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  commercialContacts CommercialContact[]
-  opportunities      Opportunity[]
-  agreements         Agreement[]
-  contracts          Contract[]
-  auditLogs          AuditLog[]
+  commercialContacts    CommercialContact[]
+  opportunities         Opportunity[]
+  agreements            Agreement[]
+  contracts             Contract[]
+  auditLogs             AuditLog[]
+  bingoExternalSubjects BingoAuthorizedExternalSubject[]
 
   @@map("companies")
 }
@@ -2105,4 +2186,1041 @@ model SelfServiceAuditEvent {
   @@index([action, createdAt])
   @@index([sessionId, createdAt])
   @@map("self_service_audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// Bingo domain — ETAPA 3 physical model only.
+// PostgreSQL is authoritative. This schema deliberately contains no draw
+// engine, HTTP surface, realtime transport or frontend concerns.
+// ---------------------------------------------------------------------------
+
+enum BingoEventStatus {
+  DRAFT
+  CONFIGURED
+  PUBLISHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+
+  @@map("bingo_event_status")
+}
+
+enum BingoEventVisibility {
+  PUBLIC
+  AUTHENTICATED_AFFILIATES
+  AUTHORIZED_PARTICIPANTS
+
+  @@map("bingo_event_visibility")
+}
+
+enum BingoEligibilityPolicy {
+  AFFILIATES
+  AFFILIATES_AND_BENEFICIARIES
+  PARTNER_COMPANY
+  AUTHORIZED_GUESTS
+  COMBINED
+  CUSTOM_APPROVED
+
+  @@map("bingo_eligibility_policy")
+}
+
+enum BingoEligibilityRuleKind {
+  ACTIVE_AFFILIATE
+  BENEFICIARY
+  PARTNER_COMPANY_MEMBER
+  AUTHORIZED_GUEST
+  CUSTOM_APPROVED
+
+  @@map("bingo_eligibility_rule_kind")
+}
+
+enum BingoParticipantKind {
+  AFFILIATE
+  BENEFICIARY
+  PARTNER_COMPANY_MEMBER
+  AUTHORIZED_GUEST
+
+  @@map("bingo_participant_kind")
+}
+
+enum BingoParticipantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+
+  @@map("bingo_participant_status")
+}
+
+enum BingoEligibilityApprovalStatus {
+  APPROVED
+  REJECTED
+  REVOKED
+
+  @@map("bingo_eligibility_approval_status")
+}
+
+enum BingoValidationPolicy {
+  SIMPLE
+  DUAL_CONTROL
+
+  @@map("bingo_validation_policy")
+}
+
+enum BingoTiePolicy {
+  SPLIT_PRIZE
+  FULL_PRIZE_EACH
+  TIE_BREAK
+  PRECONFIGURED_SPECIAL_RULE
+
+  @@map("bingo_tie_policy")
+}
+
+enum BingoFairnessMode {
+  CRYPTO_RNG
+  CRYPTO_RNG_COMMIT_REVEAL
+
+  @@map("bingo_fairness_mode")
+}
+
+enum BingoPublicWinnerVisibility {
+  CARD_ONLY
+  PARTIAL_NAME_AND_CARD
+
+  @@map("bingo_public_winner_visibility")
+}
+
+enum BingoRoundStatus {
+  DRAFT
+  READY
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("bingo_round_status")
+}
+
+enum BingoExecutionStatus {
+  PLANNED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+
+  @@map("bingo_execution_status")
+}
+
+enum BingoPatternKind {
+  LINE
+  TWO_LINES
+  FOUR_CORNERS
+  FULL_CARD
+  CUSTOM
+
+  @@map("bingo_pattern_kind")
+}
+
+enum BingoPrizeKind {
+  MONETARY
+  IN_KIND
+
+  @@map("bingo_prize_kind")
+}
+
+enum BingoAssignmentStatus {
+  ACTIVE
+  SUPERSEDED
+  REVOKED
+
+  @@map("bingo_assignment_status")
+}
+
+enum BingoCandidateStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+
+  @@map("bingo_candidate_status")
+}
+
+enum BingoWinnerStatus {
+  PENDING_VALIDATION
+  CONFIRMED
+  REJECTED
+
+  @@map("bingo_winner_status")
+}
+
+enum BingoCommandStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED_RETRYABLE
+  FAILED_FINAL
+
+  @@map("bingo_command_status")
+}
+
+enum BingoOutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+
+  @@map("bingo_outbox_status")
+}
+
+enum BingoImportFormat {
+  CSV
+  XLSX
+
+  @@map("bingo_import_format")
+}
+
+enum BingoImportStatus {
+  UPLOADED
+  VALIDATING
+  STAGED
+  READY_FOR_APPROVAL
+  APPROVED
+  APPLYING
+  COMPLETED
+  REJECTED
+  FAILED
+  EXPIRED
+
+  @@map("bingo_import_status")
+}
+
+enum BingoImportRowStatus {
+  VALID
+  INVALID
+  UNRESOLVED
+  APPLIED
+  SKIPPED
+
+  @@map("bingo_import_row_status")
+}
+
+enum BingoImportChunkStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("bingo_import_chunk_status")
+}
+
+enum BingoAuditResult {
+  SUCCEEDED
+  REJECTED
+  FAILED
+
+  @@map("bingo_audit_result")
+}
+
+enum BingoRetentionCategory {
+  TEMPORARY_FILE
+  ORIGINAL_IMPORT
+  IMPORT_STAGING
+  PARTICIPATION
+  CARD
+  ASSIGNMENT
+  ROUND_EXECUTION
+  DRAW
+  CANDIDATE
+  WINNER
+  AUDIT
+  CRYPTOGRAPHIC_EVIDENCE
+
+  @@map("bingo_retention_category")
+}
+
+model BingoEvent {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  slug                    String                      @unique
+  name                    String
+  description             String?
+  status                  BingoEventStatus            @default(DRAFT)
+  visibility              BingoEventVisibility        @default(AUTHORIZED_PARTICIPANTS)
+  eligibilityPolicy       BingoEligibilityPolicy      @map("eligibility_policy")
+  maxCardsPerParticipant  Int                         @default(1) @map("max_cards_per_participant")
+  publicWinnerVisibility  BingoPublicWinnerVisibility @default(CARD_ONLY) @map("public_winner_visibility")
+  defaultValidationPolicy BingoValidationPolicy       @default(SIMPLE) @map("default_validation_policy")
+  fairnessMode            BingoFairnessMode           @default(CRYPTO_RNG) @map("fairness_mode")
+  configurationVersion    Int                         @default(1) @map("configuration_version")
+  metadata                Json?
+  scheduledStartAt        DateTime?                   @map("scheduled_start_at") @db.Timestamptz(3)
+  publishedAt             DateTime?                   @map("published_at") @db.Timestamptz(3)
+  configurationLockedAt   DateTime?                   @map("configuration_locked_at") @db.Timestamptz(3)
+  startedAt               DateTime?                   @map("started_at") @db.Timestamptz(3)
+  completedAt             DateTime?                   @map("completed_at") @db.Timestamptz(3)
+  cancelledAt             DateTime?                   @map("cancelled_at") @db.Timestamptz(3)
+  createdByUserId         String                      @map("created_by_user_id") @db.Uuid
+  updatedByUserId         String                      @map("updated_by_user_id") @db.Uuid
+  createdAt               DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy          User                             @relation("BingoEventCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy          User                             @relation("BingoEventUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  eligibilityRules   BingoEligibilityRule[]
+  externalSubjects   BingoAuthorizedExternalSubject[]
+  participants       BingoParticipant[]
+  rounds             BingoRound[]
+  patterns           BingoPattern[]
+  cards              BingoCard[]
+  assignments        BingoCardAssignment[]
+  winGroups          BingoWinGroup[]
+  idempotencyRecords BingoCommandIdempotency[]
+  outboxEvents       BingoOutboxEvent[]
+  importBatches      BingoImportBatch[]
+  auditEvents        BingoAuditEvent[]
+  retentionPolicies  BingoRetentionPolicy[]
+
+  @@index([status, scheduledStartAt])
+  @@map("bingo_events")
+}
+
+model BingoEligibilityRule {
+  id              String                   @id @default(uuid()) @db.Uuid
+  eventId         String                   @map("event_id") @db.Uuid
+  kind            BingoEligibilityRuleKind
+  version         Int                      @default(1)
+  enabled         Boolean                  @default(true)
+  parameters      Json?
+  lockedAt        DateTime?                @map("locked_at") @db.Timestamptz(3)
+  createdByUserId String                   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event     BingoEvent                 @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  createdBy User                       @relation("BingoEligibilityRuleCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvals BingoEligibilityApproval[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, kind, version])
+  @@index([eventId, enabled, kind])
+  @@map("bingo_eligibility_rules")
+}
+
+// Event-scoped, verified reference to a subject whose master identity lives
+// outside Bingo. Raw provider identifiers and PII are never stored here.
+model BingoAuthorizedExternalSubject {
+  id                    String               @id @default(uuid()) @db.Uuid
+  eventId               String               @map("event_id") @db.Uuid
+  kind                  BingoParticipantKind
+  issuer                String
+  keyId                 String               @map("key_id")
+  subjectRefFingerprint String               @map("subject_ref_fingerprint")
+  sourceReferenceHash   String?              @map("source_reference_hash")
+  ownerAffiliateId      String?              @map("owner_affiliate_id") @db.Uuid
+  companyId             String?              @map("company_id") @db.Uuid
+  linkedCustomerId      String?              @map("linked_customer_id") @db.Uuid
+  resolvedByUserId      String?              @map("resolved_by_user_id") @db.Uuid
+  verifiedAt            DateTime             @map("verified_at") @db.Timestamptz(3)
+  lastVerifiedAt        DateTime             @map("last_verified_at") @db.Timestamptz(3)
+  revokedAt             DateTime?            @map("revoked_at") @db.Timestamptz(3)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event          BingoEvent        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  ownerAffiliate Affiliate?        @relation(fields: [ownerAffiliateId], references: [id], onDelete: Restrict)
+  company        Company?          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  linkedCustomer Customer?         @relation(fields: [linkedCustomerId], references: [id], onDelete: Restrict)
+  resolvedBy     User?             @relation("BingoExternalSubjectResolver", fields: [resolvedByUserId], references: [id], onDelete: Restrict)
+  participant    BingoParticipant?
+  importRows     BingoImportRow[]
+
+  @@unique([id, eventId])
+  @@unique([id, eventId, kind])
+  @@unique([eventId, issuer, keyId, subjectRefFingerprint])
+  @@index([ownerAffiliateId])
+  @@index([companyId])
+  @@index([linkedCustomerId])
+  @@map("bingo_authorized_external_subjects")
+}
+
+model BingoParticipant {
+  id                String                 @id @default(uuid()) @db.Uuid
+  eventId           String                 @map("event_id") @db.Uuid
+  kind              BingoParticipantKind
+  status            BingoParticipantStatus @default(PENDING)
+  affiliateId       String?                @map("affiliate_id") @db.Uuid
+  externalSubjectId String?                @unique @map("external_subject_id") @db.Uuid
+  approvedAt        DateTime?              @map("approved_at") @db.Timestamptz(3)
+  rejectedAt        DateTime?              @map("rejected_at") @db.Timestamptz(3)
+  withdrawnAt       DateTime?              @map("withdrawn_at") @db.Timestamptz(3)
+  reason            String?
+  retentionUntil    DateTime?              @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt       DateTime?              @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event           BingoEvent                      @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  affiliate       Affiliate?                      @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+  externalSubject BingoAuthorizedExternalSubject? @relation(fields: [externalSubjectId, eventId, kind], references: [id, eventId, kind], onDelete: Restrict)
+  approvals       BingoEligibilityApproval[]
+  assignments     BingoCardAssignment[]
+  candidates      BingoWinnerCandidate[]
+  importRows      BingoImportRow[]
+
+  @@unique([id, eventId])
+  @@unique([externalSubjectId, eventId, kind])
+  @@unique([eventId, affiliateId])
+  @@index([affiliateId])
+  @@index([eventId, status, id])
+  @@map("bingo_participants")
+}
+
+model BingoEligibilityApproval {
+  id                  String                         @id @default(uuid()) @db.Uuid
+  eventId             String                         @map("event_id") @db.Uuid
+  participantId       String                         @map("participant_id") @db.Uuid
+  eligibilityRuleId   String                         @map("eligibility_rule_id") @db.Uuid
+  status              BingoEligibilityApprovalStatus
+  source              String
+  sourceReferenceHash String?                        @map("source_reference_hash")
+  actorUserId         String                         @map("actor_user_id") @db.Uuid
+  reason              String?
+  context             Json?
+  decidedAt           DateTime                       @default(now()) @map("decided_at") @db.Timestamptz(3)
+  revokedAt           DateTime?                      @map("revoked_at") @db.Timestamptz(3)
+
+  participant BingoParticipant     @relation(fields: [participantId, eventId], references: [id, eventId], onDelete: Restrict)
+  rule        BingoEligibilityRule @relation(fields: [eligibilityRuleId, eventId], references: [id, eventId], onDelete: Restrict)
+  actor       User                 @relation("BingoEligibilityApprovalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([eventId, participantId, status])
+  @@index([eligibilityRuleId, eventId])
+  @@index([actorUserId, decidedAt])
+  @@map("bingo_eligibility_approvals")
+}
+
+model BingoRound {
+  id                     String                @id @default(uuid()) @db.Uuid
+  eventId                String                @map("event_id") @db.Uuid
+  sequence               Int
+  name                   String
+  status                 BingoRoundStatus      @default(DRAFT)
+  validationPolicy       BingoValidationPolicy @map("validation_policy")
+  tiePolicy              BingoTiePolicy        @map("tie_policy")
+  tiePolicyConfiguration Json?                 @map("tie_policy_configuration")
+  configurationVersion   Int                   @default(1) @map("configuration_version")
+  configurationLockedAt  DateTime?             @map("configuration_locked_at") @db.Timestamptz(3)
+  createdByUserId        String                @map("created_by_user_id") @db.Uuid
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       BingoEvent            @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  createdBy   User                  @relation("BingoRoundCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  prizes      BingoPrize[]
+  patterns    BingoRoundPattern[]
+  executions  BingoRoundExecution[]
+  assignments BingoCardAssignment[]
+  auditEvents BingoAuditEvent[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, sequence])
+  @@index([eventId, status, sequence])
+  @@map("bingo_rounds")
+}
+
+model BingoPrize {
+  id             String         @id @default(uuid()) @db.Uuid
+  eventId        String         @map("event_id") @db.Uuid
+  roundId        String         @map("round_id") @db.Uuid
+  roundPatternId String?        @map("round_pattern_id") @db.Uuid
+  patternId      String?        @map("pattern_id") @db.Uuid
+  sequence       Int
+  name           String
+  description    String?
+  kind           BingoPrizeKind
+  amountMinor    Int?           @map("amount_minor")
+  currency       String?
+  quantity       Int            @default(1)
+  metadata       Json?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  round        BingoRound         @relation(fields: [roundId, eventId], references: [id, eventId], onDelete: Restrict)
+  roundPattern BingoRoundPattern? @relation(fields: [roundPatternId, roundId, eventId, patternId], references: [id, roundId, eventId, patternId], onDelete: Restrict)
+  winGroups    BingoWinGroup[]
+  winners      BingoWinner[]
+
+  @@unique([id, eventId])
+  @@unique([id, roundId, eventId])
+  @@unique([id, roundId, eventId, roundPatternId, patternId])
+  @@unique([roundId, sequence])
+  @@index([eventId])
+  @@index([roundPatternId, roundId, eventId, patternId])
+  @@map("bingo_prizes")
+}
+
+model BingoPattern {
+  id                 String           @id @default(uuid()) @db.Uuid
+  eventId            String           @map("event_id") @db.Uuid
+  code               String
+  name               String
+  kind               BingoPatternKind
+  version            Int              @default(1)
+  requiredMatchCount Int              @default(1) @map("required_match_count")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event     BingoEvent             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  masks     BingoPatternMask[]
+  rounds    BingoRoundPattern[]
+  cardMasks BingoCardPatternMask[]
+  winGroups BingoWinGroup[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, code, version])
+  @@map("bingo_patterns")
+}
+
+model BingoPatternMask {
+  id           String   @id @default(uuid()) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  patternId    String   @map("pattern_id") @db.Uuid
+  sequence     Int
+  positionMask Int      @map("position_mask")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  pattern   BingoPattern           @relation(fields: [patternId, eventId], references: [id, eventId], onDelete: Restrict)
+  cardMasks BingoCardPatternMask[]
+
+  @@unique([id, eventId])
+  @@unique([id, patternId, eventId])
+  @@unique([patternId, sequence])
+  @@map("bingo_pattern_masks")
+}
+
+model BingoRoundPattern {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  roundId   String   @map("round_id") @db.Uuid
+  patternId String   @map("pattern_id") @db.Uuid
+  sequence  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  round     BingoRound      @relation(fields: [roundId, eventId], references: [id, eventId], onDelete: Restrict)
+  pattern   BingoPattern    @relation(fields: [patternId, eventId], references: [id, eventId], onDelete: Restrict)
+  winGroups BingoWinGroup[]
+  prizes    BingoPrize[]
+
+  @@unique([id, roundId, eventId, patternId])
+  @@unique([roundId, patternId])
+  @@unique([roundId, sequence])
+  @@index([patternId, eventId])
+  @@map("bingo_round_patterns")
+}
+
+model BingoRoundExecution {
+  id                       String                @id @default(uuid()) @db.Uuid
+  eventId                  String                @map("event_id") @db.Uuid
+  roundId                  String                @map("round_id") @db.Uuid
+  revision                 Int
+  previousExecutionId      String?               @map("previous_execution_id") @db.Uuid
+  status                   BingoExecutionStatus  @default(PLANNED)
+  stateVersion             BigInt                @default(0) @map("state_version")
+  validationPolicySnapshot BingoValidationPolicy @map("validation_policy_snapshot")
+  tiePolicySnapshot        BingoTiePolicy        @map("tie_policy_snapshot")
+  fairnessModeSnapshot     BingoFairnessMode     @map("fairness_mode_snapshot")
+  configurationVersion     Int                   @map("configuration_version")
+  configurationHash        String?               @map("configuration_hash") @db.Char(64)
+  fairnessProtocolVersion  String?               @map("fairness_protocol_version")
+  operatorUserId           String?               @map("operator_user_id") @db.Uuid
+  supervisorUserId         String?               @map("supervisor_user_id") @db.Uuid
+  startedAt                DateTime?             @map("started_at") @db.Timestamptz(3)
+  pausedAt                 DateTime?             @map("paused_at") @db.Timestamptz(3)
+  completedAt              DateTime?             @map("completed_at") @db.Timestamptz(3)
+  cancelledAt              DateTime?             @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason             String?               @map("cancel_reason")
+  createdByUserId          String                @map("created_by_user_id") @db.Uuid
+  retentionUntil           DateTime?             @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt              DateTime?             @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  round             BingoRound                @relation(fields: [roundId, eventId], references: [id, eventId], onDelete: Restrict)
+  previousExecution BingoRoundExecution?      @relation("BingoExecutionRevision", fields: [previousExecutionId, roundId, eventId], references: [id, roundId, eventId], onDelete: Restrict)
+  nextExecution     BingoRoundExecution?      @relation("BingoExecutionRevision")
+  operator          User?                     @relation("BingoExecutionOperator", fields: [operatorUserId], references: [id], onDelete: Restrict)
+  supervisor        User?                     @relation("BingoExecutionSupervisor", fields: [supervisorUserId], references: [id], onDelete: Restrict)
+  createdBy         User                      @relation("BingoExecutionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  fairness          BingoFairnessCommitment?
+  draws             BingoDraw[]
+  winGroups         BingoWinGroup[]
+  executionActors   BingoExecutionActor[]
+  idempotency       BingoCommandIdempotency[]
+  outboxEvents      BingoOutboxEvent[]
+  auditEvents       BingoAuditEvent[]
+  tieBreakTargets   BingoTieBreak[]
+
+  @@unique([id, eventId])
+  @@unique([id, roundId, eventId])
+  @@unique([roundId, revision])
+  @@unique([previousExecutionId, roundId, eventId])
+  @@index([eventId, status])
+  @@map("bingo_round_executions")
+}
+
+model BingoFairnessCommitment {
+  id                      String    @id @default(uuid()) @db.Uuid
+  eventId                 String    @map("event_id") @db.Uuid
+  executionId             String    @unique @map("execution_id") @db.Uuid
+  hashAlgorithm           String    @map("hash_algorithm")
+  rngAlgorithm            String    @map("rng_algorithm")
+  protocolVersion         String    @map("protocol_version")
+  commitmentHash          String    @map("commitment_hash")
+  configurationHash       String    @map("configuration_hash")
+  canonicalizationVersion String    @map("canonicalization_version")
+  seedCiphertext          String    @map("seed_ciphertext")
+  custodyKeyId            String    @map("custody_key_id")
+  committedByUserId       String    @map("committed_by_user_id") @db.Uuid
+  committedAt             DateTime  @map("committed_at") @db.Timestamptz(3)
+  publishedAt             DateTime? @map("published_at") @db.Timestamptz(3)
+  revealedSeed            String?   @map("revealed_seed")
+  revealedByUserId        String?   @map("revealed_by_user_id") @db.Uuid
+  revealedAt              DateTime? @map("revealed_at") @db.Timestamptz(3)
+  revealEvidenceHash      String?   @map("reveal_evidence_hash")
+  retentionUntil          DateTime? @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt             DateTime? @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  execution   BingoRoundExecution @relation(fields: [executionId, eventId], references: [id, eventId], onDelete: Restrict)
+  committedBy User                @relation("BingoCommitmentCreator", fields: [committedByUserId], references: [id], onDelete: Restrict)
+  revealedBy  User?               @relation("BingoCommitmentRevealer", fields: [revealedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([executionId, eventId])
+  @@unique([eventId, commitmentHash])
+  @@map("bingo_fairness_commitments")
+}
+
+model BingoCard {
+  id                String    @id @default(uuid()) @db.Uuid
+  eventId           String    @map("event_id") @db.Uuid
+  displayNumber     String    @map("display_number")
+  numbers           Int[]     @db.SmallInt
+  layoutHash        String    @map("layout_hash")
+  generationVersion Int       @default(1) @map("generation_version")
+  retentionUntil    DateTime? @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt       DateTime? @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event       BingoEvent             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  masks       BingoCardPatternMask[]
+  assignments BingoCardAssignment[]
+  candidates  BingoWinnerCandidate[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, displayNumber])
+  @@unique([eventId, layoutHash])
+  @@map("bingo_cards")
+}
+
+model BingoCardPatternMask {
+  id              String   @id @default(uuid()) @db.Uuid
+  eventId         String   @map("event_id") @db.Uuid
+  cardId          String   @map("card_id") @db.Uuid
+  patternId       String   @map("pattern_id") @db.Uuid
+  patternMaskId   String   @map("pattern_mask_id") @db.Uuid
+  requiredNumbers String   @map("required_numbers") @db.Bit(75)
+  derivedAt       DateTime @default(now()) @map("derived_at") @db.Timestamptz(3)
+  derivationHash  String   @map("derivation_hash")
+
+  card        BingoCard        @relation(fields: [cardId, eventId], references: [id, eventId], onDelete: Restrict)
+  pattern     BingoPattern     @relation(fields: [patternId, eventId], references: [id, eventId], onDelete: Restrict)
+  patternMask BingoPatternMask @relation(fields: [patternMaskId, patternId, eventId], references: [id, patternId, eventId], onDelete: Restrict)
+
+  @@unique([cardId, patternMaskId])
+  @@index([eventId, patternId, cardId])
+  @@index([patternMaskId, patternId, eventId])
+  @@map("bingo_card_pattern_masks")
+}
+
+model BingoCardAssignment {
+  id                       String                @id @default(uuid()) @db.Uuid
+  eventId                  String                @map("event_id") @db.Uuid
+  cardId                   String                @map("card_id") @db.Uuid
+  participantId            String                @map("participant_id") @db.Uuid
+  roundContextId           String?               @map("round_context_id") @db.Uuid
+  status                   BingoAssignmentStatus @default(ACTIVE)
+  assignedAt               DateTime              @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  deactivatedAt            DateTime?             @map("deactivated_at") @db.Timestamptz(3)
+  supersededByAssignmentId String?               @map("superseded_by_assignment_id") @db.Uuid
+  actorUserId              String                @map("actor_user_id") @db.Uuid
+  reason                   String
+  requestId                String                @map("request_id")
+  retentionUntil           DateTime?             @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt              DateTime?             @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event        BingoEvent             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  card         BingoCard              @relation(fields: [cardId, eventId], references: [id, eventId], onDelete: Restrict)
+  participant  BingoParticipant       @relation(fields: [participantId, eventId], references: [id, eventId], onDelete: Restrict)
+  roundContext BingoRound?            @relation(fields: [roundContextId, eventId], references: [id, eventId], onDelete: Restrict)
+  actor        User                   @relation("BingoAssignmentActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  supersededBy BingoCardAssignment?   @relation("BingoAssignmentReplacement", fields: [supersededByAssignmentId, eventId, cardId], references: [id, eventId, cardId], onDelete: Restrict)
+  supersedes   BingoCardAssignment?   @relation("BingoAssignmentReplacement")
+  candidates   BingoWinnerCandidate[]
+
+  @@unique([id, eventId, cardId])
+  @@unique([id, eventId, cardId, participantId])
+  @@unique([supersededByAssignmentId, eventId, cardId])
+  @@index([eventId, participantId, status])
+  @@index([roundContextId, eventId])
+  @@index([actorUserId, assignedAt])
+  @@map("bingo_card_assignments")
+}
+
+model BingoExecutionActor {
+  executionId   String   @map("execution_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  firstActionAt DateTime @map("first_action_at") @db.Timestamptz(3)
+  lastActionAt  DateTime @map("last_action_at") @db.Timestamptz(3)
+
+  execution BingoRoundExecution @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([executionId, userId])
+  @@index([userId, lastActionAt])
+  @@map("bingo_execution_actors")
+}
+
+model BingoDraw {
+  id                   String    @id @default(uuid()) @db.Uuid
+  eventId              String    @map("event_id") @db.Uuid
+  roundId              String    @map("round_id") @db.Uuid
+  executionId          String    @map("execution_id") @db.Uuid
+  sequence             Int
+  ballNumber           Int       @map("ball_number")
+  drawnByUserId        String    @map("drawn_by_user_id") @db.Uuid
+  drawnAt              DateTime  @map("drawn_at") @db.Timestamptz(3)
+  requestId            String    @map("request_id")
+  idempotencyRecordId  String    @unique @map("idempotency_record_id") @db.Uuid
+  previousEvidenceHash String?   @map("previous_evidence_hash")
+  evidenceHash         String    @map("evidence_hash")
+  rngEvidence          Json      @map("rng_evidence")
+  stateVersion         BigInt    @map("state_version")
+  retentionUntil       DateTime? @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt          DateTime? @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  execution   BingoRoundExecution     @relation(fields: [executionId, roundId, eventId], references: [id, roundId, eventId], onDelete: Restrict)
+  drawnBy     User                    @relation("BingoDrawActor", fields: [drawnByUserId], references: [id], onDelete: Restrict)
+  idempotency BingoCommandIdempotency @relation(fields: [idempotencyRecordId], references: [id], onDelete: Restrict)
+  decisiveFor BingoWinGroup[]
+
+  @@unique([id, executionId, eventId])
+  @@unique([executionId, sequence])
+  @@unique([executionId, ballNumber])
+  @@unique([executionId, evidenceHash])
+  @@index([eventId, drawnAt])
+  @@map("bingo_draws")
+}
+
+model BingoWinGroup {
+  id                String         @id @default(uuid()) @db.Uuid
+  eventId           String         @map("event_id") @db.Uuid
+  roundId           String         @map("round_id") @db.Uuid
+  executionId       String         @map("execution_id") @db.Uuid
+  prizeId           String         @map("prize_id") @db.Uuid
+  patternId         String         @map("pattern_id") @db.Uuid
+  roundPatternId    String         @map("round_pattern_id") @db.Uuid
+  decisiveDrawId    String         @map("decisive_draw_id") @db.Uuid
+  tiePolicySnapshot BingoTiePolicy @map("tie_policy_snapshot")
+  candidateCount    Int            @map("candidate_count")
+  detectedAt        DateTime       @map("detected_at") @db.Timestamptz(3)
+  evidenceHash      String         @map("evidence_hash")
+
+  event        BingoEvent             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  execution    BingoRoundExecution    @relation(fields: [executionId, roundId, eventId], references: [id, roundId, eventId], onDelete: Restrict)
+  prize        BingoPrize             @relation(fields: [prizeId, roundId, eventId, roundPatternId, patternId], references: [id, roundId, eventId, roundPatternId, patternId], onDelete: Restrict)
+  pattern      BingoPattern           @relation(fields: [patternId, eventId], references: [id, eventId], onDelete: Restrict)
+  roundPattern BingoRoundPattern      @relation(fields: [roundPatternId, roundId, eventId, patternId], references: [id, roundId, eventId, patternId], onDelete: Restrict)
+  decisiveDraw BingoDraw              @relation(fields: [decisiveDrawId, executionId, eventId], references: [id, executionId, eventId], onDelete: Restrict)
+  candidates   BingoWinnerCandidate[]
+  winners      BingoWinner[]
+  tieBreak     BingoTieBreak?         @relation("BingoOriginTieBreak")
+
+  @@unique([id, eventId])
+  @@unique([id, executionId, eventId])
+  @@unique([id, prizeId, roundId, executionId, eventId])
+  @@unique([executionId, prizeId, patternId, decisiveDrawId])
+  @@index([roundPatternId, roundId, eventId, patternId])
+  @@map("bingo_win_groups")
+}
+
+model BingoWinnerCandidate {
+  id              String               @id @default(uuid()) @db.Uuid
+  eventId         String               @map("event_id") @db.Uuid
+  executionId     String               @map("execution_id") @db.Uuid
+  winGroupId      String               @map("win_group_id") @db.Uuid
+  cardId          String               @map("card_id") @db.Uuid
+  participantId   String               @map("participant_id") @db.Uuid
+  assignmentId    String               @map("assignment_id") @db.Uuid
+  matchedNumbers  String               @map("matched_numbers") @db.Bit(75)
+  status          BingoCandidateStatus @default(PENDING)
+  decisiveBall    Int                  @map("decisive_ball")
+  detectedAt      DateTime             @map("detected_at") @db.Timestamptz(3)
+  evidenceHash    String               @map("evidence_hash")
+  rejectionReason String?              @map("rejection_reason")
+  retentionUntil  DateTime?            @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt     DateTime?            @map("legal_hold_at") @db.Timestamptz(3)
+
+  winGroup    BingoWinGroup       @relation(fields: [winGroupId, executionId, eventId], references: [id, executionId, eventId], onDelete: Restrict)
+  card        BingoCard           @relation(fields: [cardId, eventId], references: [id, eventId], onDelete: Restrict)
+  participant BingoParticipant    @relation(fields: [participantId, eventId], references: [id, eventId], onDelete: Restrict)
+  assignment  BingoCardAssignment @relation(fields: [assignmentId, eventId, cardId, participantId], references: [id, eventId, cardId, participantId], onDelete: Restrict)
+  winner      BingoWinner?
+
+  @@unique([id, eventId])
+  @@unique([id, winGroupId, executionId, eventId])
+  @@unique([winGroupId, cardId])
+  @@index([assignmentId, eventId, cardId, participantId])
+  @@index([executionId, status])
+  @@map("bingo_winner_candidates")
+}
+
+model BingoWinner {
+  id                       String                @id @default(uuid()) @db.Uuid
+  eventId                  String                @map("event_id") @db.Uuid
+  roundId                  String                @map("round_id") @db.Uuid
+  executionId              String                @map("execution_id") @db.Uuid
+  winGroupId               String                @map("win_group_id") @db.Uuid
+  candidateId              String                @map("candidate_id") @db.Uuid
+  prizeId                  String                @map("prize_id") @db.Uuid
+  status                   BingoWinnerStatus     @default(PENDING_VALIDATION)
+  validationPolicySnapshot BingoValidationPolicy @map("validation_policy_snapshot")
+  validatedByUserId        String?               @map("validated_by_user_id") @db.Uuid
+  validatedAt              DateTime?             @map("validated_at") @db.Timestamptz(3)
+  rejectedByUserId         String?               @map("rejected_by_user_id") @db.Uuid
+  rejectedAt               DateTime?             @map("rejected_at") @db.Timestamptz(3)
+  rejectionReason          String?               @map("rejection_reason")
+  tieResolution            Json?                 @map("tie_resolution")
+  evidenceHash             String                @map("evidence_hash")
+  publicDisplaySnapshot    Json                  @map("public_display_snapshot")
+  retentionUntil           DateTime?             @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt              DateTime?             @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  candidate   BingoWinnerCandidate @relation(fields: [candidateId, winGroupId, executionId, eventId], references: [id, winGroupId, executionId, eventId], onDelete: Restrict)
+  winGroup    BingoWinGroup        @relation(fields: [winGroupId, prizeId, roundId, executionId, eventId], references: [id, prizeId, roundId, executionId, eventId], onDelete: Restrict)
+  prize       BingoPrize           @relation(fields: [prizeId, roundId, eventId], references: [id, roundId, eventId], onDelete: Restrict)
+  validatedBy User?                @relation("BingoWinnerValidator", fields: [validatedByUserId], references: [id], onDelete: Restrict)
+  rejectedBy  User?                @relation("BingoWinnerRejector", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, evidenceHash])
+  @@unique([candidateId, eventId])
+  @@unique([candidateId, winGroupId, executionId, eventId])
+  @@index([executionId, status])
+  @@index([winGroupId, prizeId, roundId, executionId, eventId])
+  @@map("bingo_winners")
+}
+
+model BingoTieBreak {
+  id                String   @id @default(uuid()) @db.Uuid
+  eventId           String   @map("event_id") @db.Uuid
+  originWinGroupId  String   @unique @map("origin_win_group_id") @db.Uuid
+  originExecutionId String   @map("origin_execution_id") @db.Uuid
+  targetExecutionId String   @map("target_execution_id") @db.Uuid
+  createdByUserId   String   @map("created_by_user_id") @db.Uuid
+  reason            String
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  originWinGroup  BingoWinGroup       @relation("BingoOriginTieBreak", fields: [originWinGroupId, originExecutionId, eventId], references: [id, executionId, eventId], onDelete: Restrict)
+  targetExecution BingoRoundExecution @relation(fields: [targetExecutionId, eventId], references: [id, eventId], onDelete: Restrict)
+  createdBy       User                @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([originWinGroupId, originExecutionId, eventId])
+  @@index([targetExecutionId, eventId])
+  @@index([createdByUserId])
+  @@map("bingo_tie_breaks")
+}
+
+model BingoCommandIdempotency {
+  id             String             @id @default(uuid()) @db.Uuid
+  eventId        String             @map("event_id") @db.Uuid
+  executionId    String?            @map("execution_id") @db.Uuid
+  actorUserId    String             @map("actor_user_id") @db.Uuid
+  scope          String
+  operation      String
+  keyHash        String             @map("key_hash")
+  requestHash    String             @map("request_hash")
+  status         BingoCommandStatus @default(PROCESSING)
+  responseStatus Int?               @map("response_status")
+  responseBody   Json?              @map("response_body")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt    DateTime?          @map("completed_at") @db.Timestamptz(3)
+  expiresAt      DateTime?          @map("expires_at") @db.Timestamptz(3)
+
+  event     BingoEvent           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  execution BingoRoundExecution? @relation(fields: [executionId, eventId], references: [id, eventId], onDelete: Restrict)
+  actor     User                 @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  draw      BingoDraw?
+
+  @@unique([actorUserId, scope, operation, keyHash])
+  @@index([eventId, status, createdAt])
+  @@map("bingo_command_idempotency")
+}
+
+model BingoOutboxEvent {
+  id               String            @id @default(uuid()) @db.Uuid
+  eventId          String            @map("event_id") @db.Uuid
+  executionId      String?           @map("execution_id") @db.Uuid
+  sequence         BigInt
+  eventType        String            @map("event_type")
+  aggregateType    String            @map("aggregate_type")
+  aggregateId      String            @map("aggregate_id") @db.Uuid
+  aggregateVersion BigInt            @map("aggregate_version")
+  publicPayload    Json              @map("public_payload")
+  status           BingoOutboxStatus @default(PENDING)
+  attemptCount     Int               @default(0) @map("attempt_count")
+  nextAttemptAt    DateTime?         @map("next_attempt_at") @db.Timestamptz(3)
+  lastError        String?           @map("last_error")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt      DateTime?         @map("published_at") @db.Timestamptz(3)
+
+  event     BingoEvent           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  execution BingoRoundExecution? @relation(fields: [executionId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([eventId, sequence])
+  @@unique([eventId, aggregateType, aggregateId, aggregateVersion, eventType])
+  @@index([status, nextAttemptAt, createdAt])
+  @@map("bingo_outbox_events")
+}
+
+model BingoImportBatch {
+  id               String            @id @default(uuid()) @db.Uuid
+  eventId          String            @map("event_id") @db.Uuid
+  format           BingoImportFormat
+  status           BingoImportStatus @default(UPLOADED)
+  sha256           String
+  originalFilename String            @map("original_filename")
+  storageReference String            @map("storage_reference")
+  sizeBytes        BigInt            @map("size_bytes")
+  sheetCount       Int?              @map("sheet_count")
+  rowCount         Int?              @map("row_count")
+  validCount       Int               @default(0) @map("valid_count")
+  errorCount       Int               @default(0) @map("error_count")
+  unresolvedCount  Int               @default(0) @map("unresolved_count")
+  validatorVersion String            @map("validator_version")
+  uploadedByUserId String            @map("uploaded_by_user_id") @db.Uuid
+  approvedByUserId String?           @map("approved_by_user_id") @db.Uuid
+  approvedAt       DateTime?         @map("approved_at") @db.Timestamptz(3)
+  retentionUntil   DateTime?         @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt      DateTime?         @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event      BingoEvent                    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  uploadedBy User                          @relation("BingoImportUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  approvedBy User?                         @relation("BingoImportApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  rows       BingoImportRow[]
+  chunks     BingoImportApplicationChunk[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, sha256])
+  @@index([eventId, status, createdAt])
+  @@map("bingo_import_batches")
+}
+
+model BingoImportRow {
+  id                         String               @id @default(uuid()) @db.Uuid
+  eventId                    String               @map("event_id") @db.Uuid
+  batchId                    String               @map("batch_id") @db.Uuid
+  rowNumber                  Int                  @map("row_number")
+  sheetName                  String               @default("") @map("sheet_name")
+  status                     BingoImportRowStatus
+  errorCodes                 String[]             @map("error_codes")
+  normalizedPayloadEncrypted String?              @map("normalized_payload_encrypted")
+  payloadSchemaVersion       String               @map("payload_schema_version")
+  externalSubjectId          String?              @map("external_subject_id") @db.Uuid
+  participantId              String?              @map("participant_id") @db.Uuid
+  appliedAt                  DateTime?            @map("applied_at") @db.Timestamptz(3)
+  retentionUntil             DateTime?            @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt                DateTime?            @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt                  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  batch           BingoImportBatch                @relation(fields: [batchId, eventId], references: [id, eventId], onDelete: Restrict)
+  externalSubject BingoAuthorizedExternalSubject? @relation(fields: [externalSubjectId, eventId], references: [id, eventId], onDelete: Restrict)
+  participant     BingoParticipant?               @relation(fields: [participantId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([batchId, sheetName, rowNumber])
+  @@index([batchId, status, rowNumber])
+  @@index([externalSubjectId, eventId])
+  @@index([participantId])
+  @@map("bingo_import_rows")
+}
+
+model BingoImportApplicationChunk {
+  id           String                 @id @default(uuid()) @db.Uuid
+  eventId      String                 @map("event_id") @db.Uuid
+  batchId      String                 @map("batch_id") @db.Uuid
+  sequence     Int
+  firstRow     Int                    @map("first_row")
+  lastRow      Int                    @map("last_row")
+  status       BingoImportChunkStatus @default(PENDING)
+  attemptCount Int                    @default(0) @map("attempt_count")
+  startedAt    DateTime?              @map("started_at") @db.Timestamptz(3)
+  completedAt  DateTime?              @map("completed_at") @db.Timestamptz(3)
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  batch BingoImportBatch @relation(fields: [batchId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([batchId, sequence])
+  @@index([status, createdAt])
+  @@map("bingo_import_application_chunks")
+}
+
+model BingoAuditEvent {
+  id                 String           @id @default(uuid()) @db.Uuid
+  eventId            String           @map("event_id") @db.Uuid
+  roundId            String?          @map("round_id") @db.Uuid
+  executionId        String?          @map("execution_id") @db.Uuid
+  actorUserId        String?          @map("actor_user_id") @db.Uuid
+  actorPermission    String?          @map("actor_permission")
+  action             String
+  result             BingoAuditResult
+  reason             String?
+  previousState      Json?            @map("previous_state")
+  newState           Json?            @map("new_state")
+  requestId          String           @map("request_id")
+  idempotencyKeyHash String?          @map("idempotency_key_hash")
+  ipHash             String?          @map("ip_hash")
+  userAgentHash      String?          @map("user_agent_hash")
+  metadata           Json?
+  retentionUntil     DateTime?        @map("retention_until") @db.Timestamptz(3)
+  legalHoldAt        DateTime?        @map("legal_hold_at") @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event     BingoEvent           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  round     BingoRound?          @relation(fields: [roundId, eventId], references: [id, eventId], onDelete: Restrict)
+  execution BingoRoundExecution? @relation(fields: [executionId, eventId], references: [id, eventId], onDelete: Restrict)
+  actor     User?                @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([roundId, eventId])
+  @@index([executionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("bingo_audit_events")
+}
+
+model BingoRetentionPolicy {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  eventId                 String                 @map("event_id") @db.Uuid
+  category                BingoRetentionCategory
+  configuredRetentionDays Int                    @map("configured_retention_days")
+  corporateMinimumDays    Int                    @map("corporate_minimum_days")
+  effectiveRetentionDays  Int                    @map("effective_retention_days")
+  legalHold               Boolean                @default(false) @map("legal_hold")
+  configuredByUserId      String                 @map("configured_by_user_id") @db.Uuid
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event        BingoEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  configuredBy User       @relation(fields: [configuredByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, category])
+  @@index([configuredByUserId])
+  @@index([category, legalHold])
+  @@map("bingo_retention_policies")
 }

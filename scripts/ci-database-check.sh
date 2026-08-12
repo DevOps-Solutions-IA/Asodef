@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="34"
+readonly EXPECTED_MIGRATIONS="39"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"
@@ -174,12 +174,19 @@ unfinished_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations WHER
 [[ "$total_migrations" == "$EXPECTED_MIGRATIONS" ]] || fail "migration history contains an unexpected number of rows"
 [[ "$unfinished_migrations" == "0" ]] || fail "migration history contains failed or rolled-back rows"
 
-expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key');")"
-expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey');")"
-expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','pqr_cases','data_subject_requests','payment_events','payment_orders');")"
-[[ "$expected_indexes" == "6" ]] || fail "one or more required unique indexes are missing"
-[[ "$expected_constraints" == "4" ]] || fail "one or more self-service foreign keys are missing"
-[[ "$expected_tables" == "10" ]] || fail "one or more representative tables are missing"
+expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key','affiliate_external_identities_id_affiliate_id_issuer_key','affiliate_external_identities_active_affiliate_issuer_key','affiliate_external_identity_fingerprints_issuer_key_id_subject_ref_hash_key','affiliate_external_identity_fingerprints_identity_id_key_id_key');")"
+expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey','affiliate_external_identities_affiliate_id_fkey','affiliate_external_identities_replacement_scope_fkey','affiliate_external_identity_fingerprints_identity_id_issuer_fkey');")"
+expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','affiliate_external_identities','affiliate_external_identity_fingerprints','pqr_cases','data_subject_requests','payment_events','payment_orders');")"
+[[ "$expected_indexes" == "10" ]] || fail "one or more required unique indexes are missing"
+[[ "$expected_constraints" == "7" ]] || fail "one or more identity/self-service foreign keys are missing"
+[[ "$expected_tables" == "12" ]] || fail "one or more representative tables are missing"
+
+bingo_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('bingo_events','bingo_participants','bingo_rounds','bingo_round_executions','bingo_cards','bingo_card_assignments','bingo_draws','bingo_winner_candidates','bingo_winners','bingo_command_idempotency','bingo_outbox_events','bingo_import_batches','bingo_import_rows','bingo_audit_events','bingo_retention_policies');")"
+bingo_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('bingo_round_executions_one_active_key','bingo_card_assignments_one_active_key','bingo_eligibility_approvals_active_key','bingo_draws_execution_id_sequence_key','bingo_draws_execution_id_ball_number_key','bingo_import_batches_event_id_sha256_key');")"
+bingo_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('bingo_participants_external_subject_id_event_id_kind_fkey','bingo_draws_execution_id_round_id_event_id_fkey','bingo_winner_candidates_assignment_scope_fkey','bingo_winners_candidate_scope_fkey','bingo_winners_win_group_prize_scope_fkey','bingo_import_rows_batch_id_event_id_fkey');")"
+[[ "$bingo_tables" == "15" ]] || fail "one or more representative Bingo tables are missing"
+[[ "$bingo_indexes" == "6" ]] || fail "one or more critical Bingo indexes are missing"
+[[ "$bingo_constraints" == "6" ]] || fail "one or more critical Bingo scope constraints are missing"
 
 snapshot_sql=$(cat <<'SQL'
 SELECT 'roles=' || count(*) FROM roles
@@ -228,14 +235,17 @@ for seed_run in 1 2 3; do
   [[ "$(db_scalar "$natural_key_duplicate_sql")" == "0" ]] || fail "seed run $seed_run created a duplicate natural key"
 done
 
-[[ "$(db_scalar "SELECT count(*) FROM roles;")" == "9" ]] || fail "seeded role count is not 9"
-[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "45" ]] || fail "seeded permission count is not 45"
+[[ "$(db_scalar "SELECT count(*) FROM roles;")" == "11" ]] || fail "seeded role count is not 11"
+[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "53" ]] || fail "seeded permission count is not 53"
 [[ "$(db_scalar "SELECT count(*) FROM content_entries;")" == "38" ]] || fail "seeded content count is not 38"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents;")" == "21" ]] || fail "legal seed must create exactly 21 documents"
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version=1 AND status='DRAFT';")" == "21" ]] || fail "legal seed must create 21 version-1 DRAFT records"
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version<>1 OR status<>'DRAFT';")" == "0" ]] || fail "clean legal seed performed an unauthorized workflow transition"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents WHERE current_version_id IS NOT NULL OR slug LIKE 'consent-test-doc-%';")" == "0" ]] || fail "clean legal seed created a current/synthetic legal document"
 [[ "$(db_scalar "SELECT count(*) FROM users;")" == "0" ]] || fail "clean seed must not create users"
-[[ "$(db_scalar "SELECT (SELECT count(*) FROM self_service_access_lookups) + (SELECT count(*) FROM self_service_otp_challenges) + (SELECT count(*) FROM self_service_sessions) + (SELECT count(*) FROM self_service_idempotency) + (SELECT count(*) FROM self_service_contact_updates) + (SELECT count(*) FROM self_service_audit_events);")" == "0" ]] || fail "clean seed must not create self-service identity/session data"
+[[ "$(db_scalar "SELECT (SELECT count(*) FROM self_service_access_lookups) + (SELECT count(*) FROM self_service_otp_challenges) + (SELECT count(*) FROM self_service_sessions) + (SELECT count(*) FROM self_service_idempotency) + (SELECT count(*) FROM self_service_contact_updates) + (SELECT count(*) FROM self_service_audit_events) + (SELECT count(*) FROM affiliate_external_identities) + (SELECT count(*) FROM affiliate_external_identity_fingerprints);")" == "0" ]] || fail "clean seed must not create self-service identity/session data"
+[[ "$(db_scalar "SELECT (SELECT count(*) FROM bingo_events) + (SELECT count(*) FROM bingo_participants) + (SELECT count(*) FROM bingo_round_executions) + (SELECT count(*) FROM bingo_cards) + (SELECT count(*) FROM bingo_draws) + (SELECT count(*) FROM bingo_winners) + (SELECT count(*) FROM bingo_import_batches) + (SELECT count(*) FROM bingo_audit_events);")" == "0" ]] || fail "clean seed must not create Bingo operational or evidence data"
+
+run_quiet "Bingo upgrade-from-main canary failed" scripts/ci-bingo-upgrade-check.sh
 
 printf 'CI database check passed: %s migrations; three stable seed runs; isolated project verified.\n' "$EXPECTED_MIGRATIONS"
