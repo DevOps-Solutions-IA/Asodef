@@ -16,6 +16,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "pnpm --filter @asodef/config build && ts-node prisma/seed.ts",
     "ci:prepare-e2e": "ts-node src/database/prepare-e2e-runtime.ts",
+    "master:verify-readonly": "ts-node src/modules/master/tools/verify-read-only-connection.ts",
     "legal:publish-corrections": "ts-node src/database/publish-legal-corrections.ts",
     "prisma:studio": "prisma studio"
   },
@@ -58,6 +59,7 @@
     "cookie-parser": "^1.4.7",
     "helmet": "^8.0.0",
     "ioredis": "^5.4.1",
+    "node-firebird": "2.14.3",
     "nodemailer": "^9.0.1",
     "pdf-lib": "^1.17.1",
     "reflect-metadata": "^0.2.2",

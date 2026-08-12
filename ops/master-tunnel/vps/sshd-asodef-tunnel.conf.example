@@ -1,0 +1,15 @@
+# Install as a root-owned 0600 file under /etc/ssh/sshd_config.d only after
+# validating it with `sshd -t`. This file contains no key material.
+Match User asodef-tunnel
+    AuthenticationMethods publickey
+    PubkeyAuthentication yes
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    AllowTcpForwarding remote
+    GatewayPorts clientspecified
+    PermitListen 172.25.51.1:33051
+    PermitOpen none
+    PermitTTY no
+    X11Forwarding no
+    AllowAgentForwarding no
+    PermitTunnel no

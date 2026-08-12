@@ -19,7 +19,63 @@ describe("validateEnv", () => {
     expect(result.APP_TIMEZONE).toBe("America/Bogota");
     expect(result.BOLD_MODE).toBe("mock");
     expect(result.PRODUCTION_PAYMENTS_ENABLED).toBe(false);
+    expect(result.MASTER_FIREBIRD_ENABLED).toBe(false);
+    expect(result.MASTER_FIREBIRD_PORT).toBe(3051);
+    expect(result.MASTER_FIREBIRD_CHARSET).toBe("UTF8");
     expect(result.DATABASE_URL).toBe(VALID_ENV.DATABASE_URL);
+  });
+
+  it("keeps Firebird disabled without requiring or resolving any connection fields", () => {
+    const result = validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "false" });
+
+    expect(result.MASTER_FIREBIRD_ENABLED).toBe(false);
+    expect(result.MASTER_FIREBIRD_HOST).toBe("");
+    expect(result.MASTER_FIREBIRD_DATABASE).toBe("");
+    expect(result.MASTER_FIREBIRD_USER).toBe("");
+    expect(result.MASTER_FIREBIRD_PASSWORD).toBe("");
+  });
+
+  it("requires every Firebird connection field only when the feature is enabled", () => {
+    expect(() => validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "true" })).toThrow(
+      /MASTER_FIREBIRD_HOST/,
+    );
+    expect(() => validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "true" })).toThrow(
+      /MASTER_FIREBIRD_DATABASE/,
+    );
+    expect(() => validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "true" })).toThrow(
+      /MASTER_FIREBIRD_USER/,
+    );
+    expect(() => validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "true" })).toThrow(
+      /MASTER_FIREBIRD_PASSWORD/,
+    );
+  });
+
+  it("accepts a complete configurable Firebird shape without logging or exposing its values", () => {
+    const result = validateEnv({
+      ...VALID_ENV,
+      MASTER_FIREBIRD_ENABLED: "true",
+      MASTER_FIREBIRD_HOST: "master.example.invalid",
+      MASTER_FIREBIRD_PORT: "3051",
+      MASTER_FIREBIRD_DATABASE: "sanitized-database-alias",
+      MASTER_FIREBIRD_USER: "ASODEF_READONLY",
+      MASTER_FIREBIRD_PASSWORD: "not-a-real-password",
+      MASTER_FIREBIRD_CHARSET: "UTF8",
+    });
+
+    expect(result.MASTER_FIREBIRD_ENABLED).toBe(true);
+    expect(result.MASTER_FIREBIRD_PORT).toBe(3051);
+    expect(result.MASTER_FIREBIRD_USER).toBe("ASODEF_READONLY");
+  });
+
+  it("rejects every enabled Firebird identity except the dedicated read-only account", () => {
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      MASTER_FIREBIRD_ENABLED: "true",
+      MASTER_FIREBIRD_HOST: "master.example.invalid",
+      MASTER_FIREBIRD_DATABASE: "sanitized-database-alias",
+      MASTER_FIREBIRD_USER: "ADMINISTRATIVE_ACCOUNT",
+      MASTER_FIREBIRD_PASSWORD: "not-a-real-password",
+    })).toThrow(/must be ASODEF_READONLY/);
   });
 
   it("fails fast with a clear message naming DATABASE_URL when it is missing", () => {

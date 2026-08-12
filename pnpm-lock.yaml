@@ -84,6 +84,9 @@ importers:
       ioredis:
         specifier: ^5.4.1
         version: 5.11.1
+      node-firebird:
+        specifier: 2.14.3
+        version: 2.14.3
       nodemailer:
         specifier: ^9.0.1
         version: 9.0.4
@@ -3428,6 +3431,9 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  node-firebird@2.14.3:
+    resolution: {integrity: sha512-HssHZNb/klA0u4vEatuIR901y8C/zUZ828IdSbufeJ11JrrOu/kwAJawomXr+S1kmH2IGNqvmbLaMSJPkx3YqA==}
 
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
@@ -7948,6 +7954,8 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+
+  node-firebird@2.14.3: {}
 
   node-gyp-build@4.8.4: {}
 

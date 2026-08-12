@@ -33,6 +33,7 @@ import { CommunicationsModule } from "./modules/communications/communications.mo
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { SelfServiceModule } from "./modules/self-service/self-service.module";
+import { MasterModule } from "./modules/master/master.module";
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { SelfServiceModule } from "./modules/self-service/self-service.module";
     DashboardModule,
     ReportsModule,
     SelfServiceModule,
+    MasterModule,
   ],
   controllers: [AppController],
   providers: [],

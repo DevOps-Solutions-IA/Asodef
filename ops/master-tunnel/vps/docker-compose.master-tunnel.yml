@@ -1,0 +1,12 @@
+services:
+  api:
+    networks:
+      data: {}
+      egress: {}
+      master_tunnel:
+        ipv4_address: 172.25.51.2
+
+networks:
+  master_tunnel:
+    external: true
+    name: asodef_master_tunnel

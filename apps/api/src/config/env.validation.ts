@@ -59,6 +59,23 @@ export const envSchema = z.object({
   EXTERNAL_CORE_WEBHOOK_SECRET: z.string().default(""),
   SELF_SERVICE_MESSAGE_PROVIDER: z.enum(["not_configured"]).default("not_configured"),
 
+  // Firebird master-system integration is an internal, read-only bounded
+  // context. It remains disabled unless every connection field is supplied
+  // explicitly. The API must never infer credentials from legacy hosts,
+  // Windows DSNs, payment configuration, or administrative accounts.
+  MASTER_FIREBIRD_ENABLED: booleanFromString.default("false"),
+  MASTER_FIREBIRD_HOST: z.string().default(""),
+  MASTER_FIREBIRD_PORT: z.coerce.number().int().positive().max(65_535).default(3051),
+  MASTER_FIREBIRD_DATABASE: z.string().default(""),
+  MASTER_FIREBIRD_USER: z.string().default(""),
+  MASTER_FIREBIRD_PASSWORD: z.string().default(""),
+  MASTER_FIREBIRD_CHARSET: z.literal("UTF8").default("UTF8"),
+  MASTER_FIREBIRD_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(3_000),
+  MASTER_FIREBIRD_QUERY_TIMEOUT_MS: z.coerce.number().int().min(250).max(60_000).default(5_000),
+  MASTER_FIREBIRD_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(20).default(4),
+  MASTER_FIREBIRD_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).max(20).default(3),
+  MASTER_FIREBIRD_CIRCUIT_RESET_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
+
   // US-022: "sandbox" and "production" both route through the real HTTP
   // transport (against BOLD_BASE_URL, which Bold itself doesn't split by
   // environment) and both require BOLD_IDENTITY_KEY to be configured -
@@ -211,21 +228,47 @@ export const envSchema = z.object({
   // rationale as the other STORAGE_DIR vars.
   REPORTS_STORAGE_DIR: z.string().default("./storage/reports"),
 }).superRefine((config, context) => {
-  if (config.EXTERNAL_CORE_PROVIDER !== "http") return;
-  const required: Array<keyof typeof config> = [
-    "EXTERNAL_CORE_BASE_URL",
-    "EXTERNAL_CORE_CLIENT_ID",
-    "EXTERNAL_CORE_CLIENT_SECRET",
-    "EXTERNAL_CORE_WEBHOOK_SECRET",
-  ];
-  for (const field of required) {
-    if (!config[field]) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required when EXTERNAL_CORE_PROVIDER=http` });
+  if (config.EXTERNAL_CORE_PROVIDER === "http") {
+    const required: Array<keyof typeof config> = [
+      "EXTERNAL_CORE_BASE_URL",
+      "EXTERNAL_CORE_CLIENT_ID",
+      "EXTERNAL_CORE_CLIENT_SECRET",
+      "EXTERNAL_CORE_WEBHOOK_SECRET",
+    ];
+    for (const field of required) {
+      if (!config[field]) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required when EXTERNAL_CORE_PROVIDER=http` });
+      }
+    }
+    if (config.EXTERNAL_CORE_BASE_URL) {
+      const parsed = z.string().url().safeParse(config.EXTERNAL_CORE_BASE_URL);
+      if (!parsed.success) context.addIssue({ code: z.ZodIssueCode.custom, path: ["EXTERNAL_CORE_BASE_URL"], message: "EXTERNAL_CORE_BASE_URL must be a valid URL" });
     }
   }
-  if (config.EXTERNAL_CORE_BASE_URL) {
-    const parsed = z.string().url().safeParse(config.EXTERNAL_CORE_BASE_URL);
-    if (!parsed.success) context.addIssue({ code: z.ZodIssueCode.custom, path: ["EXTERNAL_CORE_BASE_URL"], message: "EXTERNAL_CORE_BASE_URL must be a valid URL" });
+
+  if (config.MASTER_FIREBIRD_ENABLED) {
+    const requiredMasterFields: Array<keyof typeof config> = [
+      "MASTER_FIREBIRD_HOST",
+      "MASTER_FIREBIRD_DATABASE",
+      "MASTER_FIREBIRD_USER",
+      "MASTER_FIREBIRD_PASSWORD",
+    ];
+    for (const field of requiredMasterFields) {
+      if (!config[field]) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} is required when MASTER_FIREBIRD_ENABLED=true`,
+        });
+      }
+    }
+    if (config.MASTER_FIREBIRD_USER && config.MASTER_FIREBIRD_USER !== "ASODEF_READONLY") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["MASTER_FIREBIRD_USER"],
+        message: "MASTER_FIREBIRD_USER must be ASODEF_READONLY when the master adapter is enabled",
+      });
+    }
   }
 });
 
