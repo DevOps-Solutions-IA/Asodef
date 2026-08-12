@@ -8,6 +8,7 @@ import { BingoOutboxStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { BINGO_OUTBOX_EVENT_TYPES } from "../application/outbox";
 import { BingoRedisFanoutService } from "./bingo-redis-fanout.service";
+import { BingoFeatureFlagsService } from "../feature-flags";
 
 interface ClaimedOutboxRow {
   id: string;
@@ -32,9 +33,11 @@ export class BingoOutboxPublisherService
   constructor(
     private readonly prisma: PrismaService,
     private readonly fanout: BingoRedisFanoutService,
+    private readonly flags?: BingoFeatureFlagsService,
   ) {}
 
   onApplicationBootstrap(): void {
+    if (this.flags && !this.flags.isEnabled("realtime")) return;
     this.timer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
     this.timer.unref();
     void this.poll();

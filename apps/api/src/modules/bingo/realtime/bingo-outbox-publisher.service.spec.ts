@@ -30,6 +30,21 @@ function harness(publish: jest.Mock = jest.fn().mockResolvedValue(undefined)) {
 }
 
 describe("BingoOutboxPublisherService", () => {
+  it("does not start polling while the realtime feature flag is disabled", () => {
+    jest.useFakeTimers();
+    const transaction = jest.fn();
+    const disabled = new BingoOutboxPublisherService(
+      { $transaction: transaction } as never,
+      {} as never,
+      { isEnabled: jest.fn().mockReturnValue(false) } as never,
+    );
+    disabled.onApplicationBootstrap();
+    jest.advanceTimersByTime(2_000);
+    expect(transaction).not.toHaveBeenCalled();
+    disabled.onModuleDestroy();
+    jest.useRealTimers();
+  });
+
   it("claims with the transaction and marks published only after Redis accepts the signal", async () => {
     const { service, publish, update } = harness();
     await expect(service.publishReadyBatch(5, new Date("2026-08-11T12:00:00.000Z"))).resolves.toBe(1);

@@ -22,8 +22,10 @@ import { parseBingoLastEventId } from "../contracts/realtime";
 import { BINGO_AFFILIATE_SCOPE } from "../contracts/common";
 import { BingoRealtimeRepository } from "./bingo-realtime.repository";
 import { BingoRealtimeStreamService } from "./bingo-realtime-stream.service";
+import { RequireBingoSurfaces } from "../feature-flags";
 
 @Public()
+@RequireBingoSurfaces("affiliate", "realtime")
 @ApiTags("bingo-affiliate")
 @ApiCookieAuth("asodef_affiliate_ss")
 @Controller("self-service/affiliate/bingo")

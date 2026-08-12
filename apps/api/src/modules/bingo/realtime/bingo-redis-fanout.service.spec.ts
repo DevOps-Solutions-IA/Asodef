@@ -1,6 +1,16 @@
 import { BingoRedisFanoutService } from "./bingo-redis-fanout.service";
 
 describe("BingoRedisFanoutService", () => {
+  it("does not connect a subscriber while realtime is disabled", async () => {
+    const duplicate = jest.fn();
+    const service = new BingoRedisFanoutService(
+      { getClient: () => ({ duplicate }) } as never,
+      { isEnabled: jest.fn().mockReturnValue(false) } as never,
+    );
+    await service.onModuleInit();
+    expect(duplicate).not.toHaveBeenCalled();
+  });
+
   it("publishes only a bounded non-PII PostgreSQL wake-up signal", async () => {
     const publish = jest.fn().mockResolvedValue(1);
     const service = new BingoRedisFanoutService({

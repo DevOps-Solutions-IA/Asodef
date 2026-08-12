@@ -6,6 +6,7 @@ import {
   BINGO_REDIS_OUTBOX_CHANNEL,
   type BingoOutboxNotification,
 } from "./bingo-realtime.types";
+import { BingoFeatureFlagsService } from "../feature-flags";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -15,9 +16,13 @@ export class BingoRedisFanoutService implements OnModuleInit, OnModuleDestroy {
   private readonly notifications = new Subject<BingoOutboxNotification>();
   private subscriber: Redis | null = null;
 
-  constructor(private readonly redis: RedisService) {}
+  constructor(
+    private readonly redis: RedisService,
+    private readonly flags?: BingoFeatureFlagsService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
+    if (this.flags && !this.flags.isEnabled("realtime")) return;
     const subscriber = this.redis.getClient().duplicate({ lazyConnect: true });
     this.subscriber = subscriber;
     subscriber.on("error", (error) => {

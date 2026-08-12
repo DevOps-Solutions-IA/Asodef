@@ -6,8 +6,10 @@ import { RateLimiterService } from "../../auth/rate-limiter.service";
 import { parseBingoLastEventId } from "../contracts/realtime";
 import { BingoRealtimeRepository } from "./bingo-realtime.repository";
 import { BingoRealtimeStreamService } from "./bingo-realtime-stream.service";
+import { RequireBingoSurfaces } from "../feature-flags";
 
 @Public()
+@RequireBingoSurfaces("public", "realtime")
 @ApiTags("bingo-public")
 @Controller("public/bingo/events")
 export class BingoPublicRealtimeController {

@@ -10,8 +10,10 @@ import { RequirePermissions } from "../../auth/decorators/permissions.decorator"
 import { parseBingoLastEventId } from "../contracts/realtime";
 import { BingoRealtimeRepository } from "./bingo-realtime.repository";
 import { BingoRealtimeStreamService } from "./bingo-realtime-stream.service";
+import { RequireBingoSurfaces } from "../feature-flags";
 
 @ApiTags("bingo-admin")
+@RequireBingoSurfaces("admin", "realtime")
 @ApiCookieAuth("asodef_at")
 @Controller("admin/bingo")
 export class BingoAdminRealtimeController {
