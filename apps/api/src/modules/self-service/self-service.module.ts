@@ -41,6 +41,11 @@ import { ExternalIdentityFingerprintService } from "./external-identity-fingerpr
     },
     { provide: SELF_SERVICE_MESSAGE_PROVIDER, useExisting: NotConfiguredSelfServiceMessageProvider },
   ],
-  exports: [EXTERNAL_CORE_PROVIDER, AffiliateIdentityService],
+  exports: [
+    EXTERNAL_CORE_PROVIDER,
+    AffiliateIdentityService,
+    SelfServiceSessionService,
+    SelfServiceSessionGuard,
+  ],
 })
 export class SelfServiceModule {}
