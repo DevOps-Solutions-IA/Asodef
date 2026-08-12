@@ -1,0 +1,23 @@
+export enum BingoOutcomeApplicationErrorCode {
+  FORBIDDEN = "BINGO_OUTCOME_FORBIDDEN",
+  NOT_FOUND = "BINGO_OUTCOME_NOT_FOUND",
+  INVALID_STATE = "BINGO_OUTCOME_INVALID_STATE",
+  DUAL_CONTROL_ACTOR_CONFLICT = "BINGO_DUAL_CONTROL_ACTOR_CONFLICT",
+  REJECTION_REASON_REQUIRED = "BINGO_REJECTION_REASON_REQUIRED",
+  INCOMPLETE_CANDIDATE_RESOLUTION = "BINGO_INCOMPLETE_CANDIDATE_RESOLUTION",
+  NO_VALIDATED_CANDIDATES = "BINGO_NO_VALIDATED_CANDIDATES",
+  TIE_BREAK_REQUIRED = "BINGO_TIE_BREAK_REQUIRED",
+  SPECIAL_RULE_REQUIRED = "BINGO_SPECIAL_RULE_REQUIRED",
+  IDEMPOTENCY_IN_PROGRESS = "BINGO_IDEMPOTENCY_IN_PROGRESS",
+  INVALID_PRIZE = "BINGO_INVALID_PRIZE",
+}
+
+export class BingoOutcomeApplicationError extends Error {
+  constructor(
+    public readonly code: BingoOutcomeApplicationErrorCode,
+    public readonly details: Readonly<Record<string, unknown>> = {},
+  ) {
+    super(code);
+    this.name = "BingoOutcomeApplicationError";
+  }
+}
