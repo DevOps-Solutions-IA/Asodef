@@ -5,7 +5,9 @@ IFS=$'\n\t'
 readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly migrations_root="$repository_root/apps/api/prisma/migrations"
 readonly bingo_migration="20260809180000_add_bingo_domain"
+readonly stage5_fairness_snapshot_migration="20260811120000_add_bingo_execution_fairness_snapshot"
 readonly baseline_migration_count="35"
+readonly expected_migration_count="37"
 readonly upgrade_database="${CI_POSTGRES_DB}_bingo_upgrade"
 
 [[ "$upgrade_database" =~ ^asodef_ci_[a-z0-9_]+$ ]] || {
@@ -52,7 +54,9 @@ cp "$migrations_root/migration_lock.toml" "$temporary_prisma/migrations/migratio
 copied=0
 for migration in "$migrations_root"/*; do
   [[ -d "$migration" ]] || continue
-  [[ "$(basename "$migration")" == "$bingo_migration" ]] && continue
+  case "$(basename "$migration")" in
+    "$bingo_migration"|"$stage5_fairness_snapshot_migration") continue ;;
+  esac
   cp -R "$migration" "$temporary_prisma/migrations/"
   copied=$((copied + 1))
 done
@@ -77,8 +81,9 @@ upgrade_scalar "
 
 DATABASE_URL="$upgrade_url" pnpm --filter @asodef/api exec prisma migrate deploy --schema prisma/schema.prisma >/dev/null
 
-[[ "$(upgrade_scalar "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;")" == "36" ]]
+[[ "$(upgrade_scalar "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;")" == "$expected_migration_count" ]]
 [[ "$(upgrade_scalar "SELECT (SELECT count(*) FROM users WHERE id='10000000-0000-4000-8000-000000000001') + (SELECT count(*) FROM customers WHERE id='10000000-0000-4000-8000-000000000002') + (SELECT count(*) FROM affiliates WHERE id='10000000-0000-4000-8000-000000000003') + (SELECT count(*) FROM companies WHERE id='10000000-0000-4000-8000-000000000004');")" == "4" ]]
 [[ "$(upgrade_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('bingo_events','bingo_round_executions','bingo_draws','bingo_winners');")" == "4" ]]
 
-printf 'Bingo upgrade-from-main canary passed: 35 existing migrations plus the additive Bingo migration.\n'
+printf 'Bingo upgrade-from-main canary passed: %s existing migrations plus the additive Bingo migrations (%s total).\n' \
+  "$baseline_migration_count" "$expected_migration_count"
