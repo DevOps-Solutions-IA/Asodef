@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { BingoAuditResult, Prisma } from "@prisma/client";
-import { createCanonicalCard, toPostgresBit75 } from "../../domain/cards";
+import {
+  ballMask,
+  createCanonicalCard,
+  toPostgresBit75,
+} from "../../domain/cards";
 import { evaluatePatternBatch } from "../../domain/patterns";
 import { PrismaBingoAuditRepository } from "../audit";
 import type { BallSelector } from "../fairness";
@@ -59,6 +63,70 @@ export class BingoDrawError extends Error {
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+interface PrefilteredAssignedCardRow {
+  readonly assignmentId: string;
+  readonly cardId: string;
+  readonly participantId: string;
+  readonly numbersText: string;
+}
+
+interface PrefilterResultRow {
+  readonly rows: Prisma.JsonValue;
+}
+
+const parseStoredCardNumbers = (value: string): number[] =>
+  value.split(",").map((number) => Number(number));
+
+function trustedUuidLiteral(value: string): Prisma.Sql {
+  if (!UUID_PATTERN.test(value)) {
+    throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+  }
+  return Prisma.raw(`'${value}'::uuid`);
+}
+
+function trustedBit75Literal(value: string): Prisma.Sql {
+  if (!/^[01]{75}$/.test(value)) {
+    throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+  }
+  return Prisma.raw(`'${value}'::bit(75)`);
+}
+
+function trustedPositiveIntegerLiteral(value: number): Prisma.Sql {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+  }
+  return Prisma.raw(String(value));
+}
+
+function parsePrefilteredRows(
+  value: Prisma.JsonValue,
+): PrefilteredAssignedCardRow[] {
+  if (!Array.isArray(value)) {
+    throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+  }
+  return value.map((item) => {
+    if (
+      item === null ||
+      Array.isArray(item) ||
+      typeof item !== "object" ||
+      typeof item.assignmentId !== "string" ||
+      typeof item.cardId !== "string" ||
+      typeof item.participantId !== "string" ||
+      typeof item.numbersText !== "string"
+    ) {
+      throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+    }
+    return {
+      assignmentId: item.assignmentId,
+      cardId: item.cardId,
+      participantId: item.participantId,
+      numbersText: item.numbersText,
+    };
+  });
+}
 
 export class DrawNextBallService {
   constructor(
@@ -236,18 +304,6 @@ export class DrawNextBallService {
           createdAt: now,
         });
 
-        const assignments = await tx.bingoCardAssignment.findMany({
-          where: {
-            eventId: execution.eventId,
-            status: "ACTIVE",
-            participant: { status: "APPROVED" },
-            OR: [
-              { roundContextId: null },
-              { roundContextId: execution.roundId },
-            ],
-          },
-          include: { card: true },
-        });
         const drawValues = [
           ...execution.draws.map((item) => ({
             sequence: item.sequence,
@@ -255,6 +311,16 @@ export class DrawNextBallService {
           })),
           { sequence, ball: selected.ball },
         ];
+        const currentDrawMask = toPostgresBit75(
+          ballMask(...drawValues.map((item) => item.ball)),
+        );
+        const previousDrawMask = toPostgresBit75(
+          ballMask(...execution.draws.map((item) => item.ballNumber)),
+        );
+        const eventIdSql = trustedUuidLiteral(execution.eventId);
+        const roundIdSql = trustedUuidLiteral(execution.roundId);
+        const currentDrawMaskSql = trustedBit75Literal(currentDrawMask);
+        const previousDrawMaskSql = trustedBit75Literal(previousDrawMask);
         let candidateCount = 0;
         for (const binding of execution.round.patterns) {
           const definition = {
@@ -268,10 +334,77 @@ export class DrawNextBallService {
               positionMask: mask.positionMask,
             })),
           } as const;
+          const expectedMaskCount = definition.masks.length;
+          const patternIdSql = trustedUuidLiteral(binding.pattern.id);
+          const expectedMaskCountSql =
+            trustedPositiveIntegerLiteral(expectedMaskCount);
+          const requiredMatchCountSql = trustedPositiveIntegerLiteral(
+            definition.requiredMatchCount,
+          );
+          const [prefilterResult] = await tx.$queryRaw<PrefilterResultRow[]>(
+            Prisma.sql`
+              WITH matched AS MATERIALIZED (
+                SELECT
+                  assignment.id AS assignment_id,
+                  assignment.card_id,
+                  assignment.participant_id
+                FROM bingo_card_assignments AS assignment
+                INNER JOIN bingo_participants AS participant
+                  ON participant.id = assignment.participant_id
+                 AND participant.event_id = assignment.event_id
+                INNER JOIN bingo_card_pattern_masks AS card_mask
+                  ON card_mask.card_id = assignment.card_id
+                 AND card_mask.event_id = assignment.event_id
+                 AND card_mask.pattern_id = ${patternIdSql}
+                WHERE assignment.event_id = ${eventIdSql}
+                  AND assignment.status = 'ACTIVE'::bingo_assignment_status
+                  AND participant.status = 'APPROVED'::bingo_participant_status
+                  AND (
+                    assignment.round_context_id IS NULL
+                    OR assignment.round_context_id = ${roundIdSql}
+                  )
+                GROUP BY assignment.id, assignment.card_id,
+                  assignment.participant_id
+                HAVING count(*) = ${expectedMaskCountSql}
+                  AND count(*) FILTER (
+                    WHERE (card_mask.required_numbers & ${currentDrawMaskSql})
+                      = card_mask.required_numbers
+                  ) >= ${requiredMatchCountSql}
+                  AND count(*) FILTER (
+                    WHERE (card_mask.required_numbers & ${previousDrawMaskSql})
+                      = card_mask.required_numbers
+                  ) < ${requiredMatchCountSql}
+              )
+              SELECT coalesce(
+                jsonb_agg(
+                  jsonb_build_object(
+                    'assignmentId', matched.assignment_id,
+                    'cardId', matched.card_id,
+                    'participantId', matched.participant_id,
+                    'numbersText', array_to_string(card.numbers, ',')
+                  )
+                ),
+                '[]'::jsonb
+              ) AS rows
+              FROM matched
+              INNER JOIN bingo_cards AS card
+                ON card.id = matched.card_id
+               AND card.event_id = ${eventIdSql}
+            `,
+          );
+          if (prefilterResult === undefined) {
+            throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+          }
+          const prefiltered = parsePrefilteredRows(prefilterResult.rows);
+          const assignmentByCardId = new Map(
+            prefiltered.map((assignment) => [assignment.cardId, assignment]),
+          );
           const matches = evaluatePatternBatch(
-            assignments.map((assignment) => ({
+            prefiltered.map((assignment) => ({
               cardId: assignment.cardId,
-              card: createCanonicalCard(assignment.card.numbers),
+              card: createCanonicalCard(
+                parseStoredCardNumbers(assignment.numbersText),
+              ),
             })),
             drawValues,
             definition,
@@ -307,9 +440,10 @@ export class DrawNextBallService {
               },
             });
             for (const match of matches) {
-              const assignment = assignments.find(
-                (item) => item.cardId === match.cardId,
-              )!;
+              const assignment = assignmentByCardId.get(match.cardId);
+              if (assignment === undefined) {
+                throw new BingoDrawError("BINGO_DRAW_SEQUENCE_CORRUPTED");
+              }
               const persistedCandidate = await tx.bingoWinnerCandidate.create({
                 data: {
                   eventId: execution.eventId,
@@ -317,14 +451,14 @@ export class DrawNextBallService {
                   winGroupId: group.id,
                   cardId: match.cardId,
                   participantId: assignment.participantId,
-                  assignmentId: assignment.id,
+                  assignmentId: assignment.assignmentId,
                   matchedNumbers: toPostgresBit75(
                     match.evaluation.matchedNumbersMask,
                   ),
                   decisiveBall: selected.ball,
                   detectedAt: now,
                   evidenceHash: sha256(
-                    `${groupEvidence}\n${match.cardId}\n${assignment.id}`,
+                    `${groupEvidence}\n${match.cardId}\n${assignment.assignmentId}`,
                   ),
                 },
               });

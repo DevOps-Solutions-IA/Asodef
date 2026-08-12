@@ -118,4 +118,63 @@ describe("Bingo execution fairness snapshot (integration, real PostgreSQL)", () 
       }),
     ).rejects.toBeDefined();
   });
+
+  it("rejects RUNNING when an eligible card lacks its precalculated pattern masks", async () => {
+    const fixture = await createBingoFixture(prisma, "mask-coverage-missing");
+    const event = await fixture.createEvent("mask-coverage-missing");
+    const configured = await fixture.createConfiguredRound(event.id);
+    const participant = await fixture.createAffiliateParticipant(event.id);
+    const displayNumber = `MISSING-${Date.now()}`;
+    const card = await prisma.bingoCard.create({
+      data: {
+        eventId: event.id,
+        displayNumber,
+        numbers: [
+          1, 16, 31, 46, 61, 2, 17, 32, 47, 62, 3, 18, 0, 48, 63, 4,
+          19, 34, 49, 64, 5, 20, 35, 50, 65,
+        ],
+        layoutHash: sha256(`${event.id}:${displayNumber}`),
+      },
+    });
+    await fixture.assignCard(event.id, card.id, participant.id);
+    const execution = await fixture.createExecution(
+      event.id,
+      configured.round.id,
+    );
+
+    await expect(
+      prisma.bingoRoundExecution.update({
+        where: { id: execution.id },
+        data: {
+          status: "RUNNING",
+          operatorUserId: fixture.user.id,
+          startedAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow(/BINGO_CARD_PATTERN_MASKS_INCOMPLETE/);
+  });
+
+  it("allows RUNNING after every eligible card has the complete mask set", async () => {
+    const fixture = await createBingoFixture(prisma, "mask-coverage-ready");
+    const event = await fixture.createEvent("mask-coverage-ready");
+    const configured = await fixture.createConfiguredRound(event.id);
+    const participant = await fixture.createAffiliateParticipant(event.id);
+    const card = await fixture.createCard(event.id);
+    await fixture.assignCard(event.id, card.id, participant.id);
+    const execution = await fixture.createExecution(
+      event.id,
+      configured.round.id,
+    );
+
+    const running = await prisma.bingoRoundExecution.update({
+      where: { id: execution.id },
+      data: {
+        status: "RUNNING",
+        operatorUserId: fixture.user.id,
+        startedAt: new Date(),
+      },
+    });
+
+    expect(running.status).toBe("RUNNING");
+  });
 });

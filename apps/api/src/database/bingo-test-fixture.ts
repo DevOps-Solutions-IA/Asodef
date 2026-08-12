@@ -8,6 +8,8 @@ import {
   BingoValidationPolicy,
   PrismaClient,
 } from "@prisma/client";
+import { ballMask, toPostgresBit75 } from "../modules/bingo/domain/cards";
+import { positionsFromMask } from "../modules/bingo/domain/patterns";
 
 export const VALID_CARD = [
   1, 16, 31, 46, 61, 2, 17, 32, 47, 62, 3, 18, 0, 48, 63, 4, 19, 34, 49, 64, 5,
@@ -204,7 +206,7 @@ export async function createBingoFixture(prisma: PrismaClient, label: string) {
     eventId: string,
     displayNumber: string = randomUUID(),
   ) {
-    return prisma.bingoCard.create({
+    const card = await prisma.bingoCard.create({
       data: {
         eventId,
         displayNumber,
@@ -212,6 +214,34 @@ export async function createBingoFixture(prisma: PrismaClient, label: string) {
         layoutHash: sha256(`${eventId}:${displayNumber}`),
       },
     });
+    const patternMasks = await prisma.bingoPatternMask.findMany({
+      where: { eventId },
+      select: { id: true, patternId: true, positionMask: true },
+    });
+    if (patternMasks.length > 0) {
+      await prisma.bingoCardPatternMask.createMany({
+        data: patternMasks.map((patternMask) => {
+          const requiredBalls = positionsFromMask(
+            patternMask.positionMask,
+          ).flatMap((position) => {
+            const value = card.numbers[position];
+            return value === undefined || value === 0 ? [] : [value];
+          });
+          const requiredNumbers = toPostgresBit75(ballMask(...requiredBalls));
+          return {
+            eventId,
+            cardId: card.id,
+            patternId: patternMask.patternId,
+            patternMaskId: patternMask.id,
+            requiredNumbers,
+            derivationHash: sha256(
+              `${card.layoutHash}:${patternMask.id}:${requiredNumbers}`,
+            ),
+          };
+        }),
+      });
+    }
+    return card;
   }
 
   async function assignCard(
