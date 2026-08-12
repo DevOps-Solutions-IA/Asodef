@@ -74,15 +74,7 @@ export class BingoAffiliateReadController {
   private async actor(request: SelfServiceRequest): Promise<BingoAffiliateActorContract> {
     const principal = request.selfService;
     if (!principal) throw new BadRequestException("Sesión no disponible.");
-    // Existing OTP affiliate sessions do not yet issue the Bingo-specific
-    // scope. The established summary-read scope proves this is an affiliate
-    // self-service session; the application actor narrows it to Bingo reads.
-    // Once scope issuance is integrated centrally, accept the dedicated scope
-    // without changing this endpoint contract.
-    if (
-      !principal.scopes.includes(BINGO_AFFILIATE_SCOPE) &&
-      !principal.scopes.includes("affiliate:summary:read")
-    ) {
+    if (!principal.scopes.includes(BINGO_AFFILIATE_SCOPE)) {
       throw new ForbiddenException("La sesión no autoriza esta operación.");
     }
     const identity = await this.identities.resolveSubject(principal.subjectRef);

@@ -44,6 +44,7 @@ export class SelfServiceSessionService {
     const scopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:summary:read",
+          "affiliate:bingo:read",
           "affiliate:beneficiaries:read",
           "affiliate:account:read",
           "affiliate:payments:read",

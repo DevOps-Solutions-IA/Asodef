@@ -25,7 +25,7 @@ describe("BingoAffiliateReadController", () => {
         sessionId: "session-id",
         portal: SelfServicePortal.AFFILIATE,
         subjectRef: "opaque-provider-subject",
-        scopes: ["affiliate:summary:read"],
+        scopes: ["affiliate:bingo:read"],
         assurance: "OTP",
         csrfTokenHash: "hash",
         expiresAt: new Date("2030-01-01T00:00:00.000Z"),
