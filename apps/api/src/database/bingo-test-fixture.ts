@@ -165,6 +165,8 @@ export async function createBingoFixture(prisma: PrismaClient, label: string) {
       validationPolicy?: BingoValidationPolicy;
       tiePolicy?: BingoTiePolicy;
       fairnessMode?: BingoFairnessMode;
+      configurationHash?: string;
+      fairnessProtocolVersion?: string;
     } = {},
   ) {
     return prisma.bingoRoundExecution.create({
@@ -179,12 +181,19 @@ export async function createBingoFixture(prisma: PrismaClient, label: string) {
         fairnessModeSnapshot:
           options.fairnessMode ?? BingoFairnessMode.CRYPTO_RNG,
         configurationVersion: 1,
+        configurationHash:
+          options.configurationHash ?? sha256(`${eventId}:${roundId}:v1`),
+        fairnessProtocolVersion:
+          options.fairnessProtocolVersion ?? "asodef-bingo-crypto-rng-v1",
         createdByUserId: user.id,
       },
     });
   }
 
-  async function createCard(eventId: string, displayNumber: string = randomUUID()) {
+  async function createCard(
+    eventId: string,
+    displayNumber: string = randomUUID(),
+  ) {
     return prisma.bingoCard.create({
       data: {
         eventId,

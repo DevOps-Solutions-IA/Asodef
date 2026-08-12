@@ -2716,6 +2716,8 @@ model BingoRoundExecution {
   tiePolicySnapshot        BingoTiePolicy        @map("tie_policy_snapshot")
   fairnessModeSnapshot     BingoFairnessMode     @map("fairness_mode_snapshot")
   configurationVersion     Int                   @map("configuration_version")
+  configurationHash        String?               @map("configuration_hash") @db.Char(64)
+  fairnessProtocolVersion  String?               @map("fairness_protocol_version")
   operatorUserId           String?               @map("operator_user_id") @db.Uuid
   supervisorUserId         String?               @map("supervisor_user_id") @db.Uuid
   startedAt                DateTime?             @map("started_at") @db.Timestamptz(3)
