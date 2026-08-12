@@ -19,11 +19,13 @@ import {
 } from "../../self-service/self-service.guards";
 import type { BingoAffiliateActorContract } from "../contracts/affiliate";
 import { BINGO_AFFILIATE_SCOPE } from "../contracts/common";
+import { RequireBingoSurface } from "../feature-flags";
 import { BingoAffiliateReadService } from "./bingo-affiliate-read.service";
 
 @Public()
 @ApiTags("bingo-affiliate")
 @ApiCookieAuth("asodef_affiliate_ss")
+@RequireBingoSurface("affiliate")
 @Controller("self-service/affiliate/bingo")
 @RequireSelfServicePortal(SelfServicePortal.AFFILIATE)
 @UseGuards(SelfServiceSessionGuard)

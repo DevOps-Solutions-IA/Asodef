@@ -108,6 +108,15 @@ export const envSchema = z.object({
   BOLD_WEBHOOK_SECRET: z.string().default(""),
   PRODUCTION_PAYMENTS_ENABLED: booleanFromString.default("false"),
 
+  // Bingo is deployed dark and enabled surface-by-surface. The master flag
+  // is always required in addition to the relevant surface flag; defaults
+  // deliberately keep every route and future realtime publisher disabled.
+  BINGO_ENABLED: booleanFromString.default("false"),
+  BINGO_ADMIN_ENABLED: booleanFromString.default("false"),
+  BINGO_AFFILIATE_ENABLED: booleanFromString.default("false"),
+  BINGO_PUBLIC_ENABLED: booleanFromString.default("false"),
+  BINGO_REALTIME_ENABLED: booleanFromString.default("false"),
+
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_SECURE: booleanFromString.default("false"),
@@ -247,6 +256,24 @@ export const envSchema = z.object({
   // rationale as the other STORAGE_DIR vars.
   REPORTS_STORAGE_DIR: z.string().default("./storage/reports"),
 }).superRefine((config, context) => {
+  const bingoSurfaceFlags = [
+    "BINGO_ADMIN_ENABLED",
+    "BINGO_AFFILIATE_ENABLED",
+    "BINGO_PUBLIC_ENABLED",
+    "BINGO_REALTIME_ENABLED",
+  ] as const;
+  if (!config.BINGO_ENABLED) {
+    for (const field of bingoSurfaceFlags) {
+      if (config[field]) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} requires BINGO_ENABLED=true`,
+        });
+      }
+    }
+  }
+
   if (config.EXTERNAL_CORE_PROVIDER !== "http") return;
   const required: Array<keyof typeof config> = [
     "EXTERNAL_CORE_BASE_URL",

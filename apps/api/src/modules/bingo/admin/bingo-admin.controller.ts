@@ -40,6 +40,7 @@ import {
   UpdateBingoPrizeDto,
 } from "../contracts/admin";
 import { BingoPageQueryDto } from "../contracts/common";
+import { RequireBingoSurface } from "../feature-flags";
 import {
   buildBingoCommandContext,
   type BingoAdminRequest,
@@ -53,6 +54,7 @@ import { BingoAdminConfigurationService } from "./bingo-admin-configuration.serv
 @ApiTags("bingo-admin")
 @ApiCookieAuth("asodef_at")
 @ApiForbiddenResponse({ description: "Sesión sin el permiso Bingo requerido." })
+@RequireBingoSurface("admin")
 @UseGuards(BingoAdminCsrfGuard)
 @UseFilters(BingoAdminErrorFilter)
 @Controller("admin/bingo")

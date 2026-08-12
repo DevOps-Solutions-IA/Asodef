@@ -10,6 +10,7 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { Public } from "../../auth/decorators/public.decorator";
 import { RateLimiterService } from "../../auth/rate-limiter.service";
+import { RequireBingoSurface } from "../feature-flags";
 import { BingoPublicReadService } from "./bingo-public-read.service";
 
 const PUBLIC_READ_LIMIT = 120;
@@ -17,6 +18,7 @@ const PUBLIC_READ_WINDOW_SECONDS = 60;
 
 @Public()
 @ApiTags("bingo-public")
+@RequireBingoSurface("public")
 @Controller("public/bingo/events")
 export class BingoPublicReadController {
   constructor(

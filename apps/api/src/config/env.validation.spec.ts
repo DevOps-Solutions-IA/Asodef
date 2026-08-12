@@ -19,7 +19,42 @@ describe("validateEnv", () => {
     expect(result.APP_TIMEZONE).toBe("America/Bogota");
     expect(result.BOLD_MODE).toBe("mock");
     expect(result.PRODUCTION_PAYMENTS_ENABLED).toBe(false);
+    expect(result.BINGO_ENABLED).toBe(false);
+    expect(result.BINGO_ADMIN_ENABLED).toBe(false);
+    expect(result.BINGO_AFFILIATE_ENABLED).toBe(false);
+    expect(result.BINGO_PUBLIC_ENABLED).toBe(false);
+    expect(result.BINGO_REALTIME_ENABLED).toBe(false);
     expect(result.DATABASE_URL).toBe(VALID_ENV.DATABASE_URL);
+  });
+
+  it("coerces explicit Bingo flags and allows gradual surfaces behind the master flag", () => {
+    const result = validateEnv({
+      ...VALID_ENV,
+      BINGO_ENABLED: "true",
+      BINGO_ADMIN_ENABLED: "true",
+      BINGO_AFFILIATE_ENABLED: "false",
+      BINGO_PUBLIC_ENABLED: "false",
+      BINGO_REALTIME_ENABLED: "true",
+    });
+
+    expect(result.BINGO_ENABLED).toBe(true);
+    expect(result.BINGO_ADMIN_ENABLED).toBe(true);
+    expect(result.BINGO_AFFILIATE_ENABLED).toBe(false);
+    expect(result.BINGO_PUBLIC_ENABLED).toBe(false);
+    expect(result.BINGO_REALTIME_ENABLED).toBe(true);
+  });
+
+  it.each([
+    "BINGO_ADMIN_ENABLED",
+    "BINGO_AFFILIATE_ENABLED",
+    "BINGO_PUBLIC_ENABLED",
+    "BINGO_REALTIME_ENABLED",
+  ])("rejects %s=true while the Bingo master flag is disabled", (flag) => {
+    expect(() => validateEnv({ ...VALID_ENV, [flag]: "true" })).toThrow(new RegExp(flag));
+  });
+
+  it("rejects ambiguous non-boolean Bingo flag values", () => {
+    expect(() => validateEnv({ ...VALID_ENV, BINGO_ENABLED: "1" })).toThrow(/BINGO_ENABLED/);
   });
 
   it("fails fast with a clear message naming DATABASE_URL when it is missing", () => {
