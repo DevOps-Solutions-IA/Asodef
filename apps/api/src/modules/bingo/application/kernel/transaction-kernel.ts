@@ -12,7 +12,10 @@ import {
   type BingoTransactionObserver,
 } from "./transaction-observer";
 
-export const BINGO_RETRYABLE_SQL_STATES = new Set(["40001", "40P01"]);
+// Prisma normalizes PostgreSQL serialization/deadlock failures to P2034 when
+// the driver does not expose the underlying SQLSTATE. Both forms are bounded
+// by the same idempotent retry policy.
+export const BINGO_RETRYABLE_SQL_STATES = new Set(["40001", "40P01", "P2034"]);
 
 export interface BingoTransactionOptions {
   readonly command: string;

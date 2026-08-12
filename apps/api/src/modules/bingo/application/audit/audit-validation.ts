@@ -19,6 +19,7 @@ const POLICIES = new Set([
   "PRECONFIGURED_SPECIAL_RULE",
 ]);
 const PERMISSIONS = new Set([
+  "bingo.create",
   "bingo.operate",
   "bingo.validate",
   "bingo.manage",

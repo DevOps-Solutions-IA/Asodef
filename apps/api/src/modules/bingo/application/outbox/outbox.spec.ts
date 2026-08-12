@@ -3,6 +3,18 @@ import { assertOutboxPayload } from "./outbox-validation";
 const ID = "11111111-1111-4111-8111-111111111111";
 
 describe("Bingo outbox contracts", () => {
+  it("accepts a PII-free administrative configuration event", () => {
+    expect(() =>
+      assertOutboxPayload("bingo.event.created.v1", {
+        schemaVersion: 1,
+        resourceId: ID,
+        resourceType: "EVENT",
+        eventId: ID,
+        configurationVersion: 1,
+        occurredAt: "2026-08-11T12:00:00.000Z",
+      }),
+    ).not.toThrow();
+  });
   it("accepts the versioned draw allowlist", () => {
     expect(() =>
       assertOutboxPayload("bingo.draw.created.v1", {

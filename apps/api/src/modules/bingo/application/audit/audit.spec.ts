@@ -23,6 +23,17 @@ describe("Bingo audit allowlist", () => {
     expect(() => assertAuditInput(valid())).not.toThrow();
   });
 
+  it("accepts the exact create permission for event creation", () => {
+    expect(() =>
+      assertAuditInput({
+        ...valid(),
+        executionId: undefined,
+        actorPermission: "bingo.create",
+        action: "bingo.event.created.v1",
+      }),
+    ).not.toThrow();
+  });
+
   it("requires a reason for committed rejection/failure evidence", () => {
     expect(() =>
       assertAuditInput({ ...valid(), result: BingoAuditResult.REJECTED }),

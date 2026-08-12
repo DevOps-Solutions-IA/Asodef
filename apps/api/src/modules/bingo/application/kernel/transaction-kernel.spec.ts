@@ -90,7 +90,7 @@ describe("BingoTransactionKernel", () => {
     expect(deadlockRunner.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it("recognizes nested Prisma metadata without treating P2034 alone as retryable", () => {
+  it("recognizes PostgreSQL SQLSTATE and Prisma P2034 transaction conflicts", () => {
     expect(
       isRetryableBingoTransactionError({
         meta: { database_error_code: "40001" },
@@ -99,7 +99,7 @@ describe("BingoTransactionKernel", () => {
     expect(isRetryableBingoTransactionError({ cause: { code: "40P01" } })).toBe(
       true,
     );
-    expect(isRetryableBingoTransactionError({ code: "P2034" })).toBe(false);
+    expect(isRetryableBingoTransactionError({ code: "P2034" })).toBe(true);
     expect(isRetryableBingoTransactionError({ code: "23505" })).toBe(false);
   });
 

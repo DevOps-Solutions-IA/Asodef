@@ -201,6 +201,29 @@ export class CreateBingoRoundDto {
   specialTieRuleRef?: string;
 }
 
+export class UpdateBingoRoundDto {
+  @ApiPropertyOptional({ maxLength: 160 })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  name?: string;
+  @ApiPropertyOptional({ enum: BINGO_TIE_POLICIES })
+  @IsOptional()
+  @IsIn(BINGO_TIE_POLICIES)
+  tiePolicy?: BingoTiePolicyContract;
+  @ApiPropertyOptional({ enum: BINGO_VALIDATION_POLICIES })
+  @IsOptional()
+  @IsIn(BINGO_VALIDATION_POLICIES)
+  validationPolicy?: BingoValidationPolicyContract;
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @Matches(SLUG)
+  @MaxLength(120)
+  specialTieRuleRef?: string;
+}
+
 export class BingoPatternMaskDto {
   @ApiProperty({ type: [Number], minimum: 0, maximum: 24 })
   @IsArray()
@@ -231,6 +254,28 @@ export class CreateBingoPatternDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() includeFreeCenter?: boolean;
 }
 
+export class UpdateBingoPatternDto {
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  name?: string;
+  @ApiPropertyOptional({ enum: BINGO_PATTERN_KINDS })
+  @IsOptional()
+  @IsIn(BINGO_PATTERN_KINDS)
+  kind?: BingoPatternKindContract;
+  @ApiPropertyOptional({ type: [BingoPatternMaskDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(32)
+  @ValidateNested({ each: true })
+  @Type(() => BingoPatternMaskDto)
+  masks?: BingoPatternMaskDto[];
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeFreeCenter?: boolean;
+}
+
 export class CreateBingoPrizeDto {
   @ApiProperty({ enum: BINGO_PRIZE_KINDS })
   @IsIn(BINGO_PRIZE_KINDS)
@@ -249,6 +294,34 @@ export class CreateBingoPrizeDto {
     example: "1500000.00",
     description: "Exact decimal string; never a float.",
   })
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY)
+  monetaryAmount?: string;
+  @ApiPropertyOptional({ example: "COP" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{3}$/)
+  currency?: string;
+}
+
+export class UpdateBingoPrizeDto {
+  @ApiPropertyOptional({ enum: BINGO_PRIZE_KINDS })
+  @IsOptional()
+  @IsIn(BINGO_PRIZE_KINDS)
+  kind?: BingoPrizeKindContract;
+  @ApiPropertyOptional({ maxLength: 160 })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  name?: string;
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+  @ApiPropertyOptional({ example: "1500000.00" })
   @IsOptional()
   @IsString()
   @Matches(MONEY)

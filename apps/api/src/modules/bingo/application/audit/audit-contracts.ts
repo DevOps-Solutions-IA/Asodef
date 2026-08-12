@@ -1,6 +1,14 @@
 import type { BingoAuditResult } from "@prisma/client";
 
 export const BINGO_AUDIT_ACTIONS = [
+  "bingo.event.created.v1",
+  "bingo.event.updated.v1",
+  "bingo.round.created.v1",
+  "bingo.round.updated.v1",
+  "bingo.pattern.created.v1",
+  "bingo.pattern.updated.v1",
+  "bingo.prize.created.v1",
+  "bingo.prize.updated.v1",
   "bingo.execution.started.v1",
   "bingo.execution.paused.v1",
   "bingo.execution.resumed.v1",
@@ -16,7 +24,10 @@ export const BINGO_AUDIT_ACTIONS = [
 
 export type BingoAuditAction = (typeof BINGO_AUDIT_ACTIONS)[number];
 export type BingoActorPermission =
-  "bingo.operate" | "bingo.validate" | "bingo.manage";
+  | "bingo.create"
+  | "bingo.operate"
+  | "bingo.validate"
+  | "bingo.manage";
 
 export type BingoAuditState = Readonly<{
   status?: string;

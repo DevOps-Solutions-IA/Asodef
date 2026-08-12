@@ -19,7 +19,16 @@ const ALLOWED_KEYS = new Set([
   "ballNumber",
   "candidateCount",
 ]);
-const RESOURCE_TYPES = new Set(["EXECUTION", "DRAW", "CANDIDATE", "WINNER"]);
+const RESOURCE_TYPES = new Set([
+  "EVENT",
+  "ROUND",
+  "PATTERN",
+  "PRIZE",
+  "EXECUTION",
+  "DRAW",
+  "CANDIDATE",
+  "WINNER",
+]);
 
 export function assertCommandResult(
   value: unknown,

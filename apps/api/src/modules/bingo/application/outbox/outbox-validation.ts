@@ -70,6 +70,26 @@ export function assertOutboxPayload<T extends BingoOutboxEventType>(
   if (!(BINGO_OUTBOX_EVENT_TYPES as readonly string[]).includes(eventType)) {
     throw new BingoOutboxValidationError("eventType");
   }
+  if (/^bingo\.(event|round|pattern|prize)\.(created|updated)\.v1$/.test(eventType)) {
+    assertKeys(payload, [
+      "schemaVersion",
+      "resourceId",
+      "resourceType",
+      "eventId",
+      "configurationVersion",
+      "occurredAt",
+    ]);
+    if (payload.schemaVersion !== 1)
+      throw new BingoOutboxValidationError("schemaVersion");
+    uuid(payload.resourceId, "resourceId");
+    uuid(payload.eventId, "eventId");
+    positiveInteger(payload.configurationVersion, "configurationVersion");
+    timestamp(payload.occurredAt, "occurredAt");
+    const expectedType = eventType.split(".")[1]!.toUpperCase();
+    if (payload.resourceType !== expectedType)
+      throw new BingoOutboxValidationError("resourceType");
+    return;
+  }
   if (eventType.startsWith("bingo.execution.")) {
     assertKeys(
       payload,

@@ -1,4 +1,12 @@
 export const BINGO_OUTBOX_EVENT_TYPES = [
+  "bingo.event.created.v1",
+  "bingo.event.updated.v1",
+  "bingo.round.created.v1",
+  "bingo.round.updated.v1",
+  "bingo.pattern.created.v1",
+  "bingo.pattern.updated.v1",
+  "bingo.prize.created.v1",
+  "bingo.prize.updated.v1",
   "bingo.execution.started.v1",
   "bingo.execution.paused.v1",
   "bingo.execution.resumed.v1",
@@ -56,7 +64,24 @@ type WinnerPayload = Readonly<{
   occurredAt: string;
 }>;
 
+type ConfigurationPayload = Readonly<{
+  schemaVersion: 1;
+  resourceId: string;
+  resourceType: "EVENT" | "ROUND" | "PATTERN" | "PRIZE";
+  eventId: string;
+  configurationVersion: number;
+  occurredAt: string;
+}>;
+
 export interface BingoOutboxPayloadByType {
+  "bingo.event.created.v1": ConfigurationPayload;
+  "bingo.event.updated.v1": ConfigurationPayload;
+  "bingo.round.created.v1": ConfigurationPayload;
+  "bingo.round.updated.v1": ConfigurationPayload;
+  "bingo.pattern.created.v1": ConfigurationPayload;
+  "bingo.pattern.updated.v1": ConfigurationPayload;
+  "bingo.prize.created.v1": ConfigurationPayload;
+  "bingo.prize.updated.v1": ConfigurationPayload;
   "bingo.execution.started.v1": ExecutionPayload;
   "bingo.execution.paused.v1": ExecutionPayload;
   "bingo.execution.resumed.v1": ExecutionPayload;
@@ -76,7 +101,15 @@ export interface AppendOutboxInput<T extends BingoOutboxEventType> {
   /** Allocated by the transaction kernel while its event lock is held. */
   sequence: bigint;
   eventType: T;
-  aggregateType: "EXECUTION" | "DRAW" | "CANDIDATE" | "WINNER";
+  aggregateType:
+    | "EVENT"
+    | "ROUND"
+    | "PATTERN"
+    | "PRIZE"
+    | "EXECUTION"
+    | "DRAW"
+    | "CANDIDATE"
+    | "WINNER";
   aggregateId: string;
   aggregateVersion: bigint;
   payload: BingoOutboxPayloadByType[T];

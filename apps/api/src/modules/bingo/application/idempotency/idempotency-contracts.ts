@@ -1,6 +1,14 @@
 import type { BingoCommandStatus } from "@prisma/client";
 
 export const BINGO_MUTATING_OPERATIONS = [
+  "CREATE_EVENT",
+  "UPDATE_EVENT",
+  "CREATE_ROUND",
+  "UPDATE_ROUND",
+  "CREATE_PATTERN",
+  "UPDATE_PATTERN",
+  "CREATE_PRIZE",
+  "UPDATE_PRIZE",
   "START_EXECUTION",
   "PAUSE_EXECUTION",
   "RESUME_EXECUTION",
@@ -24,7 +32,15 @@ export type BingoIdempotencyScope =
 
 export type BingoCommandResult = Readonly<{
   schemaVersion: 1;
-  resourceType: "EXECUTION" | "DRAW" | "CANDIDATE" | "WINNER";
+  resourceType:
+    | "EVENT"
+    | "ROUND"
+    | "PATTERN"
+    | "PRIZE"
+    | "EXECUTION"
+    | "DRAW"
+    | "CANDIDATE"
+    | "WINNER";
   resourceId: string;
   status: string;
   executionId?: string;

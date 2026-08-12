@@ -1,4 +1,12 @@
 export const BINGO_REALTIME_EVENT_CATALOG = Object.freeze({
+  "bingo.event.created.v1": ["ADMIN"],
+  "bingo.event.updated.v1": ["ADMIN"],
+  "bingo.round.created.v1": ["ADMIN"],
+  "bingo.round.updated.v1": ["ADMIN"],
+  "bingo.pattern.created.v1": ["ADMIN"],
+  "bingo.pattern.updated.v1": ["ADMIN"],
+  "bingo.prize.created.v1": ["ADMIN"],
+  "bingo.prize.updated.v1": ["ADMIN"],
   "bingo.execution.started.v1": ["PUBLIC", "AFFILIATE", "ADMIN"],
   "bingo.execution.paused.v1": ["PUBLIC", "AFFILIATE", "ADMIN"],
   "bingo.execution.resumed.v1": ["PUBLIC", "AFFILIATE", "ADMIN"],
