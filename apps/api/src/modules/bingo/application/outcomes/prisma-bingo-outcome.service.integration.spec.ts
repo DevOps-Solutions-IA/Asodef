@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import {
   BingoTiePolicy,
   BingoValidationPolicy,
-  Prisma,
   type PrismaClient,
 } from "@prisma/client";
 import {
@@ -11,41 +10,18 @@ import {
   sha256,
 } from "../../../../database/bingo-test-fixture";
 import { createTestPrismaClient } from "../../../../database/test-db-client";
-import type {
-  OutcomeCommandContext,
-  OutcomeLockManager,
-} from "./outcome-contracts";
+import { BingoLockManager } from "../kernel";
+import type { OutcomeCommandContext } from "./outcome-contracts";
 import {
   BingoOutcomeApplicationErrorCode,
   PrismaBingoOutcomeService,
   PrismaOutcomeOutboxSequenceAllocator,
 } from ".";
 
-class TestCanonicalLockManager implements OutcomeLockManager {
-  async acquire(
-    tx: Prisma.TransactionClient,
-    scope: Parameters<OutcomeLockManager["acquire"]>[1],
-  ): Promise<void> {
-    await tx.$queryRaw`SELECT id FROM bingo_events WHERE id = ${scope.eventId}::uuid FOR UPDATE`;
-    if (scope.roundId !== undefined) {
-      await tx.$queryRaw`SELECT id FROM bingo_rounds WHERE id = ${scope.roundId}::uuid AND event_id = ${scope.eventId}::uuid FOR UPDATE`;
-    }
-    if (scope.executionId !== undefined) {
-      await tx.$queryRaw`SELECT id FROM bingo_round_executions WHERE id = ${scope.executionId}::uuid AND event_id = ${scope.eventId}::uuid FOR UPDATE`;
-    }
-    for (const id of [...(scope.candidateIds ?? [])].sort()) {
-      await tx.$queryRaw`SELECT id FROM bingo_winner_candidates WHERE id = ${id}::uuid FOR UPDATE`;
-    }
-    for (const id of [...(scope.winnerIds ?? [])].sort()) {
-      await tx.$queryRaw`SELECT id FROM bingo_winners WHERE id = ${id}::uuid FOR UPDATE`;
-    }
-  }
-}
-
 describe("Bingo outcomes application (integration, real PostgreSQL)", () => {
   let prisma: PrismaClient;
   const service = new PrismaBingoOutcomeService(
-    new TestCanonicalLockManager(),
+    new BingoLockManager(),
     new PrismaOutcomeOutboxSequenceAllocator(),
   );
 
@@ -81,14 +57,24 @@ describe("Bingo outcomes application (integration, real PostgreSQL)", () => {
       options.validationPolicy ?? BingoValidationPolicy.SIMPLE;
     const tiePolicy = options.tiePolicy ?? BingoTiePolicy.SPLIT_PRIZE;
     const fixture = await createBingoFixture(prisma, label);
-    const event = await fixture.createEvent(label, {
-      validationPolicy,
-      maxCards: 1,
-    });
-    const configured = await fixture.createConfiguredRound(event.id, {
-      validationPolicy,
-      tiePolicy,
-    });
+    const event = await fixture.createEvent(
+      label.toLowerCase().replaceAll("_", "-"),
+      {
+        validationPolicy,
+        maxCards: 1,
+      },
+    );
+    const configured =
+      tiePolicy === BingoTiePolicy.PRECONFIGURED_SPECIAL_RULE
+        ? await createSpecialRuleRound(
+            event.id,
+            fixture.user.id,
+            validationPolicy,
+          )
+        : await fixture.createConfiguredRound(event.id, {
+            validationPolicy,
+            tiePolicy,
+          });
     const execution = await fixture.createExecution(
       event.id,
       configured.round.id,
@@ -165,6 +151,54 @@ describe("Bingo outcomes application (integration, real PostgreSQL)", () => {
       candidates.push(candidate);
     }
     return { fixture, event, configured, execution, winGroup, candidates };
+  }
+
+  async function createSpecialRuleRound(
+    eventId: string,
+    actorUserId: string,
+    validationPolicy: BingoValidationPolicy,
+  ) {
+    const round = await prisma.bingoRound.create({
+      data: {
+        eventId,
+        sequence: 1,
+        name: "Special rule round",
+        validationPolicy,
+        tiePolicy: BingoTiePolicy.PRECONFIGURED_SPECIAL_RULE,
+        tiePolicyConfiguration: { specialRuleId: "approved-special-rule-v1" },
+        createdByUserId: actorUserId,
+      },
+    });
+    const pattern = await prisma.bingoPattern.create({
+      data: {
+        eventId,
+        code: "special-line",
+        name: "Special line",
+        kind: "LINE",
+      },
+    });
+    const patternMask = await prisma.bingoPatternMask.create({
+      data: { eventId, patternId: pattern.id, sequence: 1, positionMask: 31 },
+    });
+    const roundPattern = await prisma.bingoRoundPattern.create({
+      data: { eventId, roundId: round.id, patternId: pattern.id, sequence: 1 },
+    });
+    const prize = await prisma.bingoPrize.create({
+      data: {
+        eventId,
+        roundId: round.id,
+        roundPatternId: roundPattern.id,
+        patternId: pattern.id,
+        sequence: 1,
+        name: "Special prize",
+        kind: "IN_KIND",
+      },
+    });
+    const lockedRound = await prisma.bingoRound.update({
+      where: { id: round.id },
+      data: { status: "READY", configurationLockedAt: new Date() },
+    });
+    return { round: lockedRound, prize, pattern, patternMask, roundPattern };
   }
 
   it("validates every simultaneous candidate and confirms all exact split winners atomically", async () => {
@@ -348,7 +382,7 @@ describe("Bingo outcomes application (integration, real PostgreSQL)", () => {
         code:
           tiePolicy === BingoTiePolicy.TIE_BREAK
             ? BingoOutcomeApplicationErrorCode.TIE_BREAK_REQUIRED
-            : BingoOutcomeApplicationErrorCode.INVALID_STATE,
+            : BingoOutcomeApplicationErrorCode.SPECIAL_RULE_REQUIRED,
       });
       await expect(
         prisma.bingoWinner.count({ where: { winGroupId: data.winGroup.id } }),

@@ -3,7 +3,6 @@ import {
   BingoAuditResult,
   BingoCandidateStatus,
   BingoPrizeKind,
-  BingoTiePolicy,
   BingoValidationPolicy,
   BingoWinnerStatus,
   Prisma,

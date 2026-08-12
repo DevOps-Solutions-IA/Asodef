@@ -1,3 +1,4 @@
+export * from "./bingo-outcome-command.facade";
 export * from "./outcome-contracts";
 export * from "./outcome-errors";
 export * from "./prisma-bingo-outcome.service";
