@@ -15,7 +15,7 @@ describe("Bingo public contracts", () => {
     updatedAt: "2026-12-01T20:00:00.000Z",
     winners: [
       {
-        cardNumber: 1024,
+        cardNumber: "1024",
         displayName: "Ma*** Pe***",
         confirmedAt: "2026-12-01T20:30:00.000Z",
       },
@@ -40,7 +40,7 @@ describe("Bingo public contracts", () => {
     expect(() =>
       assertPublicBingoPayloadSafe({
         ...safeSnapshot,
-        winners: [{ cardNumber: 1, [field]: "secret" }],
+        winners: [{ cardNumber: "1", [field]: "secret" }],
       }),
     ).toThrow("BINGO_PUBLIC_FIELD_FORBIDDEN"),
   );

@@ -301,8 +301,8 @@ export class BingoAffiliateReadService implements BingoAffiliateReadPortContract
     status: BingoAssignmentStatus,
     drawnBalls: ReadonlySet<number>,
   ): AffiliateBingoCardContract {
-    const cardNumber = Number(card.displayNumber);
-    if (!Number.isSafeInteger(cardNumber) || cardNumber < 0) {
+    const cardNumber = card.displayNumber.trim();
+    if (!cardNumber || cardNumber.length > 64) {
       throw new Error("BINGO_INVALID_CARD_DISPLAY_NUMBER");
     }
     return {

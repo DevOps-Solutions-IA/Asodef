@@ -4,7 +4,7 @@ export interface PublicBingoPrizeContract {
 }
 
 export interface PublicBingoWinnerContract {
-  cardNumber: number;
+  cardNumber: string;
   displayName?: string;
   confirmedAt: string;
 }

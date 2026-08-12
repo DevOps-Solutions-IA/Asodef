@@ -64,7 +64,7 @@ export interface AdminBingoParticipantContract {
 export interface AdminBingoCardContract {
   id: string;
   eventId: string;
-  cardNumber: number;
+  cardNumber: string;
   layout: readonly number[];
   layoutFingerprint: string;
   activeParticipantId: string | null;

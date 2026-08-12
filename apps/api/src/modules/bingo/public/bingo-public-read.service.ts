@@ -187,8 +187,9 @@ export class BingoPublicReadService {
     if (!snapshot || Array.isArray(snapshot) || typeof snapshot !== "object") {
       throw new Error("BINGO_INVALID_PUBLIC_WINNER_SNAPSHOT");
     }
-    const cardNumber = Number(snapshot.cardNumber);
-    if (!Number.isSafeInteger(cardNumber) || cardNumber < 0) {
+    const cardNumber =
+      typeof snapshot.cardNumber === "string" ? snapshot.cardNumber.trim() : "";
+    if (!cardNumber || cardNumber.length > 64) {
       throw new Error("BINGO_INVALID_PUBLIC_WINNER_CARD_NUMBER");
     }
     const displayName =

@@ -54,7 +54,7 @@ export interface BingoWinnerConfirmedPublicPayloadContract extends Readonly<
   schemaVersion: 1;
   eventSlug: string;
   roundOrder: number;
-  cardNumber: number;
+  cardNumber: string;
   displayName?: string;
   confirmedAt: string;
 }
