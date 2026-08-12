@@ -102,7 +102,10 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
   }
 
   async function waitForBackgroundWork(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Password recovery deliberately returns before notification persistence.
+    // CI executes every package concurrently, so 200 ms was not a reliable
+    // upper bound for that real Postgres/Redis work under runner contention.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
   describe("forgotPassword", () => {
