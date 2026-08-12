@@ -95,12 +95,23 @@ function harness(row = execution()) {
       fairnessProtocolVersion: "asodef-bingo-fairness-v1",
     }),
   };
+  const idempotency = {
+    acquire: jest.fn().mockResolvedValue({
+      kind: "ACQUIRED",
+      recordId: "idempotency-1",
+      keyHash: "a".repeat(64),
+      requestHash: "b".repeat(64),
+      resumedRetry: false,
+    }),
+    succeed: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new BingoExecutionLifecycleService(
     new BingoTransactionKernel(runner),
     locks,
     effects,
     completionPolicy,
     configurationSnapshot,
+    idempotency,
   );
   return {
     service,
@@ -109,12 +120,13 @@ function harness(row = execution()) {
     locks,
     completionPolicy,
     configurationSnapshot,
+    idempotency,
   };
 }
 
 describe("BingoExecutionLifecycleService", () => {
   it("starts execution, round and event and records audit/outbox inside one transaction", async () => {
-    const { service, tx, effects, locks } = harness();
+    const { service, tx, effects, locks, idempotency } = harness();
     await expect(service.start(startCommand, context)).resolves.toMatchObject({
       status: "RUNNING",
       stateVersion: 1n,
@@ -143,6 +155,12 @@ describe("BingoExecutionLifecycleService", () => {
     );
     expect(effects.appendAudit).toHaveBeenCalledTimes(1);
     expect(effects.appendOutbox).toHaveBeenCalledTimes(1);
+    expect(idempotency.succeed).toHaveBeenCalledWith(
+      tx,
+      "idempotency-1",
+      expect.objectContaining({ status: "RUNNING" }),
+      now,
+    );
   });
 
   it("fails closed for commit-reveal even when a commitment is published", async () => {

@@ -13,11 +13,18 @@ import {
   type BingoApplicationPermission,
   type CommandContext,
 } from "../kernel";
+import {
+  hashIdempotencyKey,
+  PrismaBingoIdempotencyRepository,
+  type BingoMutatingOperation,
+  type IdempotencyAcquisition,
+} from "../idempotency";
 import type {
   ExecutionCompletionPolicyPort,
   ExecutionConfigurationSnapshotPort,
   ExecutionEffectsPort,
 } from "./execution-effects.port";
+import type { ExecutionIdempotencyPort } from "./execution-idempotency.port";
 
 export const BINGO_EXECUTION_EVENT_TYPES = {
   STARTED: "bingo.execution.started.v1",
@@ -53,11 +60,16 @@ export interface ExecutionCommandResult {
   readonly status: "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELLED";
   readonly stateVersion: bigint;
   readonly occurredAt: Date;
+  readonly replayed?: boolean;
 }
 
 type LockedExecution = Prisma.BingoRoundExecutionGetPayload<{
   include: { round: { include: { event: true } }; fairness: true };
 }>;
+type AcquiredIdempotency = Extract<
+  IdempotencyAcquisition,
+  { kind: "ACQUIRED" }
+>;
 
 function requirePermission(
   context: CommandContext,
@@ -90,6 +102,7 @@ export class BingoExecutionLifecycleService {
     private readonly effects: ExecutionEffectsPort,
     private readonly completionPolicy: ExecutionCompletionPolicyPort,
     private readonly configurationSnapshot: ExecutionConfigurationSnapshotPort,
+    private readonly idempotency: ExecutionIdempotencyPort = new PrismaBingoIdempotencyRepository(),
   ) {}
 
   start(
@@ -106,6 +119,15 @@ export class BingoExecutionLifecycleService {
       },
       async (tx) => {
         const now = requireValidNow(context.clock.now());
+        const acquisition = await this.acquireIdempotency(
+          tx,
+          command,
+          context,
+          now,
+          "START_EXECUTION",
+          BINGO_EXECUTION_EVENT_TYPES.STARTED,
+        );
+        if (acquisition.kind === "REPLAY") return acquisition.result;
         const current = await this.lockAndLoad(tx, command);
 
         if (
@@ -251,6 +273,7 @@ export class BingoExecutionLifecycleService {
           nextVersion,
           now,
           BINGO_EXECUTION_EVENT_TYPES.STARTED,
+          acquisition.record,
         );
       },
     );
@@ -294,6 +317,15 @@ export class BingoExecutionLifecycleService {
       },
       async (tx) => {
         const now = requireValidNow(context.clock.now());
+        const acquisition = await this.acquireIdempotency(
+          tx,
+          command,
+          context,
+          now,
+          "COMPLETE_EXECUTION",
+          BINGO_EXECUTION_EVENT_TYPES.COMPLETED,
+        );
+        if (acquisition.kind === "REPLAY") return acquisition.result;
         const current = await this.lockAndLoad(tx, command);
         await this.completionPolicy.assertCanComplete(tx, {
           eventId: current.eventId,
@@ -340,6 +372,7 @@ export class BingoExecutionLifecycleService {
           nextVersion,
           now,
           BINGO_EXECUTION_EVENT_TYPES.COMPLETED,
+          acquisition.record,
         );
       },
     );
@@ -365,6 +398,15 @@ export class BingoExecutionLifecycleService {
       },
       async (tx) => {
         const now = requireValidNow(context.clock.now());
+        const acquisition = await this.acquireIdempotency(
+          tx,
+          command,
+          context,
+          now,
+          "CANCEL_EXECUTION",
+          BINGO_EXECUTION_EVENT_TYPES.CANCELLED,
+        );
+        if (acquisition.kind === "REPLAY") return acquisition.result;
         const current = await this.lockAndLoad(tx, command);
         const requiresSupervisor =
           current.validationPolicySnapshot === "DUAL_CONTROL";
@@ -408,6 +450,7 @@ export class BingoExecutionLifecycleService {
           nextVersion,
           now,
           BINGO_EXECUTION_EVENT_TYPES.CANCELLED,
+          acquisition.record,
           reason,
           approval === undefined
             ? undefined
@@ -440,6 +483,17 @@ export class BingoExecutionLifecycleService {
       },
       async (tx) => {
         const now = requireValidNow(context.clock.now());
+        const operation =
+          target === "PAUSED" ? "PAUSE_EXECUTION" : "RESUME_EXECUTION";
+        const acquisition = await this.acquireIdempotency(
+          tx,
+          command,
+          context,
+          now,
+          operation,
+          eventType,
+        );
+        if (acquisition.kind === "REPLAY") return acquisition.result;
         const current = await this.lockAndLoad(tx, command);
         transitionExecution(current.status, target);
         const nextVersion = current.stateVersion + 1n;
@@ -459,6 +513,7 @@ export class BingoExecutionLifecycleService {
           nextVersion,
           now,
           eventType,
+          acquisition.record,
         );
       },
     );
@@ -485,6 +540,78 @@ export class BingoExecutionLifecycleService {
     return current;
   }
 
+  private async acquireIdempotency(
+    tx: Prisma.TransactionClient,
+    command: ExecutionCommand | StartExecutionCommand | CancelExecutionCommand,
+    context: CommandContext,
+    now: Date,
+    operation: BingoMutatingOperation,
+    eventType: string,
+  ): Promise<
+    | Readonly<{ kind: "ACQUIRED"; record: AcquiredIdempotency }>
+    | Readonly<{ kind: "REPLAY"; result: ExecutionCommandResult }>
+  > {
+    const acquisition = await this.idempotency.acquire(tx, {
+      eventId: command.eventId,
+      executionId: command.executionId,
+      actorUserId: context.actor.userId,
+      scope: `execution:${command.executionId}`,
+      operation,
+      idempotencyKey: context.idempotencyKey,
+      request: canonicalCommandRequest(command),
+      now,
+    });
+    if (acquisition.kind === "IN_PROGRESS") {
+      throw new BingoApplicationError(BingoApplicationErrorCode.INVALID_STATE, {
+        reason: "BINGO_IDEMPOTENCY_IN_PROGRESS",
+        retryAfterMs: acquisition.retryAfterMs,
+      });
+    }
+    if (acquisition.kind === "ACQUIRED") {
+      return { kind: "ACQUIRED", record: acquisition };
+    }
+    if (
+      acquisition.result.resourceType !== "EXECUTION" ||
+      acquisition.result.resourceId !== command.executionId ||
+      acquisition.result.executionId !== command.executionId
+    ) {
+      throw new BingoApplicationError(BingoApplicationErrorCode.INVALID_STATE, {
+        reason: "BINGO_IDEMPOTENCY_INVALID_REPLAY_RESULT",
+      });
+    }
+    const keyHash = hashIdempotencyKey(context.idempotencyKey);
+    const audit = await tx.bingoAuditEvent.findFirst({
+      where: {
+        eventId: command.eventId,
+        executionId: command.executionId,
+        actorUserId: context.actor.userId,
+        action: eventType,
+        idempotencyKeyHash: keyHash,
+        result: "SUCCEEDED",
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { newState: true, createdAt: true },
+    });
+    const stateVersion = readStateVersion(audit?.newState);
+    if (audit === null || stateVersion === null) {
+      throw new BingoApplicationError(BingoApplicationErrorCode.INVALID_STATE, {
+        reason: "BINGO_IDEMPOTENCY_REPLAY_EVIDENCE_MISSING",
+      });
+    }
+    return {
+      kind: "REPLAY",
+      result: {
+        eventId: command.eventId,
+        roundId: command.roundId,
+        executionId: command.executionId,
+        status: acquisition.result.status as ExecutionCommandResult["status"],
+        stateVersion,
+        occurredAt: audit.createdAt,
+        replayed: true,
+      },
+    };
+  }
+
   private async record(
     tx: Prisma.TransactionClient,
     context: CommandContext,
@@ -493,15 +620,22 @@ export class BingoExecutionLifecycleService {
     stateVersion: bigint,
     occurredAt: Date,
     eventType: string,
+    idempotency: AcquiredIdempotency,
     reason?: string,
     metadata?: Readonly<Record<string, string>>,
   ): Promise<ExecutionCommandResult> {
-    await this.effects.appendAudit(tx, context, {
+    const effectContext: CommandContext = {
+      ...context,
+      idempotencyKeyHash: idempotency.keyHash,
+      requestHash: idempotency.requestHash,
+    };
+    await this.effects.appendAudit(tx, effectContext, {
       eventId: current.eventId,
       roundId: current.roundId,
       executionId: current.id,
       action: eventType,
       result: "SUCCEEDED",
+      occurredAt,
       previousState: snapshot(current.status, current.stateVersion),
       newState: snapshot(status, stateVersion),
       ...(reason === undefined ? {} : { reason }),
@@ -514,6 +648,7 @@ export class BingoExecutionLifecycleService {
       aggregateType: "BINGO_EXECUTION",
       aggregateId: current.id,
       aggregateVersion: stateVersion,
+      occurredAt,
       publicPayload: {
         eventId: current.eventId,
         roundId: current.roundId,
@@ -522,7 +657,7 @@ export class BingoExecutionLifecycleService {
         stateVersion: stateVersion.toString(),
       },
     });
-    return {
+    const result: ExecutionCommandResult = {
       eventId: current.eventId,
       roundId: current.roundId,
       executionId: current.id,
@@ -530,5 +665,60 @@ export class BingoExecutionLifecycleService {
       stateVersion,
       occurredAt,
     };
+    await this.idempotency.succeed(
+      tx,
+      idempotency.recordId,
+      {
+        schemaVersion: 1,
+        resourceType: "EXECUTION",
+        resourceId: current.id,
+        status,
+        executionId: current.id,
+      },
+      occurredAt,
+    );
+    return result;
   }
+}
+
+function canonicalCommandRequest(
+  command: ExecutionCommand | StartExecutionCommand | CancelExecutionCommand,
+): Readonly<Record<string, unknown>> {
+  if ("supervisorApproval" in command) {
+    return {
+      eventId: command.eventId,
+      roundId: command.roundId,
+      executionId: command.executionId,
+      reason: command.reason,
+      ...(command.supervisorApproval === undefined
+        ? {}
+        : {
+            supervisorApproval: {
+              supervisorUserId: command.supervisorApproval.supervisorUserId,
+              approvedAt: command.supervisorApproval.approvedAt.toISOString(),
+              reference: command.supervisorApproval.reference,
+            },
+          }),
+    };
+  }
+  return { ...command };
+}
+
+function readStateVersion(
+  value: Prisma.JsonValue | null | undefined,
+): bigint | null {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return null;
+  }
+  const raw = (value as Prisma.JsonObject).stateVersion;
+  if (typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0) {
+    return BigInt(raw);
+  }
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return BigInt(raw);
+  return null;
 }

@@ -72,6 +72,7 @@ describe("Bingo execution lifecycle (integration, real PostgreSQL)", () => {
             idempotencyKeyHash: commandContext.idempotencyKeyHash,
             previousState: record.previousState,
             newState: record.newState,
+            createdAt: record.occurredAt,
           },
         });
       },
@@ -87,6 +88,7 @@ describe("Bingo execution lifecycle (integration, real PostgreSQL)", () => {
             aggregateId: record.aggregateId,
             aggregateVersion: record.aggregateVersion,
             publicPayload: record.publicPayload,
+            createdAt: record.occurredAt,
           },
         });
       },
@@ -114,36 +116,41 @@ describe("Bingo execution lifecycle (integration, real PostgreSQL)", () => {
 
   it("commits execution, event, round, audit and outbox atomically", async () => {
     const value = await scenario("kernel-commit");
-    await value.service.start(
-      {
-        eventId: value.event.id,
-        roundId: value.configured.round.id,
-        executionId: value.execution.id,
-        expectedConfigurationVersion: value.execution.configurationVersion,
-      },
-      value.context,
-    );
+    const command = {
+      eventId: value.event.id,
+      roundId: value.configured.round.id,
+      executionId: value.execution.id,
+      expectedConfigurationVersion: value.execution.configurationVersion,
+    };
+    const first = await value.service.start(command, value.context);
+    const replay = await value.service.start(command, value.context);
+    expect(replay).toEqual({ ...first, replayed: true });
 
-    const [execution, event, round, audits, outbox] = await Promise.all([
-      prisma.bingoRoundExecution.findUniqueOrThrow({
-        where: { id: value.execution.id },
-      }),
-      prisma.bingoEvent.findUniqueOrThrow({ where: { id: value.event.id } }),
-      prisma.bingoRound.findUniqueOrThrow({
-        where: { id: value.configured.round.id },
-      }),
-      prisma.bingoAuditEvent.count({
-        where: { executionId: value.execution.id },
-      }),
-      prisma.bingoOutboxEvent.count({
-        where: { executionId: value.execution.id },
-      }),
-    ]);
+    const [execution, event, round, audits, outbox, idempotency] =
+      await Promise.all([
+        prisma.bingoRoundExecution.findUniqueOrThrow({
+          where: { id: value.execution.id },
+        }),
+        prisma.bingoEvent.findUniqueOrThrow({ where: { id: value.event.id } }),
+        prisma.bingoRound.findUniqueOrThrow({
+          where: { id: value.configured.round.id },
+        }),
+        prisma.bingoAuditEvent.count({
+          where: { executionId: value.execution.id },
+        }),
+        prisma.bingoOutboxEvent.count({
+          where: { executionId: value.execution.id },
+        }),
+        prisma.bingoCommandIdempotency.count({
+          where: { executionId: value.execution.id },
+        }),
+      ]);
     expect(execution).toMatchObject({ status: "RUNNING", stateVersion: 1n });
     expect(event.status).toBe("IN_PROGRESS");
     expect(round.status).toBe("IN_PROGRESS");
     expect(audits).toBe(1);
     expect(outbox).toBe(1);
+    expect(idempotency).toBe(1);
   });
 
   it("rolls back state and audit if the outbox write fails", async () => {
@@ -160,13 +167,85 @@ describe("Bingo execution lifecycle (integration, real PostgreSQL)", () => {
       ),
     ).rejects.toThrow("simulated outbox failure");
 
-    const [execution, event, round, audits, outbox] = await Promise.all([
+    const [execution, event, round, audits, outbox, idempotency] =
+      await Promise.all([
+        prisma.bingoRoundExecution.findUniqueOrThrow({
+          where: { id: value.execution.id },
+        }),
+        prisma.bingoEvent.findUniqueOrThrow({ where: { id: value.event.id } }),
+        prisma.bingoRound.findUniqueOrThrow({
+          where: { id: value.configured.round.id },
+        }),
+        prisma.bingoAuditEvent.count({
+          where: { executionId: value.execution.id },
+        }),
+        prisma.bingoOutboxEvent.count({
+          where: { executionId: value.execution.id },
+        }),
+        prisma.bingoCommandIdempotency.count({
+          where: { executionId: value.execution.id },
+        }),
+      ]);
+    expect(execution.status).toBe("PLANNED");
+    expect(event.status).toBe("PUBLISHED");
+    expect(round.status).toBe("READY");
+    expect(audits).toBe(0);
+    expect(outbox).toBe(0);
+    expect(idempotency).toBe(0);
+  });
+
+  it("rejects reuse of the same key with a different canonical request", async () => {
+    const value = await scenario("kernel-mismatch");
+    const command = {
+      eventId: value.event.id,
+      roundId: value.configured.round.id,
+      executionId: value.execution.id,
+      expectedConfigurationVersion: value.execution.configurationVersion,
+    };
+    await value.service.start(command, value.context);
+    await expect(
+      value.service.start(
+        {
+          ...command,
+          expectedConfigurationVersion:
+            value.execution.configurationVersion + 1,
+        },
+        value.context,
+      ),
+    ).rejects.toMatchObject({
+      code: "BINGO_IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST",
+    });
+    await expect(
+      prisma.bingoCommandIdempotency.count({
+        where: { executionId: value.execution.id },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it("serializes concurrent requests with the same key into one official transition", async () => {
+    const value = await scenario("kernel-concurrent");
+    const command = {
+      eventId: value.event.id,
+      roundId: value.configured.round.id,
+      executionId: value.execution.id,
+      expectedConfigurationVersion: value.execution.configurationVersion,
+    };
+    const attempts = await Promise.allSettled([
+      value.service.start(command, value.context),
+      value.service.start(command, value.context),
+    ]);
+    expect(
+      attempts.filter((attempt) => attempt.status === "fulfilled"),
+    ).not.toHaveLength(0);
+    const rejected = attempts.find((attempt) => attempt.status === "rejected");
+    if (rejected?.status === "rejected") {
+      expect(rejected.reason).toMatchObject({
+        details: { reason: "BINGO_IDEMPOTENCY_IN_PROGRESS" },
+      });
+    }
+    const [execution, audits, outbox, idempotency] = await Promise.all([
       prisma.bingoRoundExecution.findUniqueOrThrow({
         where: { id: value.execution.id },
-      }),
-      prisma.bingoEvent.findUniqueOrThrow({ where: { id: value.event.id } }),
-      prisma.bingoRound.findUniqueOrThrow({
-        where: { id: value.configured.round.id },
       }),
       prisma.bingoAuditEvent.count({
         where: { executionId: value.execution.id },
@@ -174,11 +253,42 @@ describe("Bingo execution lifecycle (integration, real PostgreSQL)", () => {
       prisma.bingoOutboxEvent.count({
         where: { executionId: value.execution.id },
       }),
+      prisma.bingoCommandIdempotency.count({
+        where: { executionId: value.execution.id },
+      }),
     ]);
-    expect(execution.status).toBe("PLANNED");
-    expect(event.status).toBe("PUBLISHED");
-    expect(round.status).toBe("READY");
-    expect(audits).toBe(0);
-    expect(outbox).toBe(0);
+    expect(execution).toMatchObject({ status: "RUNNING", stateVersion: 1n });
+    expect({ audits, outbox, idempotency }).toEqual({
+      audits: 1,
+      outbox: 1,
+      idempotency: 1,
+    });
+  });
+
+  it("uses one logical timestamp for state, audit and outbox evidence", async () => {
+    const value = await scenario("kernel-logical-time");
+    await value.service.start(
+      {
+        eventId: value.event.id,
+        roundId: value.configured.round.id,
+        executionId: value.execution.id,
+        expectedConfigurationVersion: value.execution.configurationVersion,
+      },
+      value.context,
+    );
+    const [execution, audit, outbox] = await Promise.all([
+      prisma.bingoRoundExecution.findUniqueOrThrow({
+        where: { id: value.execution.id },
+      }),
+      prisma.bingoAuditEvent.findFirstOrThrow({
+        where: { executionId: value.execution.id },
+      }),
+      prisma.bingoOutboxEvent.findFirstOrThrow({
+        where: { executionId: value.execution.id },
+      }),
+    ]);
+    expect(execution.startedAt).toEqual(value.now);
+    expect(audit.createdAt).toEqual(value.now);
+    expect(outbox.createdAt).toEqual(value.now);
   });
 });

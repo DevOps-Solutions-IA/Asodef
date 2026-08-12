@@ -1,9 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { calculateConfigurationHash } from "../../domain/fairness";
-import {
-  PrismaBingoAuditRepository,
-  type BingoAuditAction,
-} from "../audit";
+import { PrismaBingoAuditRepository, type BingoAuditAction } from "../audit";
 import type { CommandContext } from "../kernel";
 import {
   PrismaBingoOutboxRepository,
@@ -53,7 +50,7 @@ export class PrismaExecutionEffectsAdapter implements ExecutionEffectsPort {
         schemaVersion: 1,
         entityId: record.executionId,
       },
-      occurredAt: context.clock.now(),
+      occurredAt: record.occurredAt,
     });
   }
 
@@ -86,12 +83,8 @@ export class PrismaExecutionEffectsAdapter implements ExecutionEffectsPort {
         roundId: record.publicPayload.roundId,
         revision: execution.revision,
         status: record.publicPayload.status as
-          | "RUNNING"
-          | "PAUSED"
-          | "CANCELLED"
-          | "COMPLETED"
-          | "PLANNED",
-        occurredAt: execution.updatedAt.toISOString(),
+          "RUNNING" | "PAUSED" | "CANCELLED" | "COMPLETED" | "PLANNED",
+        occurredAt: record.occurredAt.toISOString(),
         ...(execution.previousExecutionId === null
           ? {}
           : { previousExecutionId: execution.previousExecutionId }),
@@ -102,14 +95,12 @@ export class PrismaExecutionEffectsAdapter implements ExecutionEffectsPort {
           ? {}
           : { fairnessProtocolVersion: execution.fairnessProtocolVersion }),
       },
-      createdAt: execution.updatedAt,
+      createdAt: record.occurredAt,
     });
   }
 }
 
-export class PrismaExecutionConfigurationSnapshotAdapter
-  implements ExecutionConfigurationSnapshotPort
-{
+export class PrismaExecutionConfigurationSnapshotAdapter implements ExecutionConfigurationSnapshotPort {
   async resolve(
     tx: Prisma.TransactionClient,
     execution: Readonly<{
@@ -184,9 +175,7 @@ export class PrismaExecutionConfigurationSnapshotAdapter
   }
 }
 
-export class PrismaExecutionCompletionPolicyAdapter
-  implements ExecutionCompletionPolicyPort
-{
+export class PrismaExecutionCompletionPolicyAdapter implements ExecutionCompletionPolicyPort {
   async assertCanComplete(
     tx: Prisma.TransactionClient,
     execution: Readonly<{
@@ -216,9 +205,7 @@ async function nextOutboxSequence(
   return row?.sequence ?? 1n;
 }
 
-function toAuditState(
-  value: Readonly<Record<string, string | number | null>>,
-) {
+function toAuditState(value: Readonly<Record<string, string | number | null>>) {
   const result: {
     status?: string;
     stateVersion?: number;

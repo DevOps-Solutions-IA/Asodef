@@ -7,6 +7,7 @@ export interface ExecutionAuditRecord {
   readonly executionId: string;
   readonly action: string;
   readonly result: "SUCCEEDED";
+  readonly occurredAt: Date;
   readonly previousState: Readonly<Record<string, string | number | null>>;
   readonly newState: Readonly<Record<string, string | number | null>>;
   readonly reason?: string;
@@ -20,6 +21,7 @@ export interface ExecutionOutboxRecord {
   readonly aggregateType: "BINGO_EXECUTION";
   readonly aggregateId: string;
   readonly aggregateVersion: bigint;
+  readonly occurredAt: Date;
   readonly publicPayload: Readonly<{
     eventId: string;
     roundId: string;
