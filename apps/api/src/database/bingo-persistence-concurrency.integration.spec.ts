@@ -238,6 +238,7 @@ describe("Bingo persistence concurrency (integration, real PostgreSQL)", () => {
     const event = await fixture.createEvent("assignment-freeze", {
       maxCards: 5,
     });
+    const configured = await fixture.createConfiguredRound(event.id);
     const participant = await fixture.createAffiliateParticipant(event.id);
     const firstCard = await fixture.createCard(event.id, "FREEZE-1");
     const secondCard = await fixture.createCard(event.id, "FREEZE-2");
@@ -246,7 +247,6 @@ describe("Bingo persistence concurrency (integration, real PostgreSQL)", () => {
       firstCard.id,
       participant.id,
     );
-    const configured = await fixture.createConfiguredRound(event.id);
     const execution = await fixture.createExecution(
       event.id,
       configured.round.id,
