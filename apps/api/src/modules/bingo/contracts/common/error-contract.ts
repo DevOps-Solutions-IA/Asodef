@@ -29,4 +29,3 @@ export interface BingoApiErrorContract {
   requestId: string;
   details?: Readonly<Record<string, string | number | boolean>>;
 }
-

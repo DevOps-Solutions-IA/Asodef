@@ -1,15 +1,15 @@
 # Contrato administrativo y RBAC
 
-| Capacidad | Permiso |
-|---|---|
-| Consultar eventos, configuración y operación | `bingo.read` |
-| Crear evento | `bingo.create` |
-| Configurar rondas, patrones, premios, participantes, cartones y asignaciones | `bingo.manage` |
-| Iniciar, pausar, reanudar, cancelar, completar y extraer | `bingo.operate` |
-| Validar/rechazar candidato y confirmar ganador | `bingo.validate` |
-| Importar | `bingo.import` |
-| Exportar | `bingo.export` |
-| Consultar auditoría | `bingo.audit.read` |
+| Capacidad                                                                    | Permiso            |
+| ---------------------------------------------------------------------------- | ------------------ |
+| Consultar eventos, configuración y operación                                 | `bingo.read`       |
+| Crear evento                                                                 | `bingo.create`     |
+| Configurar rondas, patrones, premios, participantes, cartones y asignaciones | `bingo.manage`     |
+| Iniciar, pausar, reanudar, cancelar, completar y extraer                     | `bingo.operate`    |
+| Validar/rechazar candidato y confirmar ganador                               | `bingo.validate`   |
+| Importar                                                                     | `bingo.import`     |
+| Exportar                                                                     | `bingo.export`     |
+| Consultar auditoría                                                          | `bingo.audit.read` |
 
 Los roles `BINGO_OPERATOR`, `BINGO_SUPERVISOR`, `ADMIN` y `SUPER_ADMIN`
 agrupan permisos, pero ninguna ruta debe autorizarse únicamente por nombre de
@@ -32,4 +32,3 @@ consulta arbitrarios.
 El catálogo Bingo añade un `code` estable al envelope global ASODEF. El código
 permite a frontend reaccionar sin depender de textos humanos. No se incluyen
 stack traces, consultas SQL, nombres de constraints, payload original ni PII.
-

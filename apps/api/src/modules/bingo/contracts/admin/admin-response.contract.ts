@@ -134,4 +134,3 @@ export interface AdminBingoReportStatusContract {
   completedAt: string | null;
   expiresAt: string | null;
 }
-

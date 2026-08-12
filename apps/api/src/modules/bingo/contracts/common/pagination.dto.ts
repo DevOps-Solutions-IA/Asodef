@@ -1,5 +1,12 @@
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class BingoPageQueryDto {
@@ -36,4 +43,3 @@ export interface BingoPageContract<T> {
   data: readonly T[];
   meta: BingoPageMetaContract;
 }
-

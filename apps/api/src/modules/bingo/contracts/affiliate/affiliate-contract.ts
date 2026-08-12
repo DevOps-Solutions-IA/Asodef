@@ -55,18 +55,52 @@ export interface AffiliateBingoHistoryEntryContract {
 }
 
 export interface BingoAffiliateReadPortContract {
-  listMyEvents(actor: BingoAffiliateActorContract): Promise<readonly AffiliateBingoEventSummaryContract[]>;
-  listMyCards(actor: BingoAffiliateActorContract, eventId: string): Promise<readonly AffiliateBingoCardContract[]>;
-  getMyCard(actor: BingoAffiliateActorContract, eventId: string, cardId: string): Promise<AffiliateBingoCardContract>;
-  getRoundState(actor: BingoAffiliateActorContract, eventId: string): Promise<AffiliateBingoRoundStateContract>;
-  getHistory(actor: BingoAffiliateActorContract, eventId: string): Promise<readonly AffiliateBingoHistoryEntryContract[]>;
+  listMyEvents(
+    actor: BingoAffiliateActorContract,
+  ): Promise<readonly AffiliateBingoEventSummaryContract[]>;
+  listMyCards(
+    actor: BingoAffiliateActorContract,
+    eventId: string,
+  ): Promise<readonly AffiliateBingoCardContract[]>;
+  getMyCard(
+    actor: BingoAffiliateActorContract,
+    eventId: string,
+    cardId: string,
+  ): Promise<AffiliateBingoCardContract>;
+  getRoundState(
+    actor: BingoAffiliateActorContract,
+    eventId: string,
+  ): Promise<AffiliateBingoRoundStateContract>;
+  getHistory(
+    actor: BingoAffiliateActorContract,
+    eventId: string,
+  ): Promise<readonly AffiliateBingoHistoryEntryContract[]>;
 }
 
 export const BINGO_AFFILIATE_ROUTE_CONTRACTS = Object.freeze([
-  { method: "GET", path: "/self-service/affiliate/bingo/events", scope: "affiliate:bingo:read" },
-  { method: "GET", path: "/self-service/affiliate/bingo/events/:eventId/cards", scope: "affiliate:bingo:read" },
-  { method: "GET", path: "/self-service/affiliate/bingo/events/:eventId/cards/:cardId", scope: "affiliate:bingo:read" },
-  { method: "GET", path: "/self-service/affiliate/bingo/events/:eventId/state", scope: "affiliate:bingo:read" },
-  { method: "GET", path: "/self-service/affiliate/bingo/events/:eventId/history", scope: "affiliate:bingo:read" },
+  {
+    method: "GET",
+    path: "/self-service/affiliate/bingo/events",
+    scope: "affiliate:bingo:read",
+  },
+  {
+    method: "GET",
+    path: "/self-service/affiliate/bingo/events/:eventId/cards",
+    scope: "affiliate:bingo:read",
+  },
+  {
+    method: "GET",
+    path: "/self-service/affiliate/bingo/events/:eventId/cards/:cardId",
+    scope: "affiliate:bingo:read",
+  },
+  {
+    method: "GET",
+    path: "/self-service/affiliate/bingo/events/:eventId/state",
+    scope: "affiliate:bingo:read",
+  },
+  {
+    method: "GET",
+    path: "/self-service/affiliate/bingo/events/:eventId/history",
+    scope: "affiliate:bingo:read",
+  },
 ] as const);
-

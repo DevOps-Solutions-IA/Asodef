@@ -1,4 +1,7 @@
-import { BINGO_AFFILIATE_ROUTE_CONTRACTS, type BingoAffiliateActorContract } from "./affiliate-contract";
+import {
+  BINGO_AFFILIATE_ROUTE_CONTRACTS,
+  type BingoAffiliateActorContract,
+} from "./affiliate-contract";
 
 describe("Bingo affiliate contracts", () => {
   it("binds reads to a resolved Affiliate.id application context", () => {
@@ -15,9 +18,16 @@ describe("Bingo affiliate contracts", () => {
   });
 
   it("does not declare document, phone or affiliate-code lookup routes", () => {
-    const serialized = JSON.stringify(BINGO_AFFILIATE_ROUTE_CONTRACTS).toLowerCase();
-    expect(serialized).not.toMatch(/document|phone|telefono|affiliatecode|codigo/);
-    expect(BINGO_AFFILIATE_ROUTE_CONTRACTS.every(({ scope }) => scope === "affiliate:bingo:read")).toBe(true);
+    const serialized = JSON.stringify(
+      BINGO_AFFILIATE_ROUTE_CONTRACTS,
+    ).toLowerCase();
+    expect(serialized).not.toMatch(
+      /document|phone|telefono|affiliatecode|codigo/,
+    );
+    expect(
+      BINGO_AFFILIATE_ROUTE_CONTRACTS.every(
+        ({ scope }) => scope === "affiliate:bingo:read",
+      ),
+    ).toBe(true);
   });
 });
-

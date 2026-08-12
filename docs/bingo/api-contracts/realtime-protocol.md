@@ -44,4 +44,3 @@ siendo una proyección allowlist desde el outbox, no un spread de Prisma.
 ETAPA 9 conectará outbox → publisher → Redis → procesos API → SSE. Redis será
 fan-out, nunca fuente de verdad. Polling solo podrá ser fallback controlado al
 snapshot REST.
-

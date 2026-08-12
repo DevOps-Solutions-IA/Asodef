@@ -1,4 +1,7 @@
-import { assertPublicBingoPayloadSafe, type PublicBingoSnapshotContract } from "./public-contract";
+import {
+  assertPublicBingoPayloadSafe,
+  type PublicBingoSnapshotContract,
+} from "./public-contract";
 
 describe("Bingo public contracts", () => {
   const safeSnapshot: PublicBingoSnapshotContract = {
@@ -10,7 +13,13 @@ describe("Bingo public contracts", () => {
     drawnBalls: [1, 22],
     lastSequence: 2,
     updatedAt: "2026-12-01T20:00:00.000Z",
-    winners: [{ cardNumber: 1024, displayName: "Ma*** Pe***", confirmedAt: "2026-12-01T20:30:00.000Z" }],
+    winners: [
+      {
+        cardNumber: 1024,
+        displayName: "Ma*** Pe***",
+        confirmedAt: "2026-12-01T20:30:00.000Z",
+      },
+    ],
     fairness: { protocolVersion: "1", commitment: "b".repeat(64) },
   };
 
@@ -18,9 +27,22 @@ describe("Bingo public contracts", () => {
     expect(() => assertPublicBingoPayloadSafe(safeSnapshot)).not.toThrow();
   });
 
-  it.each(["documentNumber", "phone", "email", "address", "subjectRef", "affiliateId", "secretSeed", "actorUserId"])(
-    "rejects nested public field %s",
-    (field) => expect(() => assertPublicBingoPayloadSafe({ ...safeSnapshot, winners: [{ cardNumber: 1, [field]: "secret" }] })).toThrow("BINGO_PUBLIC_FIELD_FORBIDDEN"),
+  it.each([
+    "documentNumber",
+    "phone",
+    "email",
+    "address",
+    "subjectRef",
+    "affiliateId",
+    "secretSeed",
+    "actorUserId",
+  ])("rejects nested public field %s", (field) =>
+    expect(() =>
+      assertPublicBingoPayloadSafe({
+        ...safeSnapshot,
+        winners: [{ cardNumber: 1, [field]: "secret" }],
+      }),
+    ).toThrow("BINGO_PUBLIC_FIELD_FORBIDDEN"),
   );
 
   it("does not expose an unrevealed seed in the fairness contract", () => {
