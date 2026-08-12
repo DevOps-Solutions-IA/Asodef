@@ -1,7 +1,8 @@
 # Contrato realtime Bingo v1
 
-Estado: contrato y protocolo preparados. Este cambio **no** registra endpoint
-SSE, publisher, suscripción Redis, worker ni configuración productiva.
+Estado: transporte implementado como módulo NestJS aislado. El módulo registra
+publisher outbox, señalización Redis y endpoints SSE al incorporarse al módulo
+raíz; la integración de `AppModule` queda bajo ownership del orquestador.
 
 ## Autoridad y topología futura
 
@@ -35,7 +36,9 @@ Cada envelope contiene exactamente `id`, `type`, `stream`, `sequence`,
 `occurredAt`, `surface` y `data`:
 
 - `id` es el UUID de la fila outbox PostgreSQL;
-- `sequence` es la secuencia outbox autoritativa del evento;
+- `sequence` es el ordinal contiguo de la proyección por superficie, derivado
+  determinísticamente del orden outbox autoritativo. Esto evita huecos públicos
+  cuando un evento interno (por ejemplo un candidato) solo es visible en ADMIN;
 - `stream` es un token opaco sin PII ni IDs de Affiliate/User;
 - `data.schemaVersion` es `1` y sus demás campos dependen de evento/superficie.
 
@@ -123,13 +126,19 @@ exista custodia operacional; nunca se añade `seed` a un draw/evento genérico.
 | sesión expirada/revocada | cierre/no reconexión hasta reautenticar                |
 | cambio de ejecución      | snapshot cambia revisión; no mezcla draws antiguos     |
 
-## Pendiente para implementación ETAPA 9
+## Implementación ETAPA 9
 
-- publisher outbox con claim/retry/backoff y métricas;
-- canales Redis separados por superficie y sin PII;
-- endpoint SSE con heartbeat, buffer y límites;
-- snapshots reales público/afiliado/admin;
-- autorización y cierre por expiración/revocación;
-- pruebas multi-proceso, Redis caído, replay, cliente lento y carga 1k–10k.
+- El publisher usa `FOR UPDATE SKIP LOCKED`, publica una señal mínima sin PII y
+  marca `PUBLISHED` únicamente después de la aceptación Redis. El fallo queda
+  como `FAILED` con backoff; una caída después de publicar puede duplicar la
+  señal, pero el UUID outbox y el replay la hacen idempotente.
+- Redis distribuye solo `{outboxEventId,eventId,sequence}`. Cada proceso API
+  vuelve a PostgreSQL para proyectar la allowlist pública, afiliado o admin.
+- Los endpoints SSE suscriben antes de resolver cursor, recuperan carreras desde
+  PostgreSQL, emiten heartbeat, limitan replay a 256 y fuerzan snapshot/resync
+  en vez de acumular buffers ilimitados.
+- Las conexiones autenticadas expiran como máximo en cinco minutos y al
+  reconectar vuelven a pasar por sesión/RBAC/participación.
 
-Nada de lo anterior se presenta como operacional en este cambio de contratos.
+Pendiente del hardening de MACROFASE 3: prueba de carga real de 1k–10k clientes,
+ajuste de límites de Nginx/VPS y medición multi-réplica en staging.

@@ -29,7 +29,7 @@ export interface BingoRealtimeEnvelopeContract<
   type: BingoRealtimeEventType;
   /** Opaque, non-PII stream token. It must not contain an Affiliate/User id. */
   stream: string;
-  /** Event-scoped PostgreSQL outbox sequence. */
+  /** Contiguous surface projection ordinal derived from PostgreSQL outbox order. */
   sequence: number;
   occurredAt: string;
   surface: BingoRealtimeSurface;
