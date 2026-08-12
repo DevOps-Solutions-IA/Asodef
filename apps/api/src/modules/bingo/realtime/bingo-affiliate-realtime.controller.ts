@@ -43,10 +43,7 @@ export class BingoAffiliateRealtimeController {
     @Headers("last-event-id") lastEventId: string | undefined,
   ) {
     if (!request.selfService) throw new BadRequestException("Sesión no disponible.");
-    if (
-      !request.selfService.scopes.includes(BINGO_AFFILIATE_SCOPE) &&
-      !request.selfService.scopes.includes("affiliate:summary:read")
-    ) {
+    if (!request.selfService.scopes.includes(BINGO_AFFILIATE_SCOPE)) {
       throw new ForbiddenException("La sesión no autoriza esta operación.");
     }
     const identity = await this.identities.resolveSubject(
