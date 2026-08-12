@@ -16,6 +16,18 @@ describe("BingoAdminController authorization contract", () => {
   });
 
   it("maps critical commands to their exact capabilities", () => {
+    expect(permission("createEvent")).toEqual(["bingo.create"]);
+    for (const method of [
+      "updateEvent",
+      "createRound",
+      "updateRound",
+      "createPattern",
+      "updatePattern",
+      "createPrize",
+      "updatePrize",
+    ] as const) {
+      expect(permission(method)).toEqual(["bingo.manage"]);
+    }
     for (const method of [
       "start",
       "pause",

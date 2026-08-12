@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Patch,
   Query,
   Req,
   UseFilters,
@@ -26,7 +27,18 @@ import {
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { RequirePermissions } from "../../auth/decorators/permissions.decorator";
 import type { RequestUser } from "../../auth/types/request-user.type";
-import { ExecutionReasonDto, ConfirmWinnerDto } from "../contracts/admin";
+import {
+  ExecutionReasonDto,
+  ConfirmWinnerDto,
+  CreateBingoEventDto,
+  UpdateBingoEventDto,
+  CreateBingoRoundDto,
+  UpdateBingoRoundDto,
+  CreateBingoPatternDto,
+  UpdateBingoPatternDto,
+  CreateBingoPrizeDto,
+  UpdateBingoPrizeDto,
+} from "../contracts/admin";
 import { BingoPageQueryDto } from "../contracts/common";
 import {
   buildBingoCommandContext,
@@ -36,6 +48,7 @@ import { BingoAdminCsrfGuard } from "./bingo-admin-csrf.guard";
 import { BingoAdminErrorFilter } from "./bingo-admin-error.filter";
 import { BingoAdminOperationsService } from "./bingo-admin-operations.service";
 import { BingoAdminQueryService } from "./bingo-admin-query.service";
+import { BingoAdminConfigurationService } from "./bingo-admin-configuration.service";
 
 @ApiTags("bingo-admin")
 @ApiCookieAuth("asodef_at")
@@ -47,7 +60,110 @@ export class BingoAdminController {
   constructor(
     private readonly query: BingoAdminQueryService,
     private readonly operations: BingoAdminOperationsService,
+    private readonly configuration: BingoAdminConfigurationService,
   ) {}
+
+  @Post("events")
+  @RequirePermissions("bingo.create")
+  @MutationDocs("Crea un evento Bingo auditable")
+  createEvent(
+    @Body() body: CreateBingoEventDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.createEvent(body, contextFactory(request, user));
+  }
+
+  @Patch("events/:eventId")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Actualiza configuración mutable del evento")
+  updateEvent(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Body() body: UpdateBingoEventDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.updateEvent(eventId, body, contextFactory(request, user));
+  }
+
+  @Post("events/:eventId/rounds")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Crea una ronda de evento")
+  createRound(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Body() body: CreateBingoRoundDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.createRound(eventId, body, contextFactory(request, user));
+  }
+
+  @Patch("events/:eventId/rounds/:roundId")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Actualiza una ronda antes de congelarla")
+  updateRound(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Param("roundId", ParseUUIDPipe) roundId: string,
+    @Body() body: UpdateBingoRoundDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.updateRound(eventId, roundId, body, contextFactory(request, user));
+  }
+
+  @Post("events/:eventId/rounds/:roundId/patterns")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Crea y vincula un patrón validado")
+  createPattern(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Param("roundId", ParseUUIDPipe) roundId: string,
+    @Body() body: CreateBingoPatternDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.createPattern(eventId, roundId, body, contextFactory(request, user));
+  }
+
+  @Patch("events/:eventId/rounds/:roundId/patterns/:patternId")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Actualiza un patrón antes de congelarlo")
+  updatePattern(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Param("roundId", ParseUUIDPipe) roundId: string,
+    @Param("patternId", ParseUUIDPipe) patternId: string,
+    @Body() body: UpdateBingoPatternDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.updatePattern(eventId, roundId, patternId, body, contextFactory(request, user));
+  }
+
+  @Post("events/:eventId/rounds/:roundId/prizes")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Crea un premio con valor exacto")
+  createPrize(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Param("roundId", ParseUUIDPipe) roundId: string,
+    @Body() body: CreateBingoPrizeDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.createPrize(eventId, roundId, body, contextFactory(request, user));
+  }
+
+  @Patch("events/:eventId/rounds/:roundId/prizes/:prizeId")
+  @RequirePermissions("bingo.manage")
+  @MutationDocs("Actualiza un premio antes de congelarlo")
+  updatePrize(
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Param("roundId", ParseUUIDPipe) roundId: string,
+    @Param("prizeId", ParseUUIDPipe) prizeId: string,
+    @Body() body: UpdateBingoPrizeDto,
+    @Req() request: BingoAdminRequest,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.configuration.updatePrize(eventId, roundId, prizeId, body, contextFactory(request, user));
+  }
 
   @Get("events")
   @RequirePermissions("bingo.read")
