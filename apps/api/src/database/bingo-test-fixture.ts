@@ -148,12 +148,22 @@ export async function createBingoFixture(prisma: PrismaClient, label: string) {
     const roundPattern = await prisma.bingoRoundPattern.create({
       data: { eventId, roundId: round.id, patternId: pattern.id, sequence: 1 },
     });
+    const mappedPrize = await prisma.bingoPrize.update({
+      where: { id: prize.id },
+      data: { roundPatternId: roundPattern.id, patternId: pattern.id },
+    });
     const lockedAt = new Date();
     const lockedRound = await prisma.bingoRound.update({
       where: { id: round.id },
       data: { status: "READY", configurationLockedAt: lockedAt },
     });
-    return { round: lockedRound, prize, pattern, patternMask, roundPattern };
+    return {
+      round: lockedRound,
+      prize: mappedPrize,
+      pattern,
+      patternMask,
+      roundPattern,
+    };
   }
 
   async function createExecution(

@@ -26,3 +26,18 @@ Para `CRYPTO_RNG_COMMIT_REVEAL`, `BingoFairnessCommitment` sigue conservando el
 compromiso, algoritmos, versiones, `configurationHash` y seed cifrada. El start
 debe comprobar que ambos hashes coincidan. La custodia de seed sigue siendo un
 gate independiente y fail-closed; esta migración no crea ni simula un KMS.
+
+## Relación explícita entre premio y patrón
+
+Una ronda puede configurar varios patrones y varios premios. El esquema de
+ETAPA 3 los limitaba a la misma ronda, pero no identificaba qué patrón otorgaba
+cada premio. ETAPA 5 no puede inferir esa relación por el orden de las filas ni
+crear un producto cartesiano sin cambiar las reglas del evento.
+
+La migración `20260811130000_link_bingo_prizes_to_patterns` vincula cada
+`BingoPrize` con un `BingoRoundPattern` de la misma ronda/evento. Una FK
+compuesta rechaza cruces, y el `BingoWinGroup` referencia el mismo mapeo para que
+un candidato nunca pueda recibir un premio de otro patrón. Los campos son
+nullable únicamente durante el despliegue expand-only; PostgreSQL impide
+iniciar una ejecución mientras exista un premio sin mapear. El guard existente
+de configuración vuelve inmutable el vínculo cuando la ronda se bloquea.

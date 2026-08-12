@@ -6,8 +6,9 @@ readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly migrations_root="$repository_root/apps/api/prisma/migrations"
 readonly bingo_migration="20260809180000_add_bingo_domain"
 readonly stage5_fairness_snapshot_migration="20260811120000_add_bingo_execution_fairness_snapshot"
+readonly stage5_prize_pattern_migration="20260811130000_link_bingo_prizes_to_patterns"
 readonly baseline_migration_count="35"
-readonly expected_migration_count="37"
+readonly expected_migration_count="38"
 readonly upgrade_database="${CI_POSTGRES_DB}_bingo_upgrade"
 
 [[ "$upgrade_database" =~ ^asodef_ci_[a-z0-9_]+$ ]] || {
@@ -55,7 +56,7 @@ copied=0
 for migration in "$migrations_root"/*; do
   [[ -d "$migration" ]] || continue
   case "$(basename "$migration")" in
-    "$bingo_migration"|"$stage5_fairness_snapshot_migration") continue ;;
+    "$bingo_migration"|"$stage5_fairness_snapshot_migration"|"$stage5_prize_pattern_migration") continue ;;
   esac
   cp -R "$migration" "$temporary_prisma/migrations/"
   copied=$((copied + 1))
