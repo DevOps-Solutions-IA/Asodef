@@ -62,11 +62,7 @@ describe("Firebird read-only query catalog", () => {
     expect(() => assertReadOnlyQuery(unsafe)).toThrow(/Unsafe master query/);
   });
 
-  it("keeps unconfirmed operations blocked instead of inventing SQL", () => {
-    expect(BLOCKED_MASTER_QUERIES.findPersonByDocument).toMatchObject({
-      readiness: "BLOCKED_WITH_EVIDENCE",
-      tables: ["TBLPERSONA", "TBLTIPOIDENTIFICACION"],
-    });
+  it("keeps only operations with unconfirmed business semantics blocked", () => {
     expect(BLOCKED_MASTER_QUERIES.getOutstandingInstallments).toMatchObject({
       readiness: "BLOCKED_WITH_EVIDENCE",
       tables: ["TBLCUOTASCONTRATO"],
@@ -80,9 +76,25 @@ describe("Firebird read-only query catalog", () => {
       tables: ["TBLPERSONA", "TBLCONTRATO"],
     });
 
-    expect(() => requireReadyQuery("findPersonByDocument")).toThrow(/número de documento/);
     expect(() => requireReadyQuery("getOutstandingInstallments")).toThrow(/obligación pendiente/);
     expect(() => requireReadyQuery("getPaymentReceipt")).toThrow(/catálogo aprobado/);
     expect(() => requireReadyQuery("getContractBeneficiaries")).toThrow(/pertenencia y vigencia/);
+  });
+
+  it("defines the person lookup as bounded parameterized SELECTs", () => {
+    const exact = requireReadyQuery("findPersonByDocument");
+    const normalizedFallback = requireReadyQuery("findPersonByNormalizedDocument");
+
+    expect(exact.sql).toContain("FIRST 2");
+    expect(exact.sql).toContain("WHERE p.IDPERSONA = ?");
+    expect(exact.sql).toContain("ti.IDENTIFICACION AS DOCUMENT_TYPE");
+    expect(exact.parameterCount).toBe(1);
+    expect(exact.tables).toEqual(["TBLPERSONA", "TBLTIPOIDENTIFICACION"]);
+    expect(() => assertReadOnlyQuery(exact)).not.toThrow();
+
+    expect(normalizedFallback.sql).toContain("WHERE TRIM(p.IDPERSONA) = ?");
+    expect(normalizedFallback.parameterCount).toBe(1);
+    expect(normalizedFallback.tables).toEqual(["TBLPERSONA", "TBLTIPOIDENTIFICACION"]);
+    expect(() => assertReadOnlyQuery(normalizedFallback)).not.toThrow();
   });
 });

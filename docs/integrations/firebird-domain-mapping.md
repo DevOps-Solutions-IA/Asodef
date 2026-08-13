@@ -6,7 +6,7 @@ Este documento registra únicamente relaciones y columnas confirmadas. Los campo
 
 | Operación | Fuente | Estado Fase 1D | Evidencia / bloqueo |
 | --- | --- | --- | --- |
-| `findPersonByDocument` | `TBLPERSONA`, `TBLTIPOIDENTIFICACION` | `BLOCKED_WITH_EVIDENCE` | `IDTIPOIDENTIFICACION` está confirmado, pero no la columna física del número de documento ni sus reglas de normalización. No se emite SQL. |
+| `findPersonByDocument` | `TBLPERSONA`, `TBLTIPOIDENTIFICACION` | Preparada | Metadata real confirma `TBLPERSONA.IDPERSONA` como PK `VARCHAR(20)`, el vínculo `IDTIPOIDENTIFICACION` y el catálogo de tipos. La búsqueda parametrizada intenta primero igualdad exacta y, solo sin resultado, compara `TRIM(IDPERSONA)`; conserva ceros, puntuación y espacios internos. |
 | `findCompanyByNit` | `TBLEMPRESAS` | Estructural | Solo `NIT` está confirmado; nombre y estado permanecen `null`. |
 | `getContract` | `TBLCONTRATO` | Preparada | Columnas contractuales suministradas y filtro `IDCONTRATO = ?`. |
 | `getContractsByPerson` | `TBLCONTRATO` | Preparada | Relación `IDPERSONA = ?`. |
@@ -44,6 +44,41 @@ Este documento registra únicamente relaciones y columnas confirmadas. Los campo
 | `VALORULTIMOPAGO` | `lastPaymentAmount` |
 | `IDFORMAPAGO` | `paymentMethodId` |
 | `IDMODALIDAD` | `paymentModalityId` |
+
+## Persona e identidad de afiliado
+
+La inspección de metadata de solo lectura confirmó que `TBLPERSONA.IDPERSONA`
+es la clave primaria física y el identificador usado por
+`TBLCONTRATO.IDPERSONA`. `TBLPERSONA.IDTIPOIDENTIFICACION` es obligatorio y
+referencia `TBLTIPOIDENTIFICACION.IDTIPOIDENTIFICACION`; el código público de
+tipo se toma de `TBLTIPOIDENTIFICACION.IDENTIFICACION`.
+
+Los identificadores se manejan siempre como `string`. El repositorio elimina
+espacios externos del input, intenta primero igualdad exacta con un placeholder
+y usa una segunda consulta estática con `TRIM(IDPERSONA) = ?` únicamente si no
+hay coincidencia. No elimina ceros iniciales, puntos, guiones ni espacios
+internos, porque la evidencia agregada confirma que esos formatos existen en
+el origen. Ambas consultas usan `FIRST 2` para fallar cerrado si la unicidad
+física o normalizada observada dejara de cumplirse.
+
+La prueba real agregada y sin PII encontró 13 identificadores con espacios
+externos: 7 iniciales, 5 finales y 1 en ambos extremos. El parámetro recortado
+solo encontró 5 con igualdad directa; el fallback sobre `TRIM(IDPERSONA)`
+encontró exactamente una fila para los 13 y no se detectaron grupos duplicados
+tras normalizar. Ninguno de esos 13 registros tenía relación en
+`TBLCONTRATO` al momento de la prueba; esto es evidencia operacional, no una
+regla de negocio permanente.
+
+Esta operación pertenece exclusivamente al flujo de afiliados/autoservicio.
+La autenticación administrativa continúa en ASODEF mediante usuarios,
+credenciales, sesiones, RBAC y permisos propios. Firebird no autentica
+administradores, no define sus roles y no participa en ownership
+administrativo.
+
+La habilitación del lookup no autoriza todavía el inicio de sesión de
+autoservicio: falta evidencia de negocio que determine cuáles contactos de
+`TBLPERSONA` están autorizados y verificados para OTP. Por ello no se conecta
+todavía `MasterQueryService` con `ExternalCoreProvider`.
 
 ## Cuotas
 

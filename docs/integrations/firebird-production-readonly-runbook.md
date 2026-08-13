@@ -1,8 +1,8 @@
 # Runbook de conectividad privada Firebird de solo lectura
 
-Estado: red privada, `sshd`, UFW, API estable, watchdog manual y gates de
-recuperación activos y verificados. La persistencia Windows `AtLogOn` permanece
-`OPERATOR_GATE_PENDING`; el Master Adapter aún no está desplegado.
+Estado: red privada, `sshd`, UFW, API y Master Adapter read-only activos;
+watchdog manual y gates de recuperación verificados. La persistencia Windows
+`AtLogOn` permanece `OPERATOR_GATE_PENDING`.
 
 ## Propósito y límites
 

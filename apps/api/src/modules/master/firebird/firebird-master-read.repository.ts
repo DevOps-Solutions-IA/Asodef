@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { MasterInvalidResponseError } from "../domain/master.errors";
 import type {
   Company,
   Contract,
@@ -17,6 +18,7 @@ import {
   mapContractStatus,
   mapInstallment,
   mapPayment,
+  mapPerson,
   mapPlan,
 } from "./firebird.mappers";
 import { requireReadyQuery, type MasterQueryName } from "./firebird-query.catalog";
@@ -26,9 +28,17 @@ import { FirebirdReadExecutor } from "./firebird-read.executor";
 export class FirebirdMasterReadRepository implements MasterReadRepository {
   constructor(private readonly executor: FirebirdReadExecutor) {}
 
-  async findPersonByDocument(_document: string): Promise<Person | null> {
-    requireReadyQuery("findPersonByDocument");
-    return null;
+  async findPersonByDocument(document: string): Promise<Person | null> {
+    const normalizedDocument = document.trim();
+    if (!normalizedDocument) return null;
+
+    const exactRows = await this.queryMany("findPersonByDocument", [normalizedDocument]);
+    if (exactRows.length > 1) throw new MasterInvalidResponseError("findPersonByDocument");
+    if (exactRows[0]) return mapPerson(exactRows[0]);
+
+    const normalizedRows = await this.queryMany("findPersonByNormalizedDocument", [normalizedDocument]);
+    if (normalizedRows.length > 1) throw new MasterInvalidResponseError("findPersonByDocument");
+    return normalizedRows[0] ? mapPerson(normalizedRows[0]) : null;
   }
 
   async findCompanyByNit(nit: string): Promise<Company | null> {

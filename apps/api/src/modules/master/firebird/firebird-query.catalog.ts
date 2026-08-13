@@ -28,6 +28,7 @@ export type MasterQueryName =
   | "contractCountGate"
   | "health"
   | "findPersonByDocument"
+  | "findPersonByNormalizedDocument"
   | "findCompanyByNit"
   | "getContract"
   | "getContractsByPerson"
@@ -99,6 +100,56 @@ const READY_QUERIES = {
     tables: ["TBLCONTRATO"],
     parameterCount: 0,
     purpose: "SECURITY_GATE",
+  },
+  findPersonByDocument: {
+    name: "findPersonByDocument",
+    sql: `SELECT FIRST 2
+      p.IDPERSONA AS PERSON_ID,
+      p.IDPERSONA AS DOCUMENT,
+      ti.IDENTIFICACION AS DOCUMENT_TYPE,
+      p.NOMBRES AS NAMES,
+      p.APELLIDOS AS SURNAMES,
+      p.TELEFONO AS PHONE,
+      p.NROWHATSAPP AS WHATSAPP,
+      p.DIRECCION AS ADDRESS,
+      p.FECHAAFILIACION AS AFFILIATION_DATE,
+      p.FECHARETIRO AS WITHDRAWAL_DATE,
+      p.RETIRADO AS WITHDRAWN,
+      p.PARENTESCO AS RELATIONSHIP,
+      p.NROCONTRATO AS CONTRACT_ID,
+      p.IDPLAN AS PLAN_ID
+    FROM TBLPERSONA p
+    JOIN TBLTIPOIDENTIFICACION ti
+      ON ti.IDTIPOIDENTIFICACION = p.IDTIPOIDENTIFICACION
+    WHERE p.IDPERSONA = ?`,
+    tables: ["TBLPERSONA", "TBLTIPOIDENTIFICACION"],
+    parameterCount: 1,
+    purpose: "FUNCTIONAL",
+  },
+  findPersonByNormalizedDocument: {
+    name: "findPersonByNormalizedDocument",
+    sql: `SELECT FIRST 2
+      p.IDPERSONA AS PERSON_ID,
+      p.IDPERSONA AS DOCUMENT,
+      ti.IDENTIFICACION AS DOCUMENT_TYPE,
+      p.NOMBRES AS NAMES,
+      p.APELLIDOS AS SURNAMES,
+      p.TELEFONO AS PHONE,
+      p.NROWHATSAPP AS WHATSAPP,
+      p.DIRECCION AS ADDRESS,
+      p.FECHAAFILIACION AS AFFILIATION_DATE,
+      p.FECHARETIRO AS WITHDRAWAL_DATE,
+      p.RETIRADO AS WITHDRAWN,
+      p.PARENTESCO AS RELATIONSHIP,
+      p.NROCONTRATO AS CONTRACT_ID,
+      p.IDPLAN AS PLAN_ID
+    FROM TBLPERSONA p
+    JOIN TBLTIPOIDENTIFICACION ti
+      ON ti.IDTIPOIDENTIFICACION = p.IDTIPOIDENTIFICACION
+    WHERE TRIM(p.IDPERSONA) = ?`,
+    tables: ["TBLPERSONA", "TBLTIPOIDENTIFICACION"],
+    parameterCount: 1,
+    purpose: "FUNCTIONAL",
   },
   findCompanyByNit: {
     name: "findCompanyByNit",
@@ -197,13 +248,6 @@ const READY_QUERIES = {
 } as const satisfies Partial<Record<MasterQueryName, FirebirdQueryDefinition>>;
 
 export const BLOCKED_MASTER_QUERIES = {
-  findPersonByDocument: {
-    name: "findPersonByDocument",
-    readiness: "BLOCKED_WITH_EVIDENCE",
-    reason:
-      "TBLPERSONA confirma IDTIPOIDENTIFICACION, pero no se ha confirmado la columna física que almacena el número de documento ni sus reglas de normalización",
-    tables: ["TBLPERSONA", "TBLTIPOIDENTIFICACION"],
-  },
   getOutstandingInstallments: {
     name: "getOutstandingInstallments",
     readiness: "BLOCKED_WITH_EVIDENCE",
