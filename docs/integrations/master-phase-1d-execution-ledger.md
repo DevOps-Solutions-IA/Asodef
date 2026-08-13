@@ -95,9 +95,10 @@ rules protect both ports on `eth0`.
 - Lint, strict TypeScript and production build — pass.
 - Canonical `pnpm ci:verify` — pass: 34 migrations, three stable seed runs,
   compiled runtime and Chromium E2E 40/40.
-- Previously verified real Firebird proof remains accepted baseline evidence:
-  `ASODEF_READONLY`, health `1`, contract count `8687`. It was not rerun from
-  this workspace because no authorized Master runtime secret is present.
+- The initial verified real Firebird proof remains historical baseline evidence:
+  `ASODEF_READONLY`, health `1`, contract count `8687` at that observation.
+  The count is dynamic authoritative data, not a release invariant; acceptance
+  requires a present non-negative integer rather than equality with this snapshot.
 - Gate 10 (host exposure controls): `PASS`; private listener, explicit public
   denies, nftables/UFW/sshd policy and absence of Docker publication verified.
 - Gate 11 (API recreation on the target network): `PASS`; API healthy at

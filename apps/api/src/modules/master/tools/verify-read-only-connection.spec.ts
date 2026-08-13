@@ -23,7 +23,7 @@ function runtimeWith(overrides: Partial<MasterReadOnlyGateRuntime>): {
           run: jest.fn().mockResolvedValue({
             currentUser: "ASODEF_READONLY",
             healthValue: 1,
-            contractCount: "8687",
+            contractCount: "42",
           }),
         }),
         close,
@@ -43,7 +43,7 @@ describe("runMasterReadOnlyGate", () => {
     const harness = runtimeWith({});
     await expect(runMasterReadOnlyGate(harness.runtime)).resolves.toBe(0);
     expect(harness.stdout).toHaveBeenCalledWith(
-      '{"status":"ok","currentUser":"ASODEF_READONLY","healthValue":1,"contractCount":"8687"}\n',
+      '{"status":"ok","currentUser":"ASODEF_READONLY","healthValue":1,"contractCount":"42"}\n',
     );
     expect(harness.stderr).not.toHaveBeenCalled();
     expect(harness.close).toHaveBeenCalledTimes(1);

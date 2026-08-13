@@ -25,16 +25,33 @@ export class MasterConnectionGateService {
     if (this.readValue(healthRows, "HEALTH_VALUE") !== 1) throw new MasterUnavailableError();
 
     const countRows = await this.executor.run(requireReadyQuery("contractCountGate"), []);
-    const contractCount = this.readValue(countRows, "CONTRACT_COUNT");
-    if (typeof contractCount !== "number" && typeof contractCount !== "bigint" && typeof contractCount !== "string") {
-      throw new MasterUnavailableError();
-    }
+    const contractCount = this.parseContractCount(
+      this.readValue(countRows, "CONTRACT_COUNT"),
+    );
 
     return {
       currentUser: MASTER_FIREBIRD_EXPECTED_USER,
       healthValue: 1,
-      contractCount: String(contractCount),
+      contractCount,
     };
+  }
+
+  private parseContractCount(value: unknown): string {
+    if (typeof value === "bigint") {
+      if (value < 0n) throw new MasterUnavailableError();
+      return value.toString();
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value) || value < 0) throw new MasterUnavailableError();
+      return String(value);
+    }
+
+    if (typeof value === "string" && /^\d+$/.test(value)) {
+      return BigInt(value).toString();
+    }
+
+    throw new MasterUnavailableError();
   }
 
   private readValue(rows: readonly FirebirdRow[], key: string): unknown {

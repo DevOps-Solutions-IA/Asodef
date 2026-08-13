@@ -49,6 +49,8 @@ El comando no debe ejecutarse hasta recibir por entorno host, database y passwor
 - Node 20 Alpine: validado en contenedor desechable.
 - Firebird 3.0.6: protocolo, autenticación, UTF8 y lectura real quedaron
   validados por el gate autorizado con `CURRENT_USER=ASODEF_READONLY`, health
-  `1` y conteo técnico dinámico `8687` al momento de la prueba.
+  `1` y conteo técnico `8687` en la observación histórica inicial. El conteo
+  es dinámico: el gate acepta cualquier entero no negativo válido y no compara
+  contra ese snapshot.
 - El driver nativo no fue seleccionado porque su instalación reproducible falló en Alpine durante el spike de esta fase y habría requerido cambios de toolchain/imagen sin justificación.
 - El adapter no está conectado a autoservicio, OTP, frontend, pagos, Bold o conciliación.
