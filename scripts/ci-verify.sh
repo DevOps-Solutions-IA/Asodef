@@ -63,6 +63,8 @@ export VITE_APP_URL="$web_url"
 export PUBLIC_API_URL="$api_url"
 export PUBLIC_APP_URL="$web_url"
 export CORS_ORIGIN="$web_url"
+export ADMIN_ACCOUNT_EMAIL="admin@asodef.com.co"
+export ADMIN_RECOVERY_EMAIL="asodefsas@gmail.com"
 export BOLD_MODE="mock"
 export JWT_SECRET="$(openssl rand -hex 32)"
 export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
@@ -202,7 +204,14 @@ pnpm --filter @asodef/api prisma:seed
 printf 'CI verification: source gates\n'
 NODE_ENV=test pnpm ci:check
 
+printf 'CI verification: immutable runtime images\n'
+scripts/ci-image-check.sh
+
 printf 'CI verification: guarded E2E state\n'
+export ASODEF_E2E_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+export ASODEF_E2E_ADMIN_MFA_SECRET="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";process.stdout.write([...randomBytes(32)].map((b)=>a[b&31]).join(""))')"
+export ASODEF_E2E_ADMIN_RECOVERY_CODES="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";const code=()=>{const v=[...randomBytes(12)].map((b)=>a[b%a.length]).join("");return `${v.slice(0,4)}-${v.slice(4,8)}-${v.slice(8)}`};process.stdout.write(Array.from({length:10},code).join(","))')"
+export ADMIN_MFA_REQUIRED=true
 ASODEF_E2E_PREPARE=true NODE_ENV=development pnpm --filter @asodef/api ci:prepare-e2e
 
 printf 'CI verification: compiled runtime\n'
