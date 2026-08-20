@@ -1,13 +1,12 @@
-# US-037: local Docker Compose verification only - production Nginx
-# config (real TLS, caching headers, the actual asodef.com.co reverse
-# proxy setup) is US-039's own job. This is the minimal, correct shape:
-# build the static Vite bundle, serve it with a plain nginx:alpine.
-FROM node:20-alpine AS base
+# Web build used by local verification and immutable releases. The static
+# bundle is served by the repository-owned Nginx configuration.
+FROM node:20.19-alpine AS base
 RUN corepack enable
 
 FROM base AS build
 WORKDIR /app
 COPY . .
+RUN test ! -e /app/.env && test ! -e /app/apps/web/.env.local
 # Vite bakes VITE_* vars into the bundle at build time, not runtime -
 # must be present before `pnpm --filter web build` runs, never after.
 ARG VITE_API_URL

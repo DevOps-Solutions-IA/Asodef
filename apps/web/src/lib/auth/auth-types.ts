@@ -24,14 +24,79 @@ export interface CurrentUser extends SafeUser {
   session: SessionMetadata;
 }
 
-/** POST /api/v1/auth/login */
-export interface LoginResponse {
+export interface LoginSuccessResponse {
   user: SafeUser;
 }
+
+export interface MfaLoginChallengeResponse {
+  mfaRequired: true;
+  challengeToken: string;
+  expiresAt: string;
+}
+
+/** POST /api/v1/auth/login */
+export type LoginResponse = LoginSuccessResponse | MfaLoginChallengeResponse;
 
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+export interface VerifyMfaLoginRequest {
+  challengeToken: string;
+  code: string;
+}
+
+export type VerifyMfaLoginResponse = LoginSuccessResponse;
+
+export type MfaErrorCode =
+  | "MFA_NOT_AVAILABLE"
+  | "MFA_ENROLLMENT_REQUIRED"
+  | "MFA_ENROLLMENT_EXPIRED"
+  | "MFA_ALREADY_ENABLED"
+  | "MFA_INVALID_CODE"
+  | "MFA_CHALLENGE_INVALID"
+  | "MFA_CHALLENGE_EXPIRED"
+  | "MFA_CHALLENGE_USED"
+  | "MFA_ATTEMPTS_EXCEEDED"
+  | "MFA_ADMIN_ONLY"
+  | "MFA_PASSWORD_INVALID"
+  | "MFA_CONFLICT";
+
+export interface MfaStatusResponse {
+  required: boolean;
+  enrolled: boolean;
+  status: "NOT_ENROLLED" | "PENDING" | "ACTIVE" | "REVOKED";
+  confirmedAt: string | null;
+  recoveryCodesRemaining: number;
+}
+
+export interface MfaEnrollmentResponse {
+  secret: string;
+  otpauthUri: string;
+  expiresAt: string;
+}
+
+export interface BeginMfaEnrollmentRequest {
+  password: string;
+}
+
+export interface ConfirmMfaEnrollmentRequest {
+  password: string;
+  code: string;
+}
+
+export interface MfaRecoveryCodesResponse {
+  recoveryCodes: string[];
+}
+
+export interface ManageMfaRequest {
+  password: string;
+  code: string;
+}
+
+export interface MfaStepUpResponse {
+  verifiedAt: string;
 }
 
 export interface ForgotPasswordRequest {

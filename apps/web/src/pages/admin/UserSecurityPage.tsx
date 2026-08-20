@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, EmptyState, ErrorState, PageHeader, Pagination, Skeleton } from "@asodef/ui";
@@ -13,14 +14,22 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function UserSecurityPage() {
-  const { userId } = useParams<{ userId: string }>();
+export interface UserSecurityPageProps {
+  userId?: string;
+  userEmail?: string;
+  currentAccount?: boolean;
+  beforeHistory?: ReactNode;
+}
+
+export function UserSecurityPage({ userId: explicitUserId, userEmail, currentAccount = false, beforeHistory }: UserSecurityPageProps = {}) {
+  const { userId: routeUserId } = useParams<{ userId: string }>();
+  const userId = explicitUserId ?? routeUserId;
   const [page, setPage] = useState(1);
 
   const userQuery = useQuery({
     queryKey: queryKeys.admin.users.detail(userId!),
     queryFn: ({ signal }) => getUserDetail(userId!, signal),
-    enabled: !!userId,
+    enabled: !!userId && !currentAccount,
   });
 
   const filters = { page, pageSize: PAGE_SIZE };
@@ -31,7 +40,7 @@ export function UserSecurityPage() {
     placeholderData: (previous) => previous,
   });
 
-  if (userQuery.isLoading || eventsQuery.isLoading) {
+  if ((!currentAccount && userQuery.isLoading) || eventsQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4" aria-busy="true">
         <span className="sr-only" role="status">
@@ -43,14 +52,19 @@ export function UserSecurityPage() {
     );
   }
 
-  if (userQuery.isError || eventsQuery.isError || !userQuery.data || !eventsQuery.data) {
+  if (
+    (!currentAccount && (userQuery.isError || !userQuery.data)) ||
+    eventsQuery.isError ||
+    !eventsQuery.data ||
+    (currentAccount && !userEmail)
+  ) {
     return (
       <ErrorState
         description={getAdminErrorMessage(userQuery.error ?? eventsQuery.error)}
         action={
           <Button
             onClick={() => {
-              void userQuery.refetch();
+              if (!currentAccount) void userQuery.refetch();
               void eventsQuery.refetch();
             }}
           >
@@ -65,8 +79,9 @@ export function UserSecurityPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Historial de seguridad" description={userQuery.data.email} />
-      <UserDetailTabs userId={userQuery.data.id} />
+      <PageHeader title={currentAccount ? "Seguridad de mi cuenta" : "Historial de seguridad"} description={currentAccount ? userEmail : userQuery.data!.email} />
+      {!currentAccount && <UserDetailTabs userId={userQuery.data!.id} />}
+      {beforeHistory}
 
       {events.items.length === 0 ? (
         <EmptyState title="Sin eventos de seguridad registrados" />

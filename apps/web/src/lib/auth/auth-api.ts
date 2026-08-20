@@ -1,15 +1,24 @@
 import { apiClient } from "../api-client";
 import type {
   ChangePasswordRequest,
+  BeginMfaEnrollmentRequest,
+  ConfirmMfaEnrollmentRequest,
   ChangePasswordResponse,
   CurrentUser,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
   LoginRequest,
   LoginResponse,
+  ManageMfaRequest,
+  MfaEnrollmentResponse,
+  MfaRecoveryCodesResponse,
+  MfaStepUpResponse,
+  MfaStatusResponse,
   ResetPasswordRequest,
   ResetPasswordResponse,
   StatusResponse,
+  VerifyMfaLoginRequest,
+  VerifyMfaLoginResponse,
 } from "./auth-types";
 
 /**
@@ -30,6 +39,34 @@ export function fetchCurrentUser(signal?: AbortSignal): Promise<CurrentUser | nu
 
 export function login(input: LoginRequest): Promise<LoginResponse> {
   return apiClient.post<LoginResponse>("/auth/login", input, { skipAuthRefresh: true });
+}
+
+export function verifyMfaLogin(input: VerifyMfaLoginRequest): Promise<VerifyMfaLoginResponse> {
+  return apiClient.post<VerifyMfaLoginResponse>("/auth/mfa/verify-login", input, { skipAuthRefresh: true });
+}
+
+export function getMfaStatus(signal?: AbortSignal): Promise<MfaStatusResponse> {
+  return apiClient.get<MfaStatusResponse>("/auth/mfa/status", { signal });
+}
+
+export function beginMfaEnrollment(input: BeginMfaEnrollmentRequest): Promise<MfaEnrollmentResponse> {
+  return apiClient.post<MfaEnrollmentResponse>("/auth/mfa/enrollment", input);
+}
+
+export function confirmMfaEnrollment(input: ConfirmMfaEnrollmentRequest): Promise<MfaRecoveryCodesResponse> {
+  return apiClient.post<MfaRecoveryCodesResponse>("/auth/mfa/enrollment/confirm", input);
+}
+
+export function verifyMfaStepUp(input: ManageMfaRequest): Promise<MfaStepUpResponse> {
+  return apiClient.post<MfaStepUpResponse>("/auth/step-up", input);
+}
+
+export function regenerateMfaRecoveryCodes(): Promise<MfaRecoveryCodesResponse> {
+  return apiClient.post<MfaRecoveryCodesResponse>("/auth/mfa/recovery-codes/regenerate");
+}
+
+export function revokeMfa(): Promise<StatusResponse> {
+  return apiClient.post<StatusResponse>("/auth/mfa/revoke");
 }
 
 export function refreshSession(): Promise<StatusResponse> {

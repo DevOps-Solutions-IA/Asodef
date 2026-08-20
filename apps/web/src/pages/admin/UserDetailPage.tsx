@@ -9,6 +9,7 @@ import { useAuth } from "../../lib/auth/auth-context";
 import { UserDetailTabs } from "./UserDetailTabs";
 import { ReasonConfirmDialog } from "./ReasonConfirmDialog";
 import { userStatusTone } from "./user-status-tone";
+import { isStepUpCancelledError, useStepUpAction } from "../../lib/auth/use-step-up-action";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "Nunca";
@@ -22,6 +23,7 @@ export function UserDetailPage() {
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
+  const stepUp = useStepUpAction();
 
   const detailQuery = useQuery({
     queryKey: queryKeys.admin.users.detail(userId!),
@@ -36,7 +38,7 @@ export function UserDetailPage() {
   }
 
   const deactivateMutation = useMutation({
-    mutationFn: (reason: string) => deactivateUser(userId!, reason),
+    mutationFn: (reason: string) => stepUp.execute(() => deactivateUser(userId!, reason)),
     onSuccess: () => {
       invalidateAfterMutation();
       setActiveDialog(null);
@@ -44,7 +46,7 @@ export function UserDetailPage() {
   });
 
   const reactivateMutation = useMutation({
-    mutationFn: (reason: string) => reactivateUser(userId!, reason),
+    mutationFn: (reason: string) => stepUp.execute(() => reactivateUser(userId!, reason)),
     onSuccess: () => {
       invalidateAfterMutation();
       setActiveDialog(null);
@@ -52,7 +54,7 @@ export function UserDetailPage() {
   });
 
   const unlockMutation = useMutation({
-    mutationFn: (reason: string) => unlockUser(userId!, reason),
+    mutationFn: (reason: string) => stepUp.execute(() => unlockUser(userId!, reason)),
     onSuccess: () => {
       invalidateAfterMutation();
       setActiveDialog(null);
@@ -162,7 +164,7 @@ export function UserDetailPage() {
         confirmLabel="Desactivar"
         destructive
         isPending={deactivateMutation.isPending}
-        errorMessage={deactivateMutation.isError ? getAdminErrorMessage(deactivateMutation.error) : null}
+        errorMessage={deactivateMutation.isError && !isStepUpCancelledError(deactivateMutation.error) ? getAdminErrorMessage(deactivateMutation.error) : null}
       />
       <ReasonConfirmDialog
         open={activeDialog === "reactivate"}
@@ -172,7 +174,7 @@ export function UserDetailPage() {
         description="El usuario podrá iniciar sesión nuevamente. Las sesiones anteriores no se restauran."
         confirmLabel="Reactivar"
         isPending={reactivateMutation.isPending}
-        errorMessage={reactivateMutation.isError ? getAdminErrorMessage(reactivateMutation.error) : null}
+        errorMessage={reactivateMutation.isError && !isStepUpCancelledError(reactivateMutation.error) ? getAdminErrorMessage(reactivateMutation.error) : null}
       />
       <ReasonConfirmDialog
         open={activeDialog === "unlock"}
@@ -182,8 +184,9 @@ export function UserDetailPage() {
         description="Se restablecen los intentos fallidos de inicio de sesión."
         confirmLabel="Desbloquear"
         isPending={unlockMutation.isPending}
-        errorMessage={unlockMutation.isError ? getAdminErrorMessage(unlockMutation.error) : null}
+        errorMessage={unlockMutation.isError && !isStepUpCancelledError(unlockMutation.error) ? getAdminErrorMessage(unlockMutation.error) : null}
       />
+      {stepUp.dialog}
     </div>
   );
 }

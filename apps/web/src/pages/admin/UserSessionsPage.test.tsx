@@ -69,6 +69,10 @@ describe("UserSessionsPage", () => {
     renderSessionsPage();
     expect(await screen.findByText("203.0.113.0")).toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
+    expect(screen.getByText("session-1")).toBeInTheDocument();
+    expect(screen.getByText("Test Agent")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Expira" })).toBeInTheDocument();
+    expect(screen.queryByText(/refresh/i)).not.toBeInTheDocument();
   });
 
   it("shows an empty state with no sessions", async () => {

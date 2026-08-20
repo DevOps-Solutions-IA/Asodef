@@ -9,6 +9,7 @@ import { createUser } from "../../lib/admin/admin-users-api";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../lib/query-keys";
 import { useAuth } from "../../lib/auth/auth-context";
+import { isStepUpCancelledError, useStepUpAction } from "../../lib/auth/use-step-up-action";
 
 const ASSIGNABLE_ROLES = [
   "SUPER_ADMIN",
@@ -41,6 +42,7 @@ export function CreateUserPage() {
   const queryClient = useQueryClient();
   const errorRef = useRef<HTMLDivElement>(null);
   const canAssignRoles = hasRole("SUPER_ADMIN");
+  const stepUp = useStepUpAction();
 
   const {
     register,
@@ -50,7 +52,7 @@ export function CreateUserPage() {
   } = useForm<CreateUserFormValues>({ resolver: zodResolver(createUserSchema), defaultValues: { roles: [] } });
 
   const mutation = useMutation({
-    mutationFn: (values: CreateUserFormValues) => createUser(values),
+    mutationFn: (values: CreateUserFormValues) => stepUp.execute(() => createUser(values)),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users.allLists() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users.stats() });
@@ -79,7 +81,7 @@ export function CreateUserPage() {
     <div className="flex max-w-2xl flex-col gap-6">
       <PageHeader title="Nuevo usuario" description="Se enviará un correo de invitación para configurar la contraseña." />
 
-      {mutation.isError && (
+      {mutation.isError && !isStepUpCancelledError(mutation.error) && (
         <div ref={errorRef} tabIndex={-1} className="focus:outline-none">
           <Alert variant="danger">{getAdminErrorMessage(mutation.error)}</Alert>
         </div>
@@ -119,6 +121,7 @@ export function CreateUserPage() {
           </Button>
         </div>
       </form>
+      {stepUp.dialog}
     </div>
   );
 }

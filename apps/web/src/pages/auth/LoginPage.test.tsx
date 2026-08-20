@@ -23,22 +23,47 @@ function buildCurrentUser(roles: string[]): CurrentUser {
 }
 
 interface LoginFetchOptions {
-  loginOutcome: "success" | "invalid" | "rate-limited";
+  loginOutcome: "success" | "mfa" | "mfa-not-enrolled" | "invalid" | "rate-limited";
   roles?: string[];
+  mfaVerifyOutcome?: "success" | "invalid" | "expired";
 }
 
 /** A stateful fetch mock: /auth/me starts unauthenticated, and flips to
  * authenticated only after a successful POST /auth/login - mirroring the
  * real backend's actual before/after session state. */
-function mockLoginFlow({ loginOutcome, roles = [] }: LoginFetchOptions) {
+function mockLoginFlow({ loginOutcome, roles = [], mfaVerifyOutcome = "success" }: LoginFetchOptions) {
   let loggedIn = false;
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/auth/mfa/verify-login")) {
+      if (mfaVerifyOutcome === "success") {
+        loggedIn = true;
+        return jsonResponse(200, { user: buildCurrentUser(roles) });
+      }
+      const code = mfaVerifyOutcome === "expired" ? "MFA_CHALLENGE_EXPIRED" : "MFA_INVALID_CODE";
+      return jsonResponse(401, { statusCode: 401, error: "Unauthorized", code, message: "MFA verification failed." });
+    }
 
     if (url.includes("/auth/login")) {
       if (loginOutcome === "success") {
         loggedIn = true;
         return jsonResponse(200, { user: buildCurrentUser(roles) });
+      }
+      if (loginOutcome === "mfa") {
+        return jsonResponse(200, {
+          mfaRequired: true,
+          challengeToken: "opaque-challenge-token-value-1234567890",
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        });
+      }
+      if (loginOutcome === "mfa-not-enrolled") {
+        return jsonResponse(409, {
+          statusCode: 409,
+          error: "Conflict",
+          code: "MFA_ENROLLMENT_REQUIRED",
+          message: "raw backend detail",
+        });
       }
       if (loginOutcome === "rate-limited") {
         return jsonResponse(429, {
@@ -225,6 +250,75 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
     expect(await screen.findByText("Contenido de administración")).toBeInTheDocument();
+  });
+
+  it("renders a stable safe message when the privileged account requires MFA enrollment", async () => {
+    mockLoginFlow({ loginOutcome: "mfa-not-enrolled" });
+    const user = userEvent.setup();
+    renderLoginPage();
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "admin@asodef.com.co");
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Debes configurar MFA antes de continuar.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("raw backend detail");
+  });
+
+  it("keeps an MFA challenge unauthenticated until the second factor succeeds", async () => {
+    const fetchMock = mockLoginFlow({ loginOutcome: "mfa", mfaVerifyOutcome: "success", roles: ["SUPER_ADMIN"] });
+    const storageSpy = vi.spyOn(Storage.prototype, "setItem");
+    const user = userEvent.setup();
+    renderLoginPage();
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
+
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "admin@asodef.com.co");
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect(await screen.findByRole("heading", { name: "Verificación administrativa" })).toBeInTheDocument();
+    expect(screen.queryByText("Contenido de administración")).not.toBeInTheDocument();
+    expect(storageSpy).not.toHaveBeenCalled();
+
+    const mfaCodeInput = screen.getByLabelText("Código de verificación", { exact: false });
+    await user.type(mfaCodeInput, "123456");
+    expect(mfaCodeInput).toHaveValue("123456");
+    await user.click(screen.getByRole("button", { name: "Verificar e ingresar" }));
+
+    expect(await screen.findByText("Contenido de administración")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/auth/mfa/verify-login"))).toHaveLength(1);
+    expect(storageSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the challenge open after an invalid verification code", async () => {
+    mockLoginFlow({ loginOutcome: "mfa", mfaVerifyOutcome: "invalid", roles: ["SUPER_ADMIN"] });
+    const user = userEvent.setup();
+    renderLoginPage();
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "admin@asodef.com.co");
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    await user.type(await screen.findByLabelText("Código de verificación", { exact: false }), "123456");
+    await user.click(screen.getByRole("button", { name: "Verificar e ingresar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("El código de verificación no es válido.");
+    expect(screen.getByRole("heading", { name: "Verificación administrativa" })).toBeInTheDocument();
+  });
+
+  it("discards a terminal MFA challenge after the backend reports expiry", async () => {
+    mockLoginFlow({ loginOutcome: "mfa", mfaVerifyOutcome: "expired", roles: ["SUPER_ADMIN"] });
+    const user = userEvent.setup();
+    renderLoginPage();
+    await screen.findByRole("heading", { name: "Acceso administrativo" });
+    await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), "admin@asodef.com.co");
+    await user.type(screen.getByLabelText("Contraseña", { exact: false, selector: "input" }), "correct-password");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    await user.type(await screen.findByLabelText("Código de verificación", { exact: false }), "123456");
+    await user.click(screen.getByRole("button", { name: "Verificar e ingresar" }));
+
+    expect(await screen.findByRole("heading", { name: "Acceso administrativo" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/expiró/i);
+    expect(screen.queryByLabelText("Código de verificación", { exact: false })).not.toBeInTheDocument();
   });
 
   it("redirects to a safe preserved return location after login instead of the default landing page", async () => {

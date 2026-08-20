@@ -12,13 +12,42 @@
  *    classic protocol-relative open-redirect trick, and rejects
  *    "https://..."/"javascript:..." absolute targets outright since they
  *    don't start with "/" at all)
- *  - never contains "://" anywhere (belt-and-braces against something
- *    like "/\evil.com" or an encoded variant)
+ *  - contains no backslash or encoded path-normalization trick;
+ *  - resolves against a fixed trusted origin without changing that origin.
  */
 export function isSafeInternalPath(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0) return false;
+  if (typeof value !== "string" || value.length === 0 || value.length > 2_048) return false;
   if (!value.startsWith("/")) return false;
   if (value.startsWith("//")) return false;
-  if (value.includes("://")) return false;
-  return true;
+  if (value.includes("\\") || containsControlCharacter(value)) return false;
+
+  // URL parsers normalize backslashes and encoded separators differently.
+  // Decode a small, bounded number of layers before trusting the path so
+  // `%5c` and `%255c` cannot become an external destination later.
+  let decoded = value;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (decoded.includes("\\") || containsControlCharacter(decoded) || decoded.startsWith("//") || decoded.includes("://")) return false;
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const trustedOrigin = "https://asodef.invalid";
+    const resolved = new URL(decoded, trustedOrigin);
+    return resolved.origin === trustedOrigin && resolved.pathname.startsWith("/");
+  } catch {
+    return false;
+  }
+}
+
+function containsControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f;
+  });
 }
