@@ -11,7 +11,8 @@ contain secret values, reset links, MFA seeds, recovery codes or SMTP content.
 - `ADMIN_RECOVERY_EMAIL` (`asodefsas@gmail.com`) is delivery-only and must not
   exist as a login-capable `User` row.
 - The official account must be `ACTIVE`, have its exact `recoveryEmail`, and
-  retain `ADMIN` or `SUPER_ADMIN`.
+  retain exactly one `SUPER_ADMIN` assignment. An `ADMIN` assignment alone is
+  not sufficient for the privileged control-plane invariant.
 - Administrative authentication remains PostgreSQL/JWT/RBAC. Firebird never
   authenticates an administrator and remains read-only.
 - `ADMIN_MFA_REQUIRED` must remain `false` until enrollment and recovery-code
@@ -40,6 +41,22 @@ SMTP is a production prerequisite for certifying recovery. The safe no-op
 transport is acceptable for development only and must never be reported as a
 successful recovery channel.
 
+The executable, value-free release artifacts live under `ops/admin-core/`:
+
+- `verify-runtime-env.sh` validates presence and shape without sourcing or
+  printing values;
+- `docker-compose.admin-core.yml` maps only the required names into the API;
+- `backup-postgres-encrypted.sh` streams a custom dump directly into GPG and
+  writes checksum plus sanitized metadata;
+- `rehearse-postgres-restore.sh` restores, migrates and starts the exact API
+  image on an isolated internal Docker network;
+- `rollback-public-admin-core.sh` validates rollback in dry-run mode and, only
+  with `--apply`, recreates public `api` and `web`.
+
+Use the bounded commands documented in `ops/admin-core/README.md`. Do not run
+an unfiltered `docker compose config`, and never copy runtime values into the
+repository.
+
 ## Pre-deploy inspection
 
 Using read-only PostgreSQL queries or the approved operational inspection
@@ -62,11 +79,16 @@ Abort before migration or deploy when any identity invariant differs.
    encrypted backup procedure.
 2. Rehearse all migrations on an isolated restore. They are additive; do not
    edit an already-applied migration.
-3. Apply migrations before starting the new API.
+3. Apply migrations from the exact immutable API image before starting the new
+   API. The rehearsal and production host must not depend on a mutable source
+   checkout or a host-installed pnpm.
 4. Deploy the new API with `ADMIN_MFA_REQUIRED=false` and the real SMTP
    configuration present. Recreate only the public API.
-5. Verify API, PostgreSQL, Redis, Master and outbox status through
-   `/api/v1/admin/sistema`; `UNKNOWN` is not a pass.
+5. Verify API, PostgreSQL, Redis, security and outbox status through
+   `/api/v1/admin/sistema`; `UNKNOWN` is not a pass for a core dependency.
+   Master is an optional Phase 3 dependency: `UNAVAILABLE`, `DEGRADED` or
+   `NOT_CONFIGURED` may produce `DEGRADED_OPTIONAL_DEPENDENCY`, but does not
+   block Admin Core while all core dependencies are healthy.
 6. Log in as the official account, enroll TOTP under `/admin/seguridad`, verify
    it, and transfer the one-time recovery codes to approved offline custody.
    Do not capture the MFA seed or codes in tickets, logs or screenshots.

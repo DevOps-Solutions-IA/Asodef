@@ -1,0 +1,5 @@
+services:
+  api:
+    image: ${ROLLBACK_API_IMAGE:?ROLLBACK_API_IMAGE is required}
+  web:
+    image: ${ROLLBACK_WEB_IMAGE:?ROLLBACK_WEB_IMAGE is required}
