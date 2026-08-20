@@ -204,6 +204,10 @@ pnpm --filter @asodef/api prisma:seed
 printf 'CI verification: source gates\n'
 NODE_ENV=test pnpm ci:check
 
+printf 'CI verification: operational artifact gates\n'
+ops/mail-platform/test-artifacts.sh
+ops/admin-core/test-artifacts.sh
+
 printf 'CI verification: immutable runtime images\n'
 scripts/ci-image-check.sh
 

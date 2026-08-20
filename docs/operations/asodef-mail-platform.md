@@ -1,24 +1,24 @@
 # ASODEF mail platform operator runbook
 
-## Verified discovery baseline (2026-08-20)
+## Certified runtime baseline (2026-08-20)
 
 | Control | Observed state |
 | --- | --- |
-| `smtp.asodef.com.co` | NXDOMAIN; not ready |
+| `smtp.asodef.com.co` | A `169.58.36.138`; PASS from `1.1.1.1` and `8.8.8.8` |
 | VPS IPv4 | `169.58.36.138` |
-| VPS hostname/PTR | `vmi3448457.contaboserver.net`; not aligned |
+| PTR / FCrDNS | `smtp.asodef.com.co`; PASS from both external resolvers |
 | Existing MX | GoDaddy `smtp.secureserver.net` and `mailstore1.secureserver.net` |
-| Existing SPF | authorizes `secureserver.net` only |
+| Existing SPF | VPS IPv4 plus `include:secureserver.net`; PASS |
 | Existing DMARC | present with `p=quarantine`, relaxed alignment |
-| DKIM selector | not discovered; unknown |
+| DKIM selector | immutable `asodef2026`; DNS and real signing PASS |
 | Outbound TCP/25 | reachable from VPS to Gmail, Outlook and GoDaddy |
-| Host MTA/listeners | no MTA and no host/Docker listeners on 25/465/587 |
-| SMTP TLS certificate | absent; HTTPS certificate covers only apex and `www` |
-| Host firewall detail | privileged operator inspection required |
+| Host MTA | Postfix and OpenDKIM installed; OpenDKIM `127.0.0.1:8891` |
+| SMTP TLS certificate | valid for `smtp.asodef.com.co`, TLS 1.3 verified; expires 2026-11-18 |
+| SASL/private submission | packages incomplete; TCP/587 not configured |
 
-The public network completed TCP handshakes on 25/465/587 but returned neither
-an SMTP banner nor TLS while the VPS had no matching socket. That is not an
-inbound SMTP PASS. Retest from an independent network after activation.
+The dedicated mail network and private submission listener are not active yet.
+Public 25/465/587 denial still requires independent-network certification after
+the owned firewall rules and private listener are activated.
 
 ## Target topology and trust boundaries
 
@@ -38,28 +38,28 @@ Internet -> TCP/25 DENY while GoDaddy remains MX
 PostgreSQL, Redis, Master/Firebird, R3, Bold, payments and the protected
 WhatsApp stack are outside this topology and must not be modified.
 
-The `/29` is a proposed dedicated contract and must pass the repository overlap
-gate against every Docker network and host route before creation. It must never
+The `/29` contract has passed the overlap gate but must be rechecked immediately
+before creation. It must never
 reuse `asodef_master_tunnel`, `data` or `egress`. The API-only Compose overlay
 adds a fixed `.2` member and maps the SMTP hostname internally to host `.1`,
 preserving TLS hostname verification without a public submission listener.
 
 ## DNS plan (operator/provider actions)
 
-Use a versioned selector such as `asodef2026a`; substitute only values verified
-from the generated public key and provider control panel.
+The production selector is exactly `asodef2026`. Do not regenerate its key or
+change the selector during this closure.
 
-1. Add `A smtp.asodef.com.co <MAIL_PUBLIC_IPV4>`.
-2. Provider sets PTR `<MAIL_PUBLIC_IPV4> -> smtp.asodef.com.co`.
+1. Preserve and verify `A smtp.asodef.com.co 169.58.36.138`.
+2. Preserve and verify provider PTR `169.58.36.138 -> smtp.asodef.com.co`.
 3. Keep both current MX records unchanged. This relay is outbound-only.
-4. Replace SPF atomically with an additive record equivalent to
-   `v=spf1 ip4:<MAIL_PUBLIC_IPV4> include:secureserver.net -all`. Never publish
-   a second SPF record.
+4. Preserve the single certified SPF record
+   `v=spf1 ip4:169.58.36.138 include:secureserver.net -all`. Never publish a
+   second SPF record.
    The managed relay remains IPv4-only while this policy is active. Enabling
    IPv6 delivery additionally requires an aligned IPv6 PTR and an explicit
    `ip6:` SPF mechanism before changing `inet_protocols`.
-5. Publish `<SELECTOR>._domainkey.asodef.com.co` from the on-host `.txt` public
-   key output. Never copy the `.private` file.
+5. Preserve the certified `asodef2026._domainkey.asodef.com.co` record. Never
+   copy, print or regenerate the private key.
 6. Preserve the current DMARC record and `p=quarantine` during coexistence.
    Do not change policy or reporting destination without domain-owner approval.
 7. Confirm A, PTR, SPF, DKIM and DMARC from at least two independent resolvers.
@@ -71,13 +71,16 @@ must not remove the existing GoDaddy include, MX or DMARC record.
 ## Startup and verification order
 
 1. Freeze exact application release SHA and capture current production state.
-2. Obtain DNS/PTR ownership confirmation.
+2. Reconfirm the already-certified A/PTR/FCrDNS/SPF/DKIM/DMARC state.
 3. Create root-owned, non-symlink `0600` config and password files outside Git.
 4. Validate/create the dedicated network and attach only the public API through
    the overlay during an authorized API-only recreate.
-5. Issue the public certificate through the existing ACME webroot.
-6. Prepare host configuration and generate DKIM on-host with services stopped.
-7. Publish/verify DNS using two independent resolvers.
+5. Run the read-only runtime reconciler and adopt the existing certificate from
+   `/etc/postfix/tls` and DKIM selector/key. Certificate issuance and DKIM
+   generation are prohibited in this closure.
+6. Inventory the existing Postfix queue count. Any nonzero count blocks until
+   an operator reconciles it; never flush, requeue or discard it blindly.
+7. Verify DNS using two independent resolvers.
 8. Apply exact owned UFW rules, then activate services.
 9. Run host, network, loopback-relay, bad-HELO, auth, spoof, oversize and TLS tests.
 10. Send controlled Gmail and Outlook deliveries from the approved From address.
@@ -95,7 +98,9 @@ must not remove the existing GoDaddy include, MX or DMARC record.
 - SMTP permanent failure: classify without blind retry.
 - Unknown SMTP acceptance result: preserve `UNKNOWN_RESULT`; never retry blindly.
 - Certificate renewal failure: existing certificate remains in use; alert before
-  expiry and never substitute a self-signed certificate.
+  expiry and never substitute a self-signed certificate. The deploy hook must
+  verify hostname, expiry and key match, stage the pair under `/etc/postfix/tls`
+  and restore the previous material if `postfix check` or reload fails.
 - DKIM failure: stop new delivery, restore the previous selector/key and retain
   both public selectors through the documented overlap.
 

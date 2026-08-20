@@ -4,7 +4,7 @@ myhostname = @@MAIL_HOSTNAME@@
 mydomain = @@MAIL_DOMAIN@@
 myorigin = $mydomain
 mydestination = $myhostname, localhost.$mydomain, localhost
-inet_interfaces = 127.0.0.1, [::1], @@MAIL_LISTEN_ADDRESS@@
+inet_interfaces = 127.0.0.1, @@MAIL_LISTEN_ADDRESS@@
 # Direct delivery remains IPv4-only until IPv6 has its own aligned PTR and SPF.
 inet_protocols = ipv4
 mynetworks =

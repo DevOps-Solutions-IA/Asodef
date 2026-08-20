@@ -59,13 +59,17 @@ validate_inputs() {
     printf '%s' "$mail_address" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die invalid_mail_network_address
   done
   [ "$MAIL_LISTEN_ADDRESS" = "$MAIL_GATEWAY" ] || die listener_must_equal_gateway
+  [ "$MAIL_DKIM_SELECTOR" = asodef2026 ] || die certified_dkim_selector_mismatch
   printf '%s' "$MAIL_DKIM_SELECTOR" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$' || die invalid_MAIL_DKIM_SELECTOR
   printf '%s' "$MAIL_SMTP_FROM" | grep -Eq "^[^@[:space:]]+@$MAIL_DOMAIN$" || die invalid_MAIL_SMTP_FROM
   printf '%s' "$MAIL_ACME_EMAIL" | grep -Eq '^[^@[:space:]]+@[^@[:space:]]+\.[A-Za-z]{2,}$' || die invalid_MAIL_ACME_EMAIL
   printf '%s' "$MAIL_MESSAGE_SIZE_LIMIT" | grep -Eq '^[0-9]+$' || die invalid_MAIL_MESSAGE_SIZE_LIMIT
   [ "$MAIL_MESSAGE_SIZE_LIMIT" -ge 1048576 ] && [ "$MAIL_MESSAGE_SIZE_LIMIT" -le 52428800 ] || die invalid_MAIL_MESSAGE_SIZE_LIMIT
   case "$MAIL_TLS_CERT_FILE:$MAIL_TLS_KEY_FILE:$MAIL_ACME_WEBROOT:$MAIL_SMTP_PASSWORD_FILE" in /*:/*:/*:/*) : ;; *) die secret_and_tls_paths_must_be_absolute ;; esac
+  [ "$MAIL_TLS_CERT_FILE" = /etc/postfix/tls/fullchain.pem ] || die certified_tls_certificate_path_mismatch
+  [ "$MAIL_TLS_KEY_FILE" = /etc/postfix/tls/privkey.pem ] || die certified_tls_key_path_mismatch
   case "${MAIL_OPERATOR_APPROVAL:-NO}" in YES|NO) : ;; *) die invalid_MAIL_OPERATOR_APPROVAL ;; esac
+  case "${MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS:-NO}" in YES|NO) : ;; *) die invalid_MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS ;; esac
   python3 "$SCRIPT_DIR/validate-network-contract.py" --subnet "$MAIL_SUBNET" --gateway "$MAIL_GATEWAY" --api "$MAIL_API_ADDRESS"
   python3 -c 'import ipaddress,sys; ipaddress.ip_address(sys.argv[1])' "$MAIL_PUBLIC_IPV4" 2>/dev/null || die invalid_MAIL_PUBLIC_IPV4
 }
@@ -79,7 +83,7 @@ load_config() {
   while IFS='=' read -r mail_config_name mail_config_value || [ -n "$mail_config_name" ]; do
     case "$mail_config_name" in
       ''|'#'*) continue ;;
-      MAIL_DOMAIN|MAIL_HOSTNAME|MAIL_PUBLIC_IPV4|MAIL_PUBLIC_INTERFACE|MAIL_NETWORK_NAME|MAIL_BRIDGE_NAME|MAIL_SUBNET|MAIL_GATEWAY|MAIL_API_ADDRESS|MAIL_LISTEN_ADDRESS|MAIL_API_CONTAINER|MAIL_DKIM_SELECTOR|MAIL_TLS_CERT_FILE|MAIL_TLS_KEY_FILE|MAIL_ACME_WEBROOT|MAIL_ACME_EMAIL|MAIL_SMTP_USER|MAIL_SMTP_FROM|MAIL_MESSAGE_SIZE_LIMIT|MAIL_OPERATOR_APPROVAL|MAIL_SMTP_PASSWORD_FILE)
+      MAIL_DOMAIN|MAIL_HOSTNAME|MAIL_PUBLIC_IPV4|MAIL_PUBLIC_INTERFACE|MAIL_NETWORK_NAME|MAIL_BRIDGE_NAME|MAIL_SUBNET|MAIL_GATEWAY|MAIL_API_ADDRESS|MAIL_LISTEN_ADDRESS|MAIL_API_CONTAINER|MAIL_DKIM_SELECTOR|MAIL_TLS_CERT_FILE|MAIL_TLS_KEY_FILE|MAIL_ACME_WEBROOT|MAIL_ACME_EMAIL|MAIL_SMTP_USER|MAIL_SMTP_FROM|MAIL_MESSAGE_SIZE_LIMIT|MAIL_OPERATOR_APPROVAL|MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS|MAIL_SMTP_PASSWORD_FILE)
         case "$mail_config_seen" in *"|$mail_config_name|"*) die "duplicate_config_key_$mail_config_name" ;; esac
         mail_config_seen="$mail_config_seen$mail_config_name|"
         export "$mail_config_name=$mail_config_value"

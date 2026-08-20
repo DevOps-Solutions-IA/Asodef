@@ -25,15 +25,19 @@ if [ "$STAGE" = "--activate" ]; then
   case "$mail_original_backup" in /var/backups/asodef-mail-platform/*) : ;; *) die invalid_backup_pointer ;; esac
   [ -f "$mail_original_backup/prepared.ok" ] || die prepare_stage_incomplete
   grep -q '^# ASODEF MAIL PLATFORM MANAGED$' /etc/postfix/main.cf || die managed_config_missing
+  /usr/local/sbin/asodef-mail-tls-recover
   "$SCRIPT_DIR/preflight.sh" "$CONFIG_PATH"
   postfix check
   opendkim-testkey -d "$MAIL_DOMAIN" -s "$MAIL_DKIM_SELECTOR" -vv >/dev/null 2>&1 || die dkim_dns_not_verified
   systemctl enable opendkim postfix
+  "$SCRIPT_DIR/inventory-mail-queue.sh" "$CONFIG_PATH"
   systemctl restart opendkim
   systemctl restart postfix
   echo 'status=activated'
   exit 0
 fi
+
+"$SCRIPT_DIR/reconcile-runtime.sh" "$CONFIG_PATH" --pre-apply
 
 if [ -f /etc/postfix/main.cf ] && grep -q '^# ASODEF MAIL PLATFORM MANAGED$' /etc/postfix/main.cf; then
   die already_prepared_rollback_or_activate
@@ -47,8 +51,12 @@ install -d -o root -g root -m 0700 "$BACKUP_DIR/original"
 for mail_path in \
   /etc/postfix/main.cf /etc/postfix/master.cf /etc/postfix/sender_login /etc/postfix/sender_login.db \
   /etc/postfix/sasl/smtpd.conf /etc/opendkim.conf /etc/opendkim/key.table \
-  /etc/opendkim/signing.table /etc/opendkim/trusted.hosts /etc/sasldb2 \
+  /etc/opendkim/signing.table /etc/opendkim/trusted.hosts \
+  /etc/opendkim/KeyTable /etc/opendkim/SigningTable /etc/opendkim/TrustedHosts /etc/sasldb2 \
   /etc/letsencrypt/renewal-hooks/deploy/asodef-postfix-mail \
+  /usr/local/sbin/asodef-mail-tls-recover \
+  /etc/systemd/system/postfix.service.d/asodef-tls-recovery.conf \
+  "$MAIL_TLS_CERT_FILE" "$MAIL_TLS_KEY_FILE" \
   "/etc/opendkim/keys/$MAIL_DOMAIN/$MAIL_DKIM_SELECTOR.private" \
   "/etc/opendkim/keys/$MAIL_DOMAIN/$MAIL_DKIM_SELECTOR.txt"; do
   [ ! -e "$mail_path" ] || cp -a --parents "$mail_path" "$BACKUP_DIR/original"
@@ -64,6 +72,11 @@ mail_pointer_tmp="/var/lib/asodef-mail-platform-last-backup.tmp.$$"
 printf '%s\n' "$BACKUP_DIR" > "$mail_pointer_tmp"
 chmod 0600 "$mail_pointer_tmp"
 mv "$mail_pointer_tmp" /var/lib/asodef-mail-platform-last-backup
+
+# Freeze the pre-existing spool before the authoritative zero-queue gate. A
+# nonempty queue remains stopped for explicit operator reconciliation.
+systemctl stop postfix
+"$SCRIPT_DIR/inventory-mail-queue.sh" "$CONFIG_PATH"
 
 export DEBIAN_FRONTEND=noninteractive
 mail_policy_created=NO
@@ -85,6 +98,9 @@ mail_policy_created=NO
 install -d -o root -g root -m 0755 /etc/postfix/sasl
 install -d -o root -g root -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -d -o opendkim -g opendkim -m 0750 "/etc/opendkim/keys/$MAIL_DOMAIN"
+if [ ! -d /etc/systemd/system/postfix.service.d ]; then
+  install -d -o root -g root -m 0755 /etc/systemd/system/postfix.service.d
+fi
 
 render_template "$SCRIPT_DIR/config/postfix-main.cf.template" /etc/postfix/main.cf
 render_template "$SCRIPT_DIR/config/opendkim.conf.template" /etc/opendkim.conf
@@ -93,6 +109,9 @@ render_template "$SCRIPT_DIR/config/signing.table.template" /etc/opendkim/signin
 render_template "$SCRIPT_DIR/config/trusted.hosts.template" /etc/opendkim/trusted.hosts
 install -o root -g root -m 0644 "$SCRIPT_DIR/config/smtpd.conf.template" /etc/postfix/sasl/smtpd.conf
 install -o root -g root -m 0755 "$SCRIPT_DIR/cert-renew-hook.sh" /etc/letsencrypt/renewal-hooks/deploy/asodef-postfix-mail
+install -o root -g root -m 0755 "$SCRIPT_DIR/recover-tls-transaction.sh" /usr/local/sbin/asodef-mail-tls-recover
+install -o root -g root -m 0644 "$SCRIPT_DIR/config/postfix-tls-recovery.conf" /etc/systemd/system/postfix.service.d/asodef-tls-recovery.conf
+systemctl daemon-reload
 
 MASTER_FRAGMENT="$BACKUP_DIR/rendered-master.cf.fragment"
 render_template "$SCRIPT_DIR/config/postfix-master.cf.fragment.template" "$MASTER_FRAGMENT"
@@ -118,16 +137,17 @@ chown root:postfix /etc/sasldb2
 chmod 0640 /etc/sasldb2
 
 KEY_DIR="/etc/opendkim/keys/$MAIL_DOMAIN"
-if [ ! -f "$KEY_DIR/$MAIL_DKIM_SELECTOR.private" ]; then
-  opendkim-genkey -b 2048 -D "$KEY_DIR" -d "$MAIL_DOMAIN" -s "$MAIL_DKIM_SELECTOR"
-fi
-chown -R opendkim:opendkim "$KEY_DIR"
+[ -f "$KEY_DIR/$MAIL_DKIM_SELECTOR.private" ] && [ ! -L "$KEY_DIR/$MAIL_DKIM_SELECTOR.private" ] || die existing_dkim_private_key_required
 chmod 0750 "$KEY_DIR"
+chown opendkim:opendkim "$KEY_DIR/$MAIL_DKIM_SELECTOR.private"
 chmod 0600 "$KEY_DIR/$MAIL_DKIM_SELECTOR.private"
-chmod 0644 "$KEY_DIR/$MAIL_DKIM_SELECTOR.txt"
+if [ -e "$KEY_DIR/$MAIL_DKIM_SELECTOR.txt" ]; then
+  chown opendkim:opendkim "$KEY_DIR/$MAIL_DKIM_SELECTOR.txt"
+  chmod 0644 "$KEY_DIR/$MAIL_DKIM_SELECTOR.txt"
+fi
 
 postfix check
 systemctl stop postfix opendkim
 printf 'prepared_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$BACKUP_DIR/prepared.ok"
 chmod 0600 "$BACKUP_DIR/prepared.ok"
-echo "status=prepared services=stopped dkim_dns_file=$KEY_DIR/$MAIL_DKIM_SELECTOR.txt"
+echo "status=prepared services=stopped dkim_selector=$MAIL_DKIM_SELECTOR key=adopted"
