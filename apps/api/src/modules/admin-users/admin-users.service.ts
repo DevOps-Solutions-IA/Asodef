@@ -183,6 +183,7 @@ export class AdminUsersService {
           created.email,
           dto.roles ?? [],
           "Asignación inicial al crear el usuario",
+          context,
         );
 
         await this.securityEventService.recordRequired(tx, {
@@ -376,23 +377,23 @@ export class AdminUsersService {
     return { assigned: this.roleNamesOf(target), available: [...ROLE_NAMES] };
   }
 
-  async assignRole(actor: RequestUser, targetUserId: string, dto: RoleChangeDto): Promise<RoleChangeResult> {
+  async assignRole(actor: RequestUser, targetUserId: string, dto: RoleChangeDto, context: RequestContext): Promise<RoleChangeResult> {
     return this.roleAssignmentService.assignRole(
       { actorId: actor.id, actorRoles: actor.roles },
       targetUserId,
       dto.roleName,
       dto.reason,
-      { preview: dto.preview },
+      { preview: dto.preview, context },
     );
   }
 
-  async removeRole(actor: RequestUser, targetUserId: string, dto: RoleChangeDto): Promise<RoleChangeResult> {
+  async removeRole(actor: RequestUser, targetUserId: string, dto: RoleChangeDto, context: RequestContext): Promise<RoleChangeResult> {
     return this.roleAssignmentService.removeRole(
       { actorId: actor.id, actorRoles: actor.roles },
       targetUserId,
       dto.roleName,
       dto.reason,
-      { preview: dto.preview },
+      { preview: dto.preview, context },
     );
   }
 

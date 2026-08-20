@@ -14,7 +14,7 @@ function renderAtPath(
 ) {
   mockAuthFetch(currentUser, additionalHandlers);
   const testRouter = createMemoryRouter(routeConfig, { initialEntries: [path], future: routerFutureConfig });
-  return renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
+  return renderWithAuth(<RouterProvider router={testRouter} />);
 }
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
@@ -211,7 +211,7 @@ describe("router", () => {
     mockLoginFlow(financeUser);
     const user = userEvent.setup();
     const testRouter = createMemoryRouter(routeConfig, { initialEntries: ["/admin/pagos"], future: routerFutureConfig });
-    renderWithAuth(<RouterProvider router={testRouter} future={{ v7_startTransition: true }} />);
+    renderWithAuth(<RouterProvider router={testRouter} />);
 
     await screen.findByRole("heading", { name: "Acceso administrativo" });
     await user.type(screen.getByLabelText("Correo electrónico", { exact: false }), financeUser.email);
@@ -279,6 +279,58 @@ describe("router", () => {
     renderAtPath("/admin/seguridad", currentUser, (url) => {
       if (url.endsWith("/admin/users/current-admin")) {
         userDetailRequested = true;
+        return jsonResponse(200, {
+          id: "current-admin",
+          email: "admin@asodef.test",
+          fullName: "Current Admin",
+          status: "ACTIVE",
+          roles: ["SUPER_ADMIN"],
+          permissions: ["users.security.read"],
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-20T00:00:00.000Z",
+          lastLoginAt: "2026-08-20T10:00:00.000Z",
+          lockedUntil: null,
+          isLocked: false,
+          passwordChangedAt: "2026-08-01T00:00:00.000Z",
+          activeSessionCount: 1,
+        });
+      }
+      if (url.endsWith("/admin/users/stats")) {
+        return jsonResponse(200, {
+          totalUsers: 1,
+          activeUsers: 1,
+          inactiveUsers: 0,
+          suspendedUsers: 0,
+          lockedUsers: 0,
+          recentLoginFailures24h: 0,
+          activeSessions: 1,
+        });
+      }
+      if (url.endsWith("/admin/users/current-admin/sessions")) return jsonResponse(200, []);
+      if (url.endsWith("/admin/sistema")) {
+        return jsonResponse(200, {
+          generatedAt: "2026-08-20T12:00:00.000Z",
+          overallStatus: "CORE_HEALTHY",
+          api: { status: "AVAILABLE", uptimeSeconds: 60, releaseSha: "sha", version: "1", migrationVersion: "m40" },
+          dependencies: {
+            postgres: { status: "AVAILABLE", latencyMs: 1 },
+            redis: { status: "AVAILABLE", latencyMs: 1 },
+            master: { status: "NOT_CONFIGURED", latencyMs: 0 },
+          },
+          security: { status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: false },
+          notifications: {
+            status: "AVAILABLE",
+            transport: "SMTP",
+            transportConfigured: true,
+            backlog: 0,
+            queued: 0,
+            processing: 0,
+            retryPending: 0,
+            failed: 0,
+            unknownResult: 0,
+            deadLetter: 0,
+          },
+        });
       }
       if (url.includes("/admin/users/current-admin/security-events")) {
         return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
@@ -289,7 +341,7 @@ describe("router", () => {
     expect(await screen.findByRole("heading", { name: "Seguridad de mi cuenta" })).toBeInTheDocument();
     expect(screen.getByText("Sin eventos de seguridad registrados")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Seguridad" })).toHaveAttribute("href", "/admin/seguridad");
-    expect(userDetailRequested).toBe(false);
+    expect(userDetailRequested).toBe(true);
   });
 
   it.each(["/admin/sesiones", "/admin/seguridad"])("keeps %s behind its explicit permission", async (path) => {
@@ -306,6 +358,7 @@ describe("router", () => {
         if (url.endsWith("/admin/sistema")) {
           return jsonResponse(200, {
             generatedAt: "2026-08-19T18:00:00.000Z",
+            overallStatus: "CORE_UNHEALTHY",
             api: {
               status: "AVAILABLE",
               uptimeSeconds: 60,
@@ -318,7 +371,19 @@ describe("router", () => {
               redis: { status: "UNAVAILABLE", latencyMs: 3_000 },
               master: { status: "NOT_CONFIGURED", latencyMs: 0 },
             },
-            notifications: { status: "UNKNOWN", backlog: null, failed: null, deadLetter: null },
+            security: { status: "NOT_VERIFIED", recoveryChannel: "NOT_CONFIGURED", mfaRequired: false },
+            notifications: {
+              status: "NOT_CONFIGURED",
+              transport: "NOOP",
+              transportConfigured: false,
+              backlog: null,
+              queued: null,
+              processing: null,
+              retryPending: null,
+              failed: null,
+              unknownResult: null,
+              deadLetter: null,
+            },
           });
         }
         return undefined;
@@ -328,7 +393,7 @@ describe("router", () => {
     expect(await screen.findByRole("heading", { name: "Estado del sistema" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sistema" })).toHaveAttribute("href", "/admin/sistema");
     expect(await screen.findByText("No disponible")).toBeInTheDocument();
-    expect(screen.getByText("No configurado")).toBeInTheDocument();
+    expect(screen.getAllByText("No configurado").length).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps /admin/sistema and its navigation entry behind settings.manage", async () => {

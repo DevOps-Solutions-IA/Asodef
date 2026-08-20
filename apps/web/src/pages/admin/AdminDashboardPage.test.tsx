@@ -118,6 +118,7 @@ describe("AdminDashboardPage", () => {
         if (url.includes("/admin/sistema")) {
           return jsonResponse(200, {
             generatedAt: "2026-08-20T12:00:00.000Z",
+            overallStatus: "CORE_UNHEALTHY",
             api: {
               status: "AVAILABLE",
               uptimeSeconds: 7_560,
@@ -130,7 +131,12 @@ describe("AdminDashboardPage", () => {
               redis: { status: "UNAVAILABLE", latencyMs: 3_000 },
               master: { status: "NOT_CONFIGURED", latencyMs: 0 },
             },
-            notifications: { status: "AVAILABLE", backlog: 4, failed: 1, deadLetter: 0 },
+            security: { status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: false },
+            notifications: {
+              status: "AVAILABLE", transport: "SMTP", transportConfigured: true,
+              backlog: 4, queued: 2, processing: 1, retryPending: 1,
+              failed: 1, unknownResult: 0, deadLetter: 0,
+            },
           });
         }
         if (url.includes("/admin/users/stats")) {

@@ -172,12 +172,14 @@ describe("Global ValidationPipe (integration, real HTTP via the exact configureA
       statusCode: 400,
       error: "Bad Request",
       code: "VALIDATION_ERROR",
+      errorCode: "VALIDATION_ERROR",
       classification: "VALIDATION",
       path: "/api/v1/test-validation",
     });
     expect(response.body.timestamp).toBeDefined();
     expect(response.body.requestId).toBeDefined();
     expect(response.body.correlationId).toBeDefined();
+    expect(response.body.safeMessage).toEqual(response.body.message);
     expect(response.body.stack).toBeUndefined();
   });
 
@@ -188,8 +190,10 @@ describe("Global ValidationPipe (integration, real HTTP via the exact configureA
     expect(response.body).toMatchObject({
       statusCode: 500,
       code: "INTERNAL_ERROR",
+      errorCode: "INTERNAL_ERROR",
       classification: "UNKNOWN",
       message: "Internal server error",
+      safeMessage: "Internal server error",
     });
     expect(JSON.stringify(response.body)).not.toContain("must-never-reach-the-client");
     expect(response.body.stack).toBeUndefined();

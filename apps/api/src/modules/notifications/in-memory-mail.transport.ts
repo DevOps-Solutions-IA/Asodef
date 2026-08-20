@@ -14,6 +14,10 @@ import type { MailSendResult, MailTransport, OutboundEmailMessage } from "./mail
 export class InMemoryMailTransport implements MailTransport {
   readonly sentMessages: OutboundEmailMessage[] = [];
 
+  checkHealth(): Promise<"AVAILABLE"> {
+    return Promise.resolve("AVAILABLE");
+  }
+
   send(message: OutboundEmailMessage): Promise<MailSendResult> {
     this.sentMessages.push(message);
     return Promise.resolve({ delivered: true, providerMessageId: `in-memory-${this.sentMessages.length}` });

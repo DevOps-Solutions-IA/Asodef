@@ -124,6 +124,13 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
     });
   }
 
+  /** Sanitized technical probe consumed by the administrative system page.
+   * Concrete transports never return hostnames, credentials or provider
+   * errors across this boundary. */
+  checkTransportHealth(): Promise<"AVAILABLE" | "UNAVAILABLE" | "NOT_CONFIGURED"> {
+    return this.mailTransport.checkHealth();
+  }
+
   /** Transaction-aware required enqueue for password recovery. Delivery is
    * deliberately not scheduled inside the transaction: the durable poller
    * can observe the encrypted row only after the surrounding transaction
@@ -372,6 +379,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
    * failure-mode tests can invoke the same worker path without a second
    * implementation. */
   async processAvailableJobs(): Promise<number> {
+    await this.quarantineExpiredProcessingLeases();
     const jobs = await this.claimJobs();
     await Promise.all(jobs.map((job) => this.deliverClaimedJob(job)));
     return jobs.length;
@@ -400,12 +408,8 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
       WITH candidates AS (
         SELECT "id"
         FROM "notification_jobs"
-        WHERE (
-          ("status" IN ('QUEUED'::"notification_status", 'RETRY_PENDING'::"notification_status")
-            AND "next_attempt_at" <= NOW())
-          OR
-          ("status" = 'PROCESSING'::"notification_status" AND "lock_expires_at" <= NOW())
-        )
+        WHERE "status" IN ('QUEUED'::"notification_status", 'RETRY_PENDING'::"notification_status")
+          AND "next_attempt_at" <= NOW()
         ORDER BY "next_attempt_at" ASC, "created_at" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT ${CLAIM_BATCH_SIZE}
@@ -429,6 +433,49 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
                 job."max_attempts" AS "maxAttempts",
                 job."payload_encrypted" AS "payloadEncrypted"
     `);
+  }
+
+  /**
+   * A worker may die after SMTP accepted a message but before PostgreSQL
+   * recorded SENT. Once its dispatch lease expires there is no reliable way
+   * to distinguish that case from a crash immediately before send. Retrying
+   * would therefore be a blind duplicate-delivery risk. Park the job for
+   * operator reconciliation instead; UNKNOWN_RESULT is deliberately terminal.
+   */
+  private async quarantineExpiredProcessingLeases(): Promise<void> {
+    const jobs = await this.prisma.$queryRaw<Array<{ id: string; userId: string | null; type: NotificationType }>>(Prisma.sql`
+      WITH candidates AS (
+        SELECT "id"
+        FROM "notification_jobs"
+        WHERE "status" = 'PROCESSING'::"notification_status"
+          AND "lock_expires_at" <= NOW()
+        FOR UPDATE SKIP LOCKED
+        LIMIT ${CLAIM_BATCH_SIZE}
+      )
+      UPDATE "notification_jobs" AS job
+      SET "status" = 'UNKNOWN_RESULT'::"notification_status",
+          "failure_reason" = 'LEASE_EXPIRED_DURING_DISPATCH',
+          "locked_at" = NULL,
+          "lock_expires_at" = NULL,
+          "locked_by" = NULL,
+          "updated_at" = NOW()
+      FROM candidates
+      WHERE job."id" = candidates."id"
+      RETURNING job."id", job."user_id" AS "userId", job."type"
+    `);
+
+    await Promise.all(jobs.map((job) => job.userId && (job.type === "PASSWORD_RESET" || job.type === "PASSWORD_CHANGED")
+      ? this.securityEventService.record({
+          type: "PASSWORD_NOTIFICATION_FAILED",
+          userId: job.userId,
+          metadata: {
+            jobId: job.id,
+            failureReason: "LEASE_EXPIRED_DURING_DISPATCH",
+            terminal: true,
+            outcome: "UNKNOWN_RESULT",
+          },
+        })
+      : Promise.resolve()));
   }
 
   private async deliverClaimedJob(job: ClaimedNotificationJob): Promise<void> {

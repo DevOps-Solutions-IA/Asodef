@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { AccountUnlockService } from "./account-unlock.service";
 import { SecurityEventsModule } from "../../common/security-events/security-events.module";
+import { SecurityEventService } from "../../common/security-events/security-event.service";
 import { PrismaModule } from "../../database/prisma.module";
 import { PrismaService } from "../../database/prisma.service";
 
@@ -34,7 +35,7 @@ describe("AccountUnlockService (integration, real Postgres)", () => {
   }
 
   function uniqueContext() {
-    return { ipAddress: "203.0.113.50", userAgent: "jest-agent", requestId: randomUUID() };
+    return { ipAddress: "203.0.113.50", userAgent: "jest-agent", requestId: randomUUID(), correlationId: randomUUID() };
   }
 
   async function createUser(overrides: { lockedUntil?: Date | null; failedLoginAttempts?: number; status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" } = {}) {
@@ -208,7 +209,41 @@ describe("AccountUnlockService (integration, real Postgres)", () => {
       where: { userId: actorId, type: "ADMINISTRATIVE_UNLOCK" },
     });
     expect(event.userId).toBe(actorId);
+    expect(event.actorUserId).toBe(actorId);
+    expect(event.subjectUserId).toBe(target.id);
+    expect(event.result).toBe("SUCCESS");
+    expect(event.reason).toBe("full audit trail check");
     expect(event.requestId).toBe(context.requestId);
+    expect(event.correlationId).toBe(context.correlationId);
     expect(event.metadata).toMatchObject({ targetUserId: target.id, reason: "full audit trail check" });
+  });
+
+  it("rolls the unlock back when its mandatory security event cannot be persisted", async () => {
+    const actor = await createUser();
+    const target = await createUser({ lockedUntil: new Date(Date.now() + 60_000), failedLoginAttempts: 5 });
+    const securityEvents = moduleRef.get(SecurityEventService);
+    const failure = jest.spyOn(securityEvents, "recordRequired").mockRejectedValueOnce(new Error("event unavailable"));
+
+    await expect(service.unlockAccount(superAdminActor(actor.id), target.id, "required evidence", uniqueContext()))
+      .rejects.toThrow("event unavailable");
+
+    const persisted = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(persisted.failedLoginAttempts).toBe(5);
+    expect(persisted.lockedUntil).not.toBeNull();
+    failure.mockRestore();
+  });
+
+  it("fails with conflict when the lockout state changes before its CAS claim", async () => {
+    const actor = await createUser();
+    const target = await createUser({ lockedUntil: new Date(Date.now() + 60_000), failedLoginAttempts: 5 });
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    const transactionSpy = jest.spyOn(prisma, "$transaction").mockImplementationOnce((async (callback: Parameters<typeof prisma.$transaction>[0], options?: Parameters<typeof prisma.$transaction>[1]) => {
+      await prisma.user.update({ where: { id: target.id }, data: { failedLoginAttempts: 6 } });
+      return originalTransaction(callback as never, options as never);
+    }) as typeof prisma.$transaction);
+
+    await expect(service.unlockAccount(superAdminActor(actor.id), target.id, "concurrent state", uniqueContext()))
+      .rejects.toThrow(ConflictException);
+    transactionSpy.mockRestore();
   });
 });

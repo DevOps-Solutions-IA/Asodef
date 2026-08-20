@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from "rea
 import { Alert, Button, Dialog, FormField, Input, PasswordInput } from "@asodef/ui";
 import { ApiError } from "../api-error";
 import { verifyMfaStepUp } from "./auth-api";
+import { getMfaErrorMessage } from "./auth-error-messages";
 
 const STEP_UP_MESSAGE = "Se requiere autenticación reciente para realizar esta acción.";
 
@@ -103,8 +104,12 @@ export function useStepUpAction() {
     setError(null);
     try {
       await verifyMfaStepUp({ password, code: normalizedCode });
-    } catch {
-      setError("No pudimos verificar la contraseña y el código. Revisa los datos e intenta nuevamente.");
+    } catch (cause) {
+      // Preserve the backend's safe failure category. A Redis/dependency
+      // outage, rate limit or expired session must never be presented as a
+      // wrong factor: that misleads the operator into retrying a condition
+      // that cannot succeed and hides an operational incident.
+      setError(getMfaErrorMessage(cause).message);
       setIsVerifying(false);
       return;
     }

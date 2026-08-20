@@ -27,6 +27,9 @@ export interface MailSendResult {
  */
 export interface MailTransport {
   send(message: OutboundEmailMessage): Promise<MailSendResult>;
+  /** Technical capability probe only. It never sends a message and must not
+   * expose transport configuration or provider error details. */
+  checkHealth(): Promise<"AVAILABLE" | "UNAVAILABLE" | "NOT_CONFIGURED">;
 }
 
 /** DI token - MailTransport is a type-only interface and cannot itself be

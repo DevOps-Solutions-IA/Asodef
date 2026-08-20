@@ -88,11 +88,12 @@ export class AdminMfaService {
       enrollmentKeys,
       this.config.get("ADMIN_STEP_UP_RATE_LIMIT_WINDOW_SECONDS", { infer: true }),
     );
+    // Fast-path only. The same invariant is checked again from a locked row
+    // inside the transaction below and this value is never used to write.
     const existing = await this.prisma.adminMfaCredential.findUnique({ where: { userId } });
     if (existing?.status === "ACTIVE") {
       throw new MfaException("MFA_ALREADY_ENABLED", "MFA ya está habilitado.");
     }
-
     const secret = new Secret({ size: 20 });
     const secretBase32 = secret.base32;
     const expiresAt = new Date(Date.now() + this.config.get("ADMIN_MFA_ENROLLMENT_TTL_SECONDS", { infer: true }) * 1000);
@@ -100,6 +101,19 @@ export class AdminMfaService {
 
     await this.prisma.$transaction(async (tx) => {
       await this.assertCurrentEnrollmentPrincipal(tx, user, sessionId, new Date());
+      // Serialize enrollment replacement with confirmation/revocation. The
+      // status must be decided from the locked row, never from a pre-transaction
+      // read: otherwise a concurrent confirmation could activate the current
+      // generation and this upsert could degrade it back to PENDING (ABA).
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "admin_mfa_credentials"
+        WHERE "user_id" = ${user.id}::uuid
+        FOR UPDATE
+      `);
+      const currentCredential = await tx.adminMfaCredential.findUnique({ where: { userId: user.id } });
+      if (currentCredential?.status === "ACTIVE") {
+        throw new MfaException("MFA_ALREADY_ENABLED", "MFA ya está habilitado.");
+      }
       const credential = await tx.adminMfaCredential.upsert({
         where: { userId },
         create: { userId, secretEncrypted: encrypted, pendingExpiresAt: expiresAt },
@@ -189,7 +203,12 @@ export class AdminMfaService {
     await this.prisma.$transaction(async (tx) => {
       await this.assertCurrentEnrollmentPrincipal(tx, user, sessionId, activatedAt);
       const activated = await tx.adminMfaCredential.updateMany({
-        where: { id: credential.id, status: "PENDING", pendingExpiresAt: { gt: activatedAt } },
+        where: {
+          id: credential.id,
+          status: "PENDING",
+          secretEncrypted: credential.secretEncrypted,
+          pendingExpiresAt: { equals: credential.pendingExpiresAt, gt: activatedAt },
+        },
         data: {
           status: "ACTIVE",
           confirmedAt: activatedAt,
@@ -204,6 +223,7 @@ export class AdminMfaService {
       await tx.adminMfaRecoveryCode.createMany({
         data: hashes.map((codeHash) => ({ credentialId: credential.id, codeHash })),
       });
+      await tx.adminMfaLoginChallenge.deleteMany({ where: { userId: user.id, usedAt: null } });
       await this.securityEvents.recordRequired(tx, {
         type: "MFA_ENABLED",
         userId: user.id,
@@ -238,7 +258,11 @@ export class AdminMfaService {
       throw new MfaException("MFA_ENROLLMENT_REQUIRED", "La autenticación multifactor debe estar configurada.");
     }
 
-    const rawToken = randomBytes(32).toString("base64url");
+    // Bind the challenge to this exact credential generation without
+    // persisting secret material in the challenge row. Revoke/re-enroll can
+    // never make a previously issued ceremony valid against a new factor.
+    const generation = sha256(credential.secretEncrypted);
+    const rawToken = `${randomBytes(32).toString("base64url")}.${generation}`;
     const expiresAt = new Date(Date.now() + this.config.get("ADMIN_MFA_CHALLENGE_TTL_SECONDS", { infer: true }) * 1000);
     await this.prisma.adminMfaLoginChallenge.create({
       data: {
@@ -297,6 +321,10 @@ export class AdminMfaService {
 
     const credential = await this.prisma.adminMfaCredential.findUnique({ where: { userId: challenge.userId } });
     if (!credential || credential.status !== "ACTIVE") throw this.invalidChallenge();
+    const challengeGeneration = rawToken.split(".")[1];
+    if (!challengeGeneration || challengeGeneration !== sha256(credential.secretEncrypted)) {
+      throw this.invalidChallenge();
+    }
     const factor = await this.prepareStepUpFactor(
       credential.id,
       credential.secretEncrypted,
@@ -496,6 +524,7 @@ export class AdminMfaService {
       }
       await tx.adminMfaRecoveryCode.deleteMany({ where: { credentialId: credential.id } });
       await tx.adminMfaRecoveryCode.createMany({ data: hashes.map((codeHash) => ({ credentialId: credential.id, codeHash })) });
+      await tx.adminMfaLoginChallenge.deleteMany({ where: { userId: user.id, usedAt: null } });
       await this.securityEvents.recordRequired(tx, {
         type: "MFA_RECOVERY_CODES_REGENERATED",
         userId: user.id,
@@ -533,6 +562,7 @@ export class AdminMfaService {
       });
       if (revoked.count !== 1) throw new MfaException("MFA_CONFLICT", "La credencial MFA cambió concurrentemente.");
       await tx.adminMfaRecoveryCode.deleteMany({ where: { credentialId: credential.id } });
+      await tx.adminMfaLoginChallenge.deleteMany({ where: { userId: user.id, usedAt: null } });
       // Assurance derived from this credential cannot outlive its
       // revocation. Clear every session atomically with the credential so a
       // stale mfaVerifiedAt cannot combine with a later password-only action.

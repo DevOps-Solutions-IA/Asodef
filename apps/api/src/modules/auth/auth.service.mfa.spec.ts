@@ -2,6 +2,60 @@ import { AuthService } from "./auth.service";
 import { MfaRequiredException } from "./mfa/mfa.types";
 
 describe("AuthService MFA login boundary", () => {
+  it("does not refresh a password-only official-admin session after enforcement is enabled", async () => {
+    const transaction = jest.fn();
+    const service = new AuthService(
+      {
+        user: { findUnique: jest.fn().mockResolvedValue({ id: "admin-1", email: "admin@asodef.com.co", status: "ACTIVE" }) },
+        $transaction: transaction,
+      } as never,
+      {} as never,
+      {} as never,
+      {
+        findByRawRefreshToken: jest.fn().mockResolvedValue({
+          id: "session-1", userId: "admin-1", mfaVerifiedAt: null,
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { mayAuthenticate: jest.fn().mockReturnValue(true) } as never,
+      { isEnforcementRequiredFor: jest.fn().mockReturnValue(true) } as never,
+    );
+
+    await expect(service.refresh("password-only-refresh", {})).rejects.toMatchObject({ status: 401 });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("rolls refresh back when concurrent credential change clears locked assurance", async () => {
+    const tx = {};
+    const service = new AuthService(
+      {
+        user: { findUnique: jest.fn().mockResolvedValue({ id: "admin-1", email: "admin@asodef.com.co", status: "ACTIVE" }) },
+        $transaction: jest.fn((callback: (client: object) => unknown) => callback(tx)),
+      } as never,
+      {} as never,
+      { signAccessToken: jest.fn() } as never,
+      {
+        findByRawRefreshToken: jest.fn().mockResolvedValue({
+          id: "session-1", userId: "admin-1", mfaVerifiedAt: new Date(),
+        }),
+        rotateSession: jest.fn().mockResolvedValue({
+          outcome: "rotated", rawRefreshToken: "new-refresh", session: { id: "session-2", mfaVerifiedAt: null },
+        }),
+      } as never,
+      {} as never,
+      { recordRequired: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      { mayAuthenticate: jest.fn().mockReturnValue(true) } as never,
+      { isEnforcementRequiredFor: jest.fn().mockReturnValue(true) } as never,
+    );
+
+    await expect(service.refresh("old-refresh", {})).rejects.toMatchObject({ status: 401 });
+  });
+
   it("creates no Session, access token, or login-success event before the required factor", async () => {
     const user = {
       id: "00000000-0000-4000-8000-000000000001",

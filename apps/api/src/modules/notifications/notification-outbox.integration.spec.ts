@@ -13,6 +13,10 @@ class ControllableMailTransport implements MailTransport {
   mode: "success" | "failure" | "unknown" | "throw" = "success";
   readonly messages: OutboundEmailMessage[] = [];
 
+  checkHealth(): Promise<"AVAILABLE"> {
+    return Promise.resolve("AVAILABLE");
+  }
+
   async send(message: OutboundEmailMessage): Promise<MailSendResult> {
     this.messages.push(message);
     if (this.mode === "throw") throw new Error("sensitive transport detail must not persist");
@@ -115,7 +119,7 @@ describe("NotificationService durable outbox (integration, real Postgres)", () =
     expect(job.providerMessageId).toBe(`provider-${id}`);
   });
 
-  it("recovers an expired PROCESSING lease after a worker crash", async () => {
+  it("quarantines an expired PROCESSING lease without risking a duplicate dispatch", async () => {
     const id = await queueReset();
     await prisma.notificationJob.update({
       where: { id },
@@ -127,10 +131,43 @@ describe("NotificationService durable outbox (integration, real Postgres)", () =
       },
     });
 
-    await expect(service.processAvailableJobs()).resolves.toBe(1);
+    await expect(service.processAvailableJobs()).resolves.toBe(0);
 
-    expect(transport.messages.filter((message) => message.idempotencyKey === id)).toHaveLength(1);
-    expect((await prisma.notificationJob.findUniqueOrThrow({ where: { id } })).status).toBe("SENT");
+    expect(transport.messages.filter((message) => message.idempotencyKey === id)).toHaveLength(0);
+    const job = await prisma.notificationJob.findUniqueOrThrow({ where: { id } });
+    expect(job.status).toBe("UNKNOWN_RESULT");
+    expect(job.failureReason).toBe("LEASE_EXPIRED_DURING_DISPATCH");
+    expect(job.lockedBy).toBeNull();
+  });
+
+  it("does not mislabel an uncertain security alert as a password-notification failure", async () => {
+    const id = await service.queueSecurityAlert({
+      recipientEmail: `${randomUUID()}@example.com`,
+      userId,
+      correlationId: randomUUID(),
+      subject: "Security test",
+      textBody: "Safe test body",
+    });
+    await prisma.notificationJob.update({
+      where: { id },
+      data: {
+        status: "PROCESSING",
+        lockedBy: "crashed-worker",
+        lockedAt: new Date(Date.now() - 120_000),
+        lockExpiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    await expect(service.processAvailableJobs()).resolves.toBe(0);
+
+    expect((await prisma.notificationJob.findUniqueOrThrow({ where: { id } })).status).toBe("UNKNOWN_RESULT");
+    expect(await prisma.securityEvent.count({
+      where: {
+        userId,
+        type: "PASSWORD_NOTIFICATION_FAILED",
+        metadata: { path: ["jobId"], equals: id },
+      },
+    })).toBe(0);
   });
 
   it("schedules sanitized exponential retry metadata after transport failure", async () => {

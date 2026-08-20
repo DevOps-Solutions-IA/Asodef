@@ -406,6 +406,13 @@ export class PasswordRecoveryService {
         // The acting session retains its refresh token; all other sessions,
         // the password mutation and both mandatory events commit atomically.
         await this.sessionService.revokeAllForUserExcept(user.id, currentSessionId, "PASSWORD_CHANGED", tx);
+        const assuranceCleared = await this.sessionService.clearAssuranceForUsableSession(
+          currentSessionId,
+          user.id,
+          tx,
+          changedAt,
+        );
+        if (!assuranceCleared) throw this.concurrentUpdate();
         await this.securityEventService.recordRequired(tx, {
           type: "PASSWORD_CHANGED",
           userId: user.id,

@@ -43,15 +43,33 @@ describe("useStepUpAction", () => {
 
   it("keeps the challenge open and does not invoke the action after a wrong factor", async () => {
     const action = vi.fn().mockRejectedValueOnce(stepUpRequired());
-    vi.stubGlobal("fetch", vi.fn(() => response(401, { statusCode: 401, error: "Unauthorized", message: "Invalid" })));
+    const fetchMock = vi.fn(() => response(401, { statusCode: 401, error: "Unauthorized", message: "Invalid", code: "MFA_PASSWORD_INVALID" }));
+    vi.stubGlobal("fetch", fetchMock);
     render(<Harness action={action} />);
     await userEvent.click(screen.getByRole("button", { name: "Ejecutar" }));
     await userEvent.type(screen.getByLabelText(/Contraseña actual/), "ValidPassword!23");
     await userEvent.type(screen.getByLabelText(/Código de verificación/), "123456");
     await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(await screen.findByText(/No pudimos verificar/)).toBeInTheDocument();
+    expect(await screen.findByText("La contraseña actual no es válida.")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(action).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [429, { statusCode: 429, error: "Too Many Requests", message: "limited" }, "Demasiados intentos"],
+    [503, { statusCode: 503, error: "Unavailable", message: "redis detail" }, "El servicio no está disponible"],
+    [401, { statusCode: 401, error: "Unauthorized", message: "expired" }, "Debes iniciar sesión"],
+  ])("presents the safe operational category for HTTP %s", async (status, body, expected) => {
+    const action = vi.fn().mockRejectedValueOnce(stepUpRequired());
+    vi.stubGlobal("fetch", vi.fn(() => response(status, body)));
+    render(<Harness action={action} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ejecutar" }));
+    await userEvent.type(screen.getByLabelText(/Contraseña actual/), "ValidPassword!23");
+    await userEvent.type(screen.getByLabelText(/Código de verificación/), "123456");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(await screen.findByText(new RegExp(expected))).toBeInTheDocument();
+    expect(screen.queryByText(/redis detail|limited|expired/)).not.toBeInTheDocument();
   });
 
   it("verifies once and retries the exact action once without a loop", async () => {

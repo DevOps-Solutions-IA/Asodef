@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BellRing, Database, RefreshCw, Server, Waypoints } from "lucide-react";
-import { Button, cn, ErrorState, PageHeader, Skeleton, StatusBadge, type StatusTone } from "@asodef/ui";
+import { AlertTriangle, BellRing, Database, RefreshCw, Server, ShieldCheck, Waypoints } from "lucide-react";
+import { Alert, Button, cn, ErrorState, PageHeader, Skeleton, StatusBadge, type StatusTone } from "@asodef/ui";
 import { getAdminSystemStatus } from "../../lib/admin/admin-system-api";
 import type { AdminSystemStatus, OperationalStatus } from "../../lib/admin/admin-system-types";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
@@ -44,6 +44,14 @@ export function AdminSystemPage() {
 function SystemSnapshot({ data }: { data: AdminSystemStatus }) {
   return (
     <>
+      <Alert variant={data.overallStatus === "CORE_HEALTHY" ? "success" : data.overallStatus === "CORE_UNHEALTHY" ? "danger" : "warning"}>
+        {data.overallStatus === "CORE_HEALTHY"
+          ? "El núcleo administrativo está saludable."
+          : data.overallStatus === "DEGRADED_OPTIONAL_DEPENDENCY"
+            ? "El núcleo administrativo está saludable, pero una dependencia opcional está degradada."
+            : "El núcleo administrativo no cumple sus dependencias obligatorias."}
+      </Alert>
+
       <section aria-labelledby="dependencies-heading" className="flex flex-col gap-4">
         <div>
           <h2 id="dependencies-heading" className="font-display text-lg font-semibold text-text-main">Dependencias</h2>
@@ -57,19 +65,39 @@ function SystemSnapshot({ data }: { data: AdminSystemStatus }) {
         </div>
       </section>
 
+      <section aria-labelledby="security-heading" className="data-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="security-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main">
+              <ShieldCheck aria-hidden="true" className="h-5 w-5 text-brand-dark" /> Seguridad administrativa
+            </h2>
+            <p className="mt-1 text-sm text-text-muted">Invariante de identidad, canal de recuperación y política MFA observados por el backend.</p>
+          </div>
+          <StatusBadge tone={data.security.status === "VERIFIED" ? "success" : "failed"} label={data.security.status === "VERIFIED" ? "Verificada" : "No verificada"} />
+        </div>
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+          <TextMetric label="Canal de recuperación" value={data.security.recoveryChannel === "CONFIGURED" ? "Configurado" : "No configurado"} />
+          <TextMetric label="MFA obligatorio" value={data.security.mfaRequired ? "Sí" : "No — activación escalonada"} />
+        </dl>
+      </section>
+
       <section aria-labelledby="notifications-heading" className="data-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 id="notifications-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main">
               <BellRing aria-hidden="true" className="h-5 w-5 text-brand-dark" /> Notificaciones
             </h2>
-            <p className="mt-1 text-sm text-text-muted">Cola durable y entregas que requieren atención operativa.</p>
+            <p className="mt-1 text-sm text-text-muted">Cola durable y transporte {data.notifications.transportConfigured ? "SMTP configurado" : "no configurado"}.</p>
           </div>
           <OperationalBadge status={data.notifications.status} />
         </div>
-        <dl className="mt-5 grid gap-3 sm:grid-cols-3">
-          <CountMetric label="Pendientes en cola" value={data.notifications.backlog} />
-          <CountMetric label="Fallidas / resultado incierto" value={data.notifications.failed} attention />
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <CountMetric label="En cola" value={data.notifications.queued} />
+          <CountMetric label="Procesando" value={data.notifications.processing} />
+          <CountMetric label="Reintento pendiente" value={data.notifications.retryPending} />
+          <CountMetric label="Backlog total" value={data.notifications.backlog} />
+          <CountMetric label="Fallidas" value={data.notifications.failed} attention />
+          <CountMetric label="Resultado incierto" value={data.notifications.unknownResult} attention />
           <CountMetric label="Dead letter" value={data.notifications.deadLetter} attention />
         </dl>
       </section>

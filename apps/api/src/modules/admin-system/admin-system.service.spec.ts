@@ -2,6 +2,10 @@ import { AdminSystemService } from "./admin-system.service";
 import type { PrismaService } from "../../database/prisma.service";
 import type { RedisService } from "../../common/redis/redis.service";
 import type { MasterHealthService } from "../master/health/master-health.service";
+import type { AdminIdentityInvariantService } from "../auth/admin-identity-invariant.service";
+import type { ConfigService } from "@nestjs/config";
+import type { EnvConfig } from "../../config/env.validation";
+import type { NotificationService } from "../notifications/notification.service";
 
 describe("AdminSystemService", () => {
   function harness() {
@@ -21,12 +25,19 @@ describe("AdminSystemService", () => {
     };
     const redis = { isHealthy: jest.fn().mockResolvedValue(true) };
     const master = { check: jest.fn().mockResolvedValue({ status: "ok" }) };
+    const identity = { getStatus: jest.fn().mockReturnValue({ status: "VERIFIED", verifiedAt: new Date().toISOString() }) };
+    const env = { SMTP_HOST: "smtp.example.test", ADMIN_MFA_REQUIRED: false };
+    const config = { get: jest.fn((key: keyof typeof env) => env[key]) };
+    const notifications = { checkTransportHealth: jest.fn().mockResolvedValue("AVAILABLE") };
     const service = new AdminSystemService(
       prisma as unknown as PrismaService,
       redis as unknown as RedisService,
       master as unknown as MasterHealthService,
+      identity as unknown as AdminIdentityInvariantService,
+      config as unknown as ConfigService<EnvConfig, true>,
+      notifications as unknown as NotificationService,
     );
-    return { service, prisma, redis, master };
+    return { service, prisma, redis, master, identity, env, notifications };
   }
 
   it("reports only live dependency and outbox values", async () => {
@@ -37,7 +48,20 @@ describe("AdminSystemService", () => {
       redis: expect.objectContaining({ status: "AVAILABLE" }),
       master: expect.objectContaining({ status: "AVAILABLE" }),
     });
-    expect(result.notifications).toEqual({ status: "AVAILABLE", backlog: 6, failed: 7, deadLetter: 4 });
+    expect(result.overallStatus).toBe("CORE_HEALTHY");
+    expect(result.security).toEqual({ status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: false });
+    expect(result.notifications).toEqual({
+      status: "AVAILABLE",
+      transport: "SMTP",
+      transportConfigured: true,
+      backlog: 6,
+      queued: 2,
+      processing: 1,
+      retryPending: 3,
+      failed: 1,
+      unknownResult: 2,
+      deadLetter: 4,
+    });
     expect(result.api.migrationVersion).toBe("20260819132100_notification_unknown_result");
     expect(result).not.toHaveProperty("errorRate");
   });
@@ -46,6 +70,40 @@ describe("AdminSystemService", () => {
     const { service, master } = harness();
     master.check.mockResolvedValue({ status: "disabled" });
     expect((await service.getStatus()).dependencies.master.status).toBe("NOT_CONFIGURED");
+    expect((await service.getStatus()).overallStatus).toBe("DEGRADED_OPTIONAL_DEPENDENCY");
+  });
+
+  it("reports missing SMTP configuration as a core recovery failure instead of false green", async () => {
+    const { service, env, notifications } = harness();
+    env.SMTP_HOST = "";
+    notifications.checkTransportHealth.mockResolvedValue("NOT_CONFIGURED");
+    const result = await service.getStatus();
+    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
+    expect(result.notifications).toEqual(expect.objectContaining({
+      status: "NOT_CONFIGURED",
+      transport: "NOOP",
+      transportConfigured: false,
+    }));
+  });
+
+  it("reports configured but unreachable SMTP as unavailable instead of false green", async () => {
+    const { service, notifications } = harness();
+    notifications.checkTransportHealth.mockResolvedValue("UNAVAILABLE");
+    const result = await service.getStatus();
+    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
+    expect(result.notifications).toEqual(expect.objectContaining({
+      status: "UNAVAILABLE",
+      transport: "SMTP",
+      transportConfigured: true,
+    }));
+  });
+
+  it("reports an unverified administrative identity as core unhealthy without exposing identity data", async () => {
+    const { service, identity } = harness();
+    identity.getStatus.mockReturnValue({ status: "NOT_VERIFIED", verifiedAt: null });
+    const result = await service.getStatus();
+    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
+    expect(result.security).toEqual(expect.objectContaining({ status: "NOT_VERIFIED", recoveryChannel: "NOT_CONFIGURED" }));
   });
 
   it("reports dependency failures honestly without throwing or leaking internals", async () => {
@@ -60,7 +118,14 @@ describe("AdminSystemService", () => {
     expect(result.dependencies.postgres.status).toBe("UNAVAILABLE");
     expect(result.dependencies.redis.status).toBe("UNAVAILABLE");
     expect(result.dependencies.master.status).toBe("UNAVAILABLE");
-    expect(result.notifications).toEqual({ status: "UNKNOWN", backlog: null, failed: null, deadLetter: null });
+    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
+    expect(result.notifications).toEqual(expect.objectContaining({
+      status: "UNAVAILABLE",
+      backlog: null,
+      failed: null,
+      unknownResult: null,
+      deadLetter: null,
+    }));
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("private-master");
   });

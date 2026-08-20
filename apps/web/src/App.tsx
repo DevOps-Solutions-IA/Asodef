@@ -22,7 +22,7 @@ export function App() {
           <AuthProvider>
             <CookieConsentProvider>
               <Suspense fallback={<RouteLoadingFallback />}>
-                <RouterProvider router={router} future={{ v7_startTransition: true }} />
+                <RouterProvider router={router} />
               </Suspense>
               <CookieConsentBanner />
             </CookieConsentProvider>

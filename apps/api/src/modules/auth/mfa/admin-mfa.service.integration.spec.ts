@@ -324,6 +324,92 @@ describe("AdminMfaService (integration)", () => {
     expect(await prisma.adminMfaRecoveryCode.count({ where: { credential: { userId: adminUserId } } })).toBe(10);
   });
 
+  it("never degrades an ACTIVE credential when confirmation wins against a stale begin", async () => {
+    const started = await service.beginEnrollment(adminUserId, adminSessionId, PASSWORD, context());
+    const originalFindUnique = prisma.adminMfaCredential.findUnique.bind(prisma.adminMfaCredential);
+    let releaseStaleRead!: () => void;
+    let markStaleRead!: () => void;
+    const staleReadReached = new Promise<void>((resolve) => { markStaleRead = resolve; });
+    const staleReadRelease = new Promise<void>((resolve) => { releaseStaleRead = resolve; });
+    let interceptNextUserLookup = true;
+    const staleReadImplementation = async (args: Parameters<typeof originalFindUnique>[0]) => {
+      const result = await originalFindUnique(args);
+      if (interceptNextUserLookup && "userId" in args.where) {
+        interceptNextUserLookup = false;
+        markStaleRead();
+        await staleReadRelease;
+      }
+      return result;
+    };
+    const findUnique = jest.spyOn(prisma.adminMfaCredential, "findUnique").mockImplementation(
+      staleReadImplementation as unknown as typeof prisma.adminMfaCredential.findUnique,
+    );
+
+    const competingBegin = service.beginEnrollment(adminUserId, adminSessionId, PASSWORD, context());
+    await staleReadReached;
+    try {
+      await expect(service.confirmEnrollment(
+        adminUserId,
+        adminSessionId,
+        PASSWORD,
+        generateCode(started.secret),
+        context(),
+      )).resolves.toMatchObject({ recoveryCodes: expect.any(Array) });
+      releaseStaleRead();
+      await expect(competingBegin).rejects.toMatchObject({ code: "MFA_ALREADY_ENABLED" });
+    } finally {
+      releaseStaleRead();
+      findUnique.mockRestore();
+    }
+
+    expect(await prisma.adminMfaCredential.findUniqueOrThrow({ where: { userId: adminUserId } }))
+      .toMatchObject({ status: "ACTIVE", pendingExpiresAt: null });
+    expect(await prisma.adminMfaRecoveryCode.count({ where: { credential: { userId: adminUserId } } })).toBe(10);
+  });
+
+  it("rejects an enrollment confirmation when another begin replaces its generation mid-flight", async () => {
+    const started = await service.beginEnrollment(adminUserId, adminSessionId, PASSWORD, context());
+    const originalHash = passwordService.hash.bind(passwordService);
+    let injected = false;
+    const race = jest.spyOn(passwordService, "hash").mockImplementation(async (value: string) => {
+      if (!injected) {
+        injected = true;
+        await prisma.adminMfaCredential.update({
+          where: { userId: adminUserId },
+          data: { secretEncrypted: "concurrent-enrollment-generation" },
+        });
+      }
+      return originalHash(value);
+    });
+    try {
+      await expect(service.confirmEnrollment(
+        adminUserId,
+        adminSessionId,
+        PASSWORD,
+        generateCode(started.secret),
+        context(),
+      )).rejects.toMatchObject({ code: "MFA_CONFLICT" });
+    } finally {
+      race.mockRestore();
+    }
+    expect(await prisma.adminMfaCredential.findUniqueOrThrow({ where: { userId: adminUserId } }))
+      .toMatchObject({ status: "PENDING", secretEncrypted: "concurrent-enrollment-generation" });
+    expect(await prisma.adminMfaRecoveryCode.count({ where: { credential: { userId: adminUserId } } })).toBe(0);
+  });
+
+  it("binds outstanding login challenges to the exact MFA credential generation", async () => {
+    const { started } = await enroll();
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: adminUserId } });
+    const challenge = await service.createLoginChallenge(user, context());
+    await prisma.adminMfaCredential.update({
+      where: { userId: adminUserId },
+      data: { secretEncrypted: "replacement-generation" },
+    });
+
+    await expect(completeChallenge(challenge.challengeToken, nextStepCode(started.secret)))
+      .rejects.toMatchObject({ code: "MFA_CHALLENGE_INVALID" });
+  });
+
   it("rolls enrollment activation and recovery codes back when MFA_ENABLED cannot persist", async () => {
     const started = await service.beginEnrollment(adminUserId, adminSessionId, PASSWORD, context());
     const eventFailure = jest.spyOn(securityEventService, "recordRequired").mockRejectedValueOnce(new Error("event unavailable"));

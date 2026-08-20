@@ -7,6 +7,7 @@ import { SessionService } from "../session.service";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import type { AuthenticatedRequest, RequestUser } from "../types/request-user.type";
 import type { EnvConfig } from "../../../config/env.validation";
+import { AdminIdentityPolicy } from "../admin-identity.policy";
 
 const SAFE_AUTH_ERROR_MESSAGE = "No autenticado.";
 
@@ -47,6 +48,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly sessionService: SessionService,
+    private readonly adminIdentityPolicy: AdminIdentityPolicy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -91,7 +93,13 @@ export class JwtAuthGuard implements CanActivate {
       this.sessionService.findUsableByIdForUser(payload.sid, payload.sub),
     ]);
 
-    if (!user || user.status !== "ACTIVE" || !session) {
+    if (!user || user.status !== "ACTIVE" || !session || !this.adminIdentityPolicy.mayAuthenticate(user.email)) {
+      throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
+    }
+
+    if (this.configService.get("ADMIN_MFA_REQUIRED", { infer: true }) &&
+        this.adminIdentityPolicy.isPrivilegedAdminEmail(user.email) &&
+        !session.mfaVerifiedAt) {
       throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
     }
 

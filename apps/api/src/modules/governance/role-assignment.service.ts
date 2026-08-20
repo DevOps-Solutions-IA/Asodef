@@ -4,6 +4,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import { ROLE_NAMES, type RoleName } from "../../database/rbac-catalog";
 import { AdminIdentityPolicy, AdminIdentityPolicyViolation } from "../auth/admin-identity.policy";
+import type { RequestContext } from "../auth/auth.service";
 
 const SAFE_FORBIDDEN_MESSAGE = "No tienes permisos para realizar esta acción.";
 const SAFE_LAST_SUPER_ADMIN_MESSAGE = "No se puede eliminar el último SUPER_ADMIN de la plataforma.";
@@ -32,6 +33,7 @@ export interface RoleChangeOptions {
    * run" support required for a future high-risk admin UI (US-008
    * section 10). */
   preview?: boolean;
+  context?: RequestContext;
 }
 
 /**
@@ -63,9 +65,10 @@ export class RoleAssignmentService {
     targetEmail: string,
     roleNames: readonly string[],
     reason: string,
+    context: RequestContext = {},
   ): Promise<void> {
     if (roleNames.length === 0) return;
-    await this.assertActorIsSuperAdmin(actor, "assignInitialRoles", targetUserId, roleNames.join(","));
+    await this.assertActorIsSuperAdmin(actor, "assignInitialRoles", targetUserId, roleNames.join(","), context);
     this.assertValidReason(reason);
     for (const roleName of roleNames) {
       if (!ROLE_NAMES.includes(roleName as RoleName)) throw new BadRequestException(SAFE_UNKNOWN_ROLE_MESSAGE);
@@ -80,6 +83,10 @@ export class RoleAssignmentService {
         subjectUserId: targetUserId,
         result: "SUCCESS",
         reason,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
         metadata: { targetUserId, roleName, reason },
       });
     }
@@ -92,7 +99,7 @@ export class RoleAssignmentService {
     reason: string,
     options: RoleChangeOptions = {},
   ): Promise<RoleChangeResult> {
-    await this.assertActorIsSuperAdmin(actor, "assignRole", targetUserId, roleName);
+    await this.assertActorIsSuperAdmin(actor, "assignRole", targetUserId, roleName, options.context);
     this.assertValidReason(reason);
     const role = await this.assertKnownRole(roleName);
     const target = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { email: true } });
@@ -120,6 +127,10 @@ export class RoleAssignmentService {
           subjectUserId: targetUserId,
           result: "SUCCESS",
           reason,
+          requestId: options.context?.requestId,
+          correlationId: options.context?.correlationId,
+          ipAddress: options.context?.ipAddress,
+          userAgent: options.context?.userAgent,
           metadata: { targetUserId, roleName, reason },
         });
         return true;
@@ -145,7 +156,7 @@ export class RoleAssignmentService {
     reason: string,
     options: RoleChangeOptions = {},
   ): Promise<RoleChangeResult> {
-    await this.assertActorIsSuperAdmin(actor, "removeRole", targetUserId, roleName);
+    await this.assertActorIsSuperAdmin(actor, "removeRole", targetUserId, roleName, options.context);
     this.assertValidReason(reason);
     const role = await this.assertKnownRole(roleName);
     const target = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { email: true } });
@@ -163,7 +174,7 @@ export class RoleAssignmentService {
       return { applied: false };
     }
 
-    const removed = await this.removeRoleAtomically(actor.actorId, targetUserId, role.id, roleName, reason);
+    const removed = await this.removeRoleAtomically(actor.actorId, targetUserId, role.id, roleName, reason, options.context);
     if (!removed) {
       return { applied: false, alreadyAbsent: true };
     }
@@ -181,6 +192,7 @@ export class RoleAssignmentService {
     roleId: string,
     roleName: string,
     reason: string,
+    context: RequestContext = {},
   ): Promise<boolean> {
     return this.prisma.$transaction(
       async (tx) => {
@@ -197,6 +209,10 @@ export class RoleAssignmentService {
           subjectUserId: targetUserId,
           result: "SUCCESS",
           reason,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
           metadata: { targetUserId, roleName, reason },
         });
         return true;
@@ -226,6 +242,7 @@ export class RoleAssignmentService {
     action: string,
     targetUserId: string,
     roleName: string,
+    context: RequestContext = {},
   ): Promise<void> {
     if (actor.actorRoles.includes("SUPER_ADMIN")) return;
 
@@ -235,6 +252,10 @@ export class RoleAssignmentService {
       actorUserId: actor.actorId,
       subjectUserId: targetUserId,
       result: "DENIED",
+      requestId: context.requestId,
+      correlationId: context.correlationId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
       metadata: { action, targetUserId, roleName, result: "denied" },
     });
     throw new ForbiddenException(SAFE_FORBIDDEN_MESSAGE);

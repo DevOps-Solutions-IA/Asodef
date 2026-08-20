@@ -107,16 +107,16 @@ export class AdminUsersController {
   @RequireStepUp()
   @Post(":userId/roles")
   @HttpCode(HttpStatus.OK)
-  assignRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto) {
-    return this.adminUsersService.assignRole(actor, userId, dto);
+  assignRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto, @Req() request: AuthenticatedRequest) {
+    return this.adminUsersService.assignRole(actor, userId, dto, buildRequestContext(request));
   }
 
   @RequirePermissions("users.roles.manage")
   @RequireStepUp()
   @Post(":userId/roles/revoke")
   @HttpCode(HttpStatus.OK)
-  removeRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto) {
-    return this.adminUsersService.removeRole(actor, userId, dto);
+  removeRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto, @Req() request: AuthenticatedRequest) {
+    return this.adminUsersService.removeRole(actor, userId, dto, buildRequestContext(request));
   }
 
   @RequirePermissions("users.sessions.read")
