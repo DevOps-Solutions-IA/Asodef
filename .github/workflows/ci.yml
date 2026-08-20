@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "20.19"
   PNPM_VERSION: "10.16.0"
   COMPOSE_PROJECT_NAME: "asodef-ci-github-${{ github.run_id }}-${{ github.run_attempt }}"
   CI_POSTGRES_DB: "asodef_ci_github"
@@ -34,6 +34,8 @@ env:
   PUBLIC_API_URL: "http://localhost:3100"
   PUBLIC_APP_URL: "http://localhost:4173"
   CORS_ORIGIN: "http://localhost:4173"
+  ADMIN_ACCOUNT_EMAIL: "admin@asodef.com.co"
+  ADMIN_RECOVERY_EMAIL: "asodefsas@gmail.com"
 
 jobs:
   ci:
@@ -80,6 +82,20 @@ jobs:
           generate_masked_secret ENCRYPTION_KEY
           generate_masked_secret PASSWORD_RESET_TOKEN_SECRET
           generate_masked_secret CONTRACT_DOWNLOAD_TOKEN_SECRET
+
+          e2e_admin_password="$(openssl rand -hex 24)"
+          e2e_mfa_secret="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";process.stdout.write([...randomBytes(32)].map((b)=>a[b&31]).join(""))')"
+          e2e_recovery_codes="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";const code=()=>{const v=[...randomBytes(12)].map((b)=>a[b%a.length]).join("");return `${v.slice(0,4)}-${v.slice(4,8)}-${v.slice(8)}`};process.stdout.write(Array.from({length:10},code).join(","))')"
+          for value in "$e2e_admin_password" "$e2e_mfa_secret" "$e2e_recovery_codes"; do
+            printf '::add-mask::%s\n' "$value"
+          done
+          IFS=',' read -ra e2e_recovery_code_values <<< "$e2e_recovery_codes"
+          for value in "${e2e_recovery_code_values[@]}"; do
+            printf '::add-mask::%s\n' "$value"
+          done
+          printf 'ASODEF_E2E_ADMIN_PASSWORD=%s\n' "$e2e_admin_password" >> "$GITHUB_ENV"
+          printf 'ASODEF_E2E_ADMIN_MFA_SECRET=%s\n' "$e2e_mfa_secret" >> "$GITHUB_ENV"
+          printf 'ASODEF_E2E_ADMIN_RECOVERY_CODES=%s\n' "$e2e_recovery_codes" >> "$GITHUB_ENV"
 
           postgres_password="$(openssl rand -hex 32)"
           database_url="postgresql://${CI_POSTGRES_USER}:${postgres_password}@127.0.0.1:${CI_POSTGRES_PORT}/${CI_POSTGRES_DB}?schema=public"
@@ -155,16 +171,22 @@ jobs:
       - name: Verify lint, strict types, tests, and production build
         run: pnpm ci:check
 
+      - name: Build and inspect immutable runtime images
+        run: scripts/ci-image-check.sh
+
       - name: Prepare guarded ephemeral E2E state
         # Tests intentionally exercise legal seed restoration. E2E state is
         # therefore prepared afterwards, through the real audited publication
         # workflow, so no test mutation can leave a current version in DRAFT.
         env:
           ASODEF_E2E_PREPARE: "true"
+          ADMIN_MFA_REQUIRED: "true"
           NODE_ENV: development
         run: pnpm --filter api ci:prepare-e2e
 
       - name: Start the compiled API in the background
+        env:
+          ADMIN_MFA_REQUIRED: "true"
         run: nohup node apps/api/dist/main.js > api.log 2>&1 &
 
       - name: Wait for the API health endpoint
@@ -202,6 +224,7 @@ jobs:
 
       - name: End-to-end smoke test
         env:
+          ADMIN_MFA_REQUIRED: "true"
           PLAYWRIGHT_BASE_URL: "http://localhost:4173"
         run: pnpm test:e2e
 

@@ -2,6 +2,10 @@
 **/dist
 **/.turbo
 **/coverage
+.env
+.env.*
+**/.env
+**/.env.*
 .git
 .github
 e2e

@@ -1,7 +1,9 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { disconnectTestActorsClient, ensureTestActor, TEST_ACTOR_PASSWORD } from "./support/test-actors";
+import { loginPrivilegedAdmin } from "./support/admin-auth";
+import { disconnectTestActorsClient, ensureTestActor, PRIVILEGED_TEST_EMAIL } from "./support/test-actors";
 
-const ADMIN_EMAIL = "e2e.premium-visual@example.com";
+const ADMIN_EMAIL = PRIVILEGED_TEST_EMAIL;
+test.use({ trace: "off" });
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 960 },
   { name: "tablet", width: 768, height: 1024 },
@@ -16,14 +18,6 @@ async function expectStableViewport(page: Page) {
     viewportWidth: document.documentElement.clientWidth,
   }));
   expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
-}
-
-async function login(page: Page) {
-  await page.goto("/iniciar-sesion");
-  await page.getByLabel("Correo electrónico", { exact: false }).fill(ADMIN_EMAIL);
-  await page.getByRole("textbox", { name: "Contraseña" }).fill(TEST_ACTOR_PASSWORD);
-  await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page).not.toHaveURL(/iniciar-sesion/);
 }
 
 test.describe("premium enterprise visual system", () => {
@@ -52,7 +46,8 @@ test.describe("premium enterprise visual system", () => {
       await page.goto("/pagos");
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-payments.png`), fullPage: true });
 
-      await login(page);
+      const recoveryCodeIndex = VIEWPORTS.findIndex(({ name }) => name === viewport.name) + 1;
+      await loginPrivilegedAdmin(page, { kind: "recovery", index: recoveryCodeIndex });
       for (const route of ["/admin", "/admin/crm/empresas", "/admin/legal"] as const) {
         await page.goto(route);
         await expect(page.locator("main#main-content")).toBeVisible();

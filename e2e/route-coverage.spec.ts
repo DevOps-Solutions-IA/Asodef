@@ -1,15 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
-import { disconnectTestActorsClient, ensureTestActor, TEST_ACTOR_PASSWORD } from "./support/test-actors";
+import { expect, test } from "@playwright/test";
+import { loginPrivilegedAdmin } from "./support/admin-auth";
+import { disconnectTestActorsClient, ensureTestActor, PRIVILEGED_TEST_EMAIL } from "./support/test-actors";
 
-const ADMIN_EMAIL = "e2e.super-admin.routes@example.com";
+const ADMIN_EMAIL = PRIVILEGED_TEST_EMAIL;
 
-async function login(page: Page, email: string) {
-  await page.goto("/iniciar-sesion");
-  await page.getByLabel("Correo electrónico", { exact: false }).fill(email);
-  await page.getByRole("textbox", { name: "Contraseña" }).fill(TEST_ACTOR_PASSWORD);
-  await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page).not.toHaveURL(/iniciar-sesion/);
-}
+test.use({ trace: "off" });
 
 test.describe("cobertura de rutas solicitadas", () => {
   test.beforeAll(async () => {
@@ -55,7 +50,7 @@ test.describe("cobertura de rutas solicitadas", () => {
   });
 
   test("SUPER_ADMIN accede a cada área administrativa requerida", async ({ page }) => {
-    await login(page, ADMIN_EMAIL);
+    await loginPrivilegedAdmin(page, { kind: "recovery", index: 0 });
     const routes = [
       "/admin", "/admin/legal", "/admin/crm", "/admin/crm/empresas", "/admin/pqr",
       "/admin/solicitudes-de-datos", "/admin/pagos", "/admin/reportes", "/admin/contratos", "/admin/comunicaciones",
