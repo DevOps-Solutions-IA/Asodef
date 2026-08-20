@@ -23,8 +23,15 @@ printf 'check=password_file '
 require_secure_password_file
 echo PASS
 
-printf 'check=port_conflicts '
-if ss -lnt | awk '{print $4}' | grep -Eq '(^|:)(25|587)$'; then die mail_port_conflict; fi
+printf 'check=listener_scope '
+mail_unexpected_listener=$(ss -lntH | awk -v private="$MAIL_LISTEN_ADDRESS" '
+  {
+    address=$4
+    if (address ~ /:587$/ && address != private ":587") print address
+    if (address ~ /:25$/ && address != "127.0.0.1:25" && address != private ":25") print address
+  }
+' | head -n 1)
+[ -z "$mail_unexpected_listener" ] || die unexpected_public_mail_listener
 echo PASS
 
 echo 'status=ok mode=read-only-preflight'

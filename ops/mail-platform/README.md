@@ -27,31 +27,42 @@ accounts are deliberately out of scope.
 
 ## Ordered activation
 
-1. Confirm `172.25.52.0/29` does not overlap any Docker network, host route or
-   private connectivity. Copy `mail-platform.env.example` outside Git as a
-   root-owned regular file (not a symlink), set mode `0600`, and keep approval
-   `NO`.
-2. Operator creates the root-only SMTP password file (`0600`). Never pass the
-   password as an argument or environment variable.
-3. Run `create-mail-network.sh CONFIG --dry-run`; after operator approval use
-   `--apply`. Add `docker-compose.mail-platform.yml` only to the public ASODEF
-   API Compose invocation and recreate only that API when the release gate permits.
-4. Publish `smtp` A and request matching PTR from the VPS provider.
-5. Use the existing ACME webroot with `issue-certificate.sh CONFIG`; it never
-   stops or replaces the public web server.
-6. Set approval `YES` and execute `apply.sh CONFIG --prepare`. It generates the
-   DKIM key on-host, emits only the path to its public DNS record, and leaves
-   mail services stopped.
-7. Publish the DKIM TXT and additive SPF described in the runbook. Preserve MX
-   and the current DMARC policy.
-8. Run `verify-dns.sh CONFIG` and `preflight.sh CONFIG`; any A, PTR, SPF, DKIM,
-   DMARC, TLS or protected-file failure blocks.
-9. Review `configure-firewall.sh CONFIG --dry-run`; privileged operator then
-   runs `--apply`.
-10. Execute `apply.sh CONFIG --activate`, `verify.sh CONFIG`, then internal and external
-   negative relay tests.
-11. Configure ASODEF production SMTP variables through its protected env
+The current production host already has the certified hostname, certificate,
+OpenDKIM integration and immutable `asodef2026` selector. This release adopts
+those assets; it must not request a certificate or generate/rotate a DKIM key.
+
+1. Copy `mail-platform.env.example` outside Git as a root-owned regular file
+   (`0600`), retain `MAIL_DKIM_SELECTOR=asodef2026`, the `/etc/postfix/tls`
+   paths and `MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS=NO`.
+2. Run `reconcile-runtime.sh CONFIG --report`. It reads only sanitized runtime
+   contracts and planned changes. Any identity, key, TLS or public-587 failure
+   blocks adoption.
+3. Run `inventory-mail-queue.sh CONFIG`. A nonempty pre-existing queue blocks;
+   an operator must reconcile/quarantine it without flush, requeue or deletion.
+4. Confirm the already-certified DNS with `verify-dns.sh CONFIG`. Preserve MX,
+   SPF, DKIM selector and DMARC.
+5. Confirm `172.25.52.0/29` still has no collision. Run
+   `create-mail-network.sh CONFIG --dry-run`; after approval use `--apply`.
+   Add `docker-compose.mail-platform.yml` only to the public ASODEF API Compose
+   invocation and recreate only that API when its release gate permits.
+6. Operator creates the root-only SMTP password file (`0600`). Never pass the
+   password as an argument, environment variable or log field.
+7. Set approval `YES` and execute `apply.sh CONFIG --prepare`. It backs up and
+   adopts the existing `asodef2026` key and TLS material; missing key material
+   fails closed. It never invokes `opendkim-genkey`.
+8. Run `preflight.sh CONFIG`; review `configure-firewall.sh CONFIG --dry-run`;
+   then apply only the owned mail rules.
+9. Execute `apply.sh CONFIG --activate`, `verify.sh CONFIG`, then the authorized
+   adversarial and external-network gates.
+10. Configure ASODEF production SMTP variables through its protected env
     mechanism, recreate only the public API when release gates authorize it.
+
+`issue-certificate.sh` is disabled by default. It requires both normal operator
+approval and `MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS=YES`; it is not part of the
+current closure because the existing certificate is valid. The renewal hook
+validates expiry, hostname and certificate/key correspondence, stages new
+material under `/etc/postfix/tls`, and restores the previous pair if Postfix
+validation or reload fails.
 
 The API runtime value for `SMTP_USER` must be exactly
 `MAIL_SMTP_USER@MAIL_DOMAIN`; the sender ownership map and verification gate
@@ -77,7 +88,8 @@ DMARC throughout rollback.
 
 ## Rotation and renewal
 
-- `rotate-dkim.sh CONFIG NEW_SELECTOR` generates a new on-host key and stops
+- `rotate-dkim.sh CONFIG NEW_SELECTOR` is a future, separately approved
+  rotation tool; do not run it during this closure. It generates a new on-host key and stops
   before switching. Publish and verify the new TXT first; retain the old public
   selector for at least seven days after switching.
 - Install `cert-renew-hook.sh` as a Certbot deploy hook. It reloads Postfix only

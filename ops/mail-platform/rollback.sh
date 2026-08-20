@@ -41,7 +41,13 @@ restore_path() {
     rm -f "$mail_live_path"
   fi
   if [ -e "$mail_original_path" ]; then
-    install -d -o root -g root -m 0755 "$(dirname "$mail_live_path")"
+    mail_parent=$(dirname "$mail_live_path")
+    if [ ! -d "$mail_parent" ]; then
+      case "$mail_parent" in
+        /etc/opendkim/keys/*) install -d -o opendkim -g opendkim -m 0750 "$mail_parent" ;;
+        *) install -d -o root -g root -m 0755 "$mail_parent" ;;
+      esac
+    fi
     cp -a "$mail_original_path" "$mail_live_path"
   fi
 }
@@ -49,12 +55,17 @@ restore_path() {
 for mail_path in \
   /etc/postfix/main.cf /etc/postfix/master.cf /etc/postfix/sender_login /etc/postfix/sender_login.db \
   /etc/postfix/sasl/smtpd.conf /etc/opendkim.conf /etc/opendkim/key.table \
-  /etc/opendkim/signing.table /etc/opendkim/trusted.hosts /etc/sasldb2 \
+  /etc/opendkim/signing.table /etc/opendkim/trusted.hosts \
+  /etc/opendkim/KeyTable /etc/opendkim/SigningTable /etc/opendkim/TrustedHosts /etc/sasldb2 \
   /etc/letsencrypt/renewal-hooks/deploy/asodef-postfix-mail \
+  /usr/local/sbin/asodef-mail-tls-recover \
+  /etc/systemd/system/postfix.service.d/asodef-tls-recovery.conf \
+  "$MAIL_TLS_CERT_FILE" "$MAIL_TLS_KEY_FILE" \
   "/etc/opendkim/keys/$MAIL_DOMAIN/$MAIL_DKIM_SELECTOR.private" \
   "/etc/opendkim/keys/$MAIL_DOMAIN/$MAIL_DKIM_SELECTOR.txt"; do
   restore_path "$mail_path"
 done
+systemctl daemon-reload
 
 restore_service() {
   mail_service=$1
