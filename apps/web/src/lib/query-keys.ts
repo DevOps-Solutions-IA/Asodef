@@ -16,6 +16,7 @@ export const queryKeys = {
      * one key, never an inline literal (US-010: "avoid duplicating session
      * state in multiple global stores"). */
     me: () => ["auth", "me"] as const,
+    mfaStatus: () => ["auth", "mfa", "status"] as const,
   },
   content: {
     /** GET /content - published, managed homepage fields (US-020). */
@@ -96,6 +97,8 @@ export const queryKeys = {
       differences: (runId: string) => ["admin", "reconciliation", "runs", runId, "differences"] as const,
     },
     dashboard: () => ["admin", "dashboard"] as const,
+    system: () => ["admin", "system"] as const,
+    audit: (filters: unknown) => ["admin", "audit", filters] as const,
     reports: {
       list: () => ["admin", "reports", "list"] as const,
       run: (key: string, filters: unknown) => ["admin", "reports", "run", key, filters] as const,

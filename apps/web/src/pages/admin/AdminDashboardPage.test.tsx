@@ -58,10 +58,15 @@ describe("AdminDashboardPage", () => {
   });
 
   it("does not query or render user-account stats for an actor without users.read (regression: this used to error for every non-ADMIN role)", async () => {
-    let userStatsCalled = false;
+    const forbiddenCalls: string[] = [];
     renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }), (url) => {
-      if (url.includes("/admin/users/stats")) {
-        userStatsCalled = true;
+      if (
+        url.includes("/admin/users/stats")
+        || url.includes("/admin/users/user-1")
+        || url.includes("/admin/sistema")
+        || url.includes("/auth/mfa/status")
+      ) {
+        forbiddenCalls.push(url);
         return jsonResponse(403, { statusCode: 403, error: "Forbidden", message: "No autorizado." });
       }
       if (url.includes("/admin/dashboard")) return jsonResponse(200, buildDashboard());
@@ -69,8 +74,9 @@ describe("AdminDashboardPage", () => {
     });
 
     await screen.findByText("7");
-    expect(userStatsCalled).toBe(false);
+    expect(forbiddenCalls).toEqual([]);
     expect(screen.queryByText("Cuentas de usuario")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Desconocido").length).toBeGreaterThan(0);
   });
 
   it("shows user-account stats for an actor with users.read", async () => {
@@ -97,5 +103,85 @@ describe("AdminDashboardPage", () => {
     const label = await screen.findByText("Usuarios totales");
     const card = label.parentElement?.parentElement;
     expect(card).toHaveTextContent("12");
+  });
+
+  it("renders the operational control-plane core from authorized live contracts", async () => {
+    const called: string[] = [];
+    renderPage(
+      buildCurrentUser({
+        roles: ["SUPER_ADMIN"],
+        permissions: ["settings.manage", "users.read", "users.sessions.read", "payments.read"],
+      }),
+      (url) => {
+        called.push(url);
+        if (url.includes("/admin/dashboard")) return jsonResponse(200, buildDashboard());
+        if (url.includes("/admin/sistema")) {
+          return jsonResponse(200, {
+            generatedAt: "2026-08-20T12:00:00.000Z",
+            api: {
+              status: "AVAILABLE",
+              uptimeSeconds: 7_560,
+              releaseSha: "release-abc123",
+              version: "1.2.3",
+              migrationVersion: "20260819133000_add_structured_audit_context",
+            },
+            dependencies: {
+              postgres: { status: "AVAILABLE", latencyMs: 3 },
+              redis: { status: "UNAVAILABLE", latencyMs: 3_000 },
+              master: { status: "NOT_CONFIGURED", latencyMs: 0 },
+            },
+            notifications: { status: "AVAILABLE", backlog: 4, failed: 1, deadLetter: 0 },
+          });
+        }
+        if (url.includes("/admin/users/stats")) {
+          return jsonResponse(200, {
+            totalUsers: 1,
+            activeUsers: 1,
+            inactiveUsers: 0,
+            suspendedUsers: 0,
+            lockedUsers: 1,
+            recentLoginFailures24h: 2,
+            activeSessions: 2,
+          });
+        }
+        if (url.includes("/admin/users/user-1/sessions")) {
+          return jsonResponse(200, [
+            { id: "current", createdAt: "2026-08-20T10:00:00.000Z", lastUsedAt: null, expiresAt: "2026-08-21T10:00:00.000Z", revokedAt: null, revokedReason: null, ipAddress: null, userAgent: null, isActive: true, isCurrent: true },
+            { id: "old", createdAt: "2026-08-18T10:00:00.000Z", lastUsedAt: null, expiresAt: "2026-08-19T10:00:00.000Z", revokedAt: "2026-08-18T11:00:00.000Z", revokedReason: "ADMIN_ACTION", ipAddress: null, userAgent: null, isActive: false, isCurrent: false },
+          ]);
+        }
+        if (url.includes("/admin/users/user-1")) {
+          return jsonResponse(200, {
+            id: "user-1",
+            email: "admin@asodef.com.co",
+            fullName: "Admin",
+            status: "ACTIVE",
+            roles: ["SUPER_ADMIN"],
+            permissions: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastLoginAt: "2026-08-20T10:00:00.000Z",
+            updatedAt: "2026-08-20T10:00:00.000Z",
+            lockedUntil: null,
+            isLocked: false,
+            passwordChangedAt: "2026-08-10T10:00:00.000Z",
+            activeSessionCount: 1,
+          });
+        }
+        if (url.includes("/auth/mfa/status")) {
+          return jsonResponse(200, { required: true, enrolled: true, status: "ACTIVE", confirmedAt: "2026-08-19T12:00:00.000Z", recoveryCodesRemaining: 8 });
+        }
+        return undefined;
+      },
+    );
+
+    expect(await screen.findByRole("heading", { name: "Sistema" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Seguridad" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Operación" })).toBeInTheDocument();
+    expect(await screen.findByText("release-abc123")).toBeInTheDocument();
+    expect(screen.getByText("Activo")).toBeInTheDocument();
+    expect(screen.getAllByText("No configurado").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(called.some((url) => url.includes("/admin/sistema"))).toBe(true);
+    expect(called.some((url) => url.includes("/auth/mfa/status"))).toBe(true);
   });
 });

@@ -11,6 +11,13 @@ describe("isSafeInternalPath", () => {
     expect(isSafeInternalPath("//evil.example.com")).toBe(false);
   });
 
+  it("rejects backslash and encoded-separator normalization bypasses", () => {
+    expect(isSafeInternalPath("/\\evil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%5cevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%5C%5Cevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%255cevil.example.com")).toBe(false);
+  });
+
   it("rejects an absolute external URL", () => {
     expect(isSafeInternalPath("https://evil.example.com")).toBe(false);
     expect(isSafeInternalPath("http://evil.example.com/mi-cuenta")).toBe(false);
@@ -34,5 +41,11 @@ describe("isSafeInternalPath", () => {
   it("rejects an empty string and a path with no leading slash", () => {
     expect(isSafeInternalPath("")).toBe(false);
     expect(isSafeInternalPath("mi-cuenta")).toBe(false);
+  });
+
+  it("rejects malformed escapes, control characters and unbounded paths", () => {
+    expect(isSafeInternalPath("/%not-encoded")).toBe(false);
+    expect(isSafeInternalPath("/admin\nnext")).toBe(false);
+    expect(isSafeInternalPath(`/${"a".repeat(2_049)}`)).toBe(false);
   });
 });

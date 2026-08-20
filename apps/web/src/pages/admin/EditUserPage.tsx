@@ -9,6 +9,7 @@ import { getUserDetail, updateUser } from "../../lib/admin/admin-users-api";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../lib/query-keys";
 import { UserDetailTabs } from "./UserDetailTabs";
+import { isStepUpCancelledError, useStepUpAction } from "../../lib/auth/use-step-up-action";
 
 const editUserSchema = z.object({
   email: z.string().trim().toLowerCase().min(1, "El correo electrónico es requerido.").email("Ingresa un correo electrónico válido."),
@@ -23,6 +24,7 @@ export function EditUserPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const errorRef = useRef<HTMLDivElement>(null);
+  const stepUp = useStepUpAction();
 
   const detailQuery = useQuery({
     queryKey: queryKeys.admin.users.detail(userId!),
@@ -45,8 +47,10 @@ export function EditUserPage() {
   }, [detailQuery.data, reset]);
 
   const mutation = useMutation({
-    mutationFn: (values: EditUserFormValues) =>
-      updateUser(userId!, { ...values, expectedUpdatedAt: detailQuery.data?.updatedAt }),
+    mutationFn: (values: EditUserFormValues) => {
+      const input = { ...values, expectedUpdatedAt: detailQuery.data?.updatedAt };
+      return stepUp.execute(() => updateUser(userId!, input));
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users.detail(userId!) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users.allLists() });
@@ -90,7 +94,7 @@ export function EditUserPage() {
       <PageHeader title="Editar usuario" description={detailQuery.data.email} />
       <UserDetailTabs userId={detailQuery.data.id} />
 
-      {mutation.isError && (
+      {mutation.isError && !isStepUpCancelledError(mutation.error) && (
         <div ref={errorRef} tabIndex={-1} className="focus:outline-none">
           <Alert variant="danger">{getAdminErrorMessage(mutation.error)}</Alert>
         </div>
@@ -118,6 +122,7 @@ export function EditUserPage() {
           </Button>
         </div>
       </form>
+      {stepUp.dialog}
     </div>
   );
 }

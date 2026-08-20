@@ -7,6 +7,7 @@ import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../lib/query-keys";
 import { UserDetailTabs } from "./UserDetailTabs";
 import { ReasonConfirmDialog } from "./ReasonConfirmDialog";
+import { isStepUpCancelledError, useStepUpAction } from "../../lib/auth/use-step-up-action";
 
 type PendingChange = { type: "assign" | "revoke"; roleName: string } | null;
 
@@ -14,6 +15,7 @@ export function UserRolesPage() {
   const { userId } = useParams<{ userId: string }>();
   const queryClient = useQueryClient();
   const [pendingChange, setPendingChange] = useState<PendingChange>(null);
+  const stepUp = useStepUpAction();
 
   const userQuery = useQuery({
     queryKey: queryKeys.admin.users.detail(userId!),
@@ -34,7 +36,7 @@ export function UserRolesPage() {
   }
 
   const assignMutation = useMutation({
-    mutationFn: (input: { roleName: string; reason: string }) => assignUserRole(userId!, input),
+    mutationFn: (input: { roleName: string; reason: string }) => stepUp.execute(() => assignUserRole(userId!, input)),
     onSuccess: () => {
       invalidate();
       setPendingChange(null);
@@ -42,7 +44,7 @@ export function UserRolesPage() {
   });
 
   const revokeMutation = useMutation({
-    mutationFn: (input: { roleName: string; reason: string }) => revokeUserRole(userId!, input),
+    mutationFn: (input: { roleName: string; reason: string }) => stepUp.execute(() => revokeUserRole(userId!, input)),
     onSuccess: () => {
       invalidate();
       setPendingChange(null);
@@ -156,13 +158,14 @@ export function UserRolesPage() {
         destructive={pendingChange?.type === "revoke"}
         isPending={isMutating}
         errorMessage={
-          assignMutation.isError
+          assignMutation.isError && !isStepUpCancelledError(assignMutation.error)
             ? getAdminErrorMessage(assignMutation.error)
-            : revokeMutation.isError
+            : revokeMutation.isError && !isStepUpCancelledError(revokeMutation.error)
               ? getAdminErrorMessage(revokeMutation.error)
               : null
         }
       />
+      {stepUp.dialog}
     </div>
   );
 }

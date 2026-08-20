@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, AlertTriangle, BarChart3, BriefcaseBusiness, CreditCard, Gauge, UsersRound } from "lucide-react";
-import { cn, ErrorState, PageHeader, Skeleton } from "@asodef/ui";
-import { getUserStats } from "../../lib/admin/admin-users-api";
+import { Activity, AlertTriangle, BarChart3, BriefcaseBusiness, CreditCard, Database, Gauge, Server, ShieldCheck, UsersRound } from "lucide-react";
+import { cn, ErrorState, PageHeader, Skeleton, StatusBadge, type StatusTone } from "@asodef/ui";
+import { getUserDetail, getUserStats, listUserSessions } from "../../lib/admin/admin-users-api";
 import { getAdminDashboard } from "../../lib/admin/admin-dashboard-api";
+import { getAdminSystemStatus } from "../../lib/admin/admin-system-api";
+import type { AdminSystemStatus, OperationalStatus } from "../../lib/admin/admin-system-types";
 import { getAdminErrorMessage } from "../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../lib/query-keys";
 import { useAuth } from "../../lib/auth/auth-context";
+import { getMfaStatus } from "../../lib/auth/auth-api";
 import { PIPELINE_STAGE_LABELS, type PipelineStage } from "../../lib/admin/admin-crm-types";
 
 interface MetricCardProps {
@@ -52,6 +55,73 @@ function formatPercent(ratio: number): string {
   return new Intl.NumberFormat("es-CO", { style: "percent", maximumFractionDigits: 1 }).format(ratio);
 }
 
+const STATUS_PRESENTATION: Record<OperationalStatus, { label: string; tone: StatusTone }> = {
+  AVAILABLE: { label: "Disponible", tone: "success" },
+  UNAVAILABLE: { label: "No disponible", tone: "failed" },
+  NOT_CONFIGURED: { label: "No configurado", tone: "inactive" },
+  UNKNOWN: { label: "Desconocido", tone: "draft" },
+};
+
+function OperationalBadge({ status }: { status: OperationalStatus }) {
+  const presentation = STATUS_PRESENTATION[status];
+  return <StatusBadge tone={presentation.tone} label={presentation.label} />;
+}
+
+function ControlMetric({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border-soft bg-bg-soft/40 p-4">
+      <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-text-muted">{label}</dt>
+      <dd className="mt-2 break-words text-sm font-semibold text-text-main">{value}</dd>
+    </div>
+  );
+}
+
+function UnknownValue({ reason = "Sin una fuente disponible" }: { reason?: string }) {
+  return <span className="text-warning" title={reason}>Desconocido</span>;
+}
+
+function formatTimestamp(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? null
+    : new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function formatPasswordAge(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp) || timestamp > Date.now()) return null;
+  const days = Math.floor((Date.now() - timestamp) / 86_400_000);
+  return `${days.toLocaleString("es-CO")} ${days === 1 ? "día" : "días"}`;
+}
+
+function formatDuration(seconds: number): string | null {
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  return days > 0 ? `${days} d ${hours} h` : hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+function RuntimeStatus({ data }: { data: AdminSystemStatus | undefined }) {
+  const unknown = <OperationalBadge status="UNKNOWN" />;
+  return (
+    <section aria-labelledby="system-core-heading" className="data-surface p-5 sm:p-6">
+      <h2 id="system-core-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main">
+        <Server aria-hidden="true" className="h-5 w-5 text-brand-dark" /> Sistema
+      </h2>
+      <p className="mt-1 text-sm text-text-muted">Salud observada de las dependencias; lo no verificable se conserva como desconocido.</p>
+      <dl className="mt-5 grid grid-cols-2 gap-3">
+        <ControlMetric label="API" value={data ? <OperationalBadge status={data.api.status} /> : unknown} />
+        <ControlMetric label="PostgreSQL" value={data ? <OperationalBadge status={data.dependencies.postgres.status} /> : unknown} />
+        <ControlMetric label="Redis" value={data ? <OperationalBadge status={data.dependencies.redis.status} /> : unknown} />
+        <ControlMetric label="Master / Firebird" value={data ? <OperationalBadge status={data.dependencies.master.status} /> : unknown} />
+      </dl>
+    </section>
+  );
+}
+
 /**
  * US-064 AC1: every figure comes from GET /admin/dashboard, a live DB
  * query bundle - nothing here is a constant. The pre-existing user-
@@ -61,8 +131,11 @@ function formatPercent(ratio: number): string {
  * their own default page - a real bug fixed here, not introduced.
  */
 export function AdminDashboardPage() {
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const canReadUsers = hasPermission("users.read");
+  const canReadSessions = hasPermission("users.sessions.read");
+  const canReadSystem = hasPermission("settings.manage");
+  const canReadMfa = user?.roles.includes("SUPER_ADMIN") ?? false;
 
   const dashboardQuery = useQuery({ queryKey: queryKeys.admin.dashboard(), queryFn: ({ signal }) => getAdminDashboard(signal) });
   const userStatsQuery = useQuery({
@@ -70,10 +143,81 @@ export function AdminDashboardPage() {
     queryFn: ({ signal }) => getUserStats(signal),
     enabled: canReadUsers,
   });
+  const systemQuery = useQuery({
+    queryKey: queryKeys.admin.system(),
+    queryFn: ({ signal }) => getAdminSystemStatus(signal),
+    enabled: canReadSystem,
+  });
+  const currentUserDetailQuery = useQuery({
+    queryKey: queryKeys.admin.users.detail(user?.id ?? "current"),
+    queryFn: ({ signal }) => getUserDetail(user!.id, signal),
+    enabled: canReadUsers && Boolean(user),
+  });
+  const currentSessionsQuery = useQuery({
+    queryKey: queryKeys.admin.users.sessions(user?.id ?? "current"),
+    queryFn: ({ signal }) => listUserSessions(user!.id, signal),
+    enabled: canReadSessions && Boolean(user),
+  });
+  const mfaStatusQuery = useQuery({
+    queryKey: queryKeys.auth.mfaStatus(),
+    queryFn: ({ signal }) => getMfaStatus(signal),
+    enabled: canReadMfa,
+  });
+
+  const systemData = systemQuery.isSuccess ? systemQuery.data : undefined;
+  const detail = currentUserDetailQuery.isSuccess ? currentUserDetailQuery.data : undefined;
+  const sessions = currentSessionsQuery.isSuccess ? currentSessionsQuery.data : undefined;
+  const activeSessionCount = sessions
+    ? sessions.filter((session) => session.isActive).length
+    : detail?.activeSessionCount;
+  const revokedSessionCount = sessions?.filter((session) => session.revokedAt !== null).length;
+  const securitySignals = userStatsQuery.isSuccess
+    ? `${userStatsQuery.data.recentLoginFailures24h.toLocaleString("es-CO")} fallos · ${userStatsQuery.data.lockedUsers.toLocaleString("es-CO")} bloqueos`
+    : undefined;
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader eyebrow="Inteligencia operativa" icon={<Gauge className="h-5 w-5" />} title="Dashboard administrativo" description="Lectura consolidada de la actividad comercial, financiera y operativa en tiempo real." />
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <RuntimeStatus data={systemData} />
+
+        <section aria-labelledby="security-core-heading" className="data-surface p-5 sm:p-6">
+          <h2 id="security-core-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main">
+            <ShieldCheck aria-hidden="true" className="h-5 w-5 text-brand-dark" /> Seguridad
+          </h2>
+          <p className="mt-1 text-sm text-text-muted">Estado real de la identidad y las sesiones que este actor está autorizado a consultar.</p>
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ControlMetric label="Último acceso" value={formatTimestamp(detail?.lastLoginAt) ?? <UnknownValue reason="Requiere users.read" />} />
+            <ControlMetric label="Fallos de acceso (24h)" value={userStatsQuery.isSuccess ? userStatsQuery.data.recentLoginFailures24h.toLocaleString("es-CO") : <UnknownValue reason="Requiere users.read" />} />
+            <ControlMetric label="Sesiones activas" value={activeSessionCount != null ? activeSessionCount.toLocaleString("es-CO") : <UnknownValue reason="Requiere users.sessions.read o users.read" />} />
+            <ControlMetric label="Sesiones revocadas" value={revokedSessionCount != null ? revokedSessionCount.toLocaleString("es-CO") : <UnknownValue reason="Requiere users.sessions.read" />} />
+            <ControlMetric
+              label="MFA"
+              value={mfaStatusQuery.isSuccess
+                ? (mfaStatusQuery.data.enrolled ? "Activo" : mfaStatusQuery.data.required ? "Inscripción requerida" : "No inscrito")
+                : <UnknownValue reason="Disponible para SUPER_ADMIN" />}
+            />
+            <ControlMetric label="Antigüedad de contraseña" value={formatPasswordAge(detail?.passwordChangedAt) ?? <UnknownValue reason="Requiere users.read y una fecha registrada" />} />
+          </dl>
+        </section>
+
+        <section aria-labelledby="operations-core-heading" className="data-surface p-5 sm:p-6">
+          <h2 id="operations-core-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-text-main">
+            <Database aria-hidden="true" className="h-5 w-5 text-brand-dark" /> Operación
+          </h2>
+          <p className="mt-1 text-sm text-text-muted">Release, migración y señales operativas sin asumir telemetría inexistente.</p>
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ControlMetric label="Release" value={systemData?.api.releaseSha && systemData.api.releaseSha !== "UNKNOWN" ? systemData.api.releaseSha : <UnknownValue reason="Requiere settings.manage o APP_RELEASE_SHA" />} />
+            <ControlMetric label="Versión API" value={systemData?.api.version && systemData.api.version !== "UNKNOWN" ? systemData.api.version : <UnknownValue reason="Requiere settings.manage o APP_VERSION" />} />
+            <ControlMetric label="Migración" value={systemData?.api.migrationVersion && systemData.api.migrationVersion !== "UNKNOWN" ? systemData.api.migrationVersion : <UnknownValue reason="Requiere settings.manage y PostgreSQL disponible" />} />
+            <ControlMetric label="Uptime" value={systemData ? formatDuration(systemData.api.uptimeSeconds) ?? <UnknownValue /> : <UnknownValue reason="Requiere settings.manage" />} />
+            <ControlMetric label="Backlog de notificaciones" value={systemData?.notifications.backlog != null ? systemData.notifications.backlog.toLocaleString("es-CO") : <UnknownValue reason="Requiere settings.manage y PostgreSQL disponible" />} />
+            <ControlMetric label="Señales de seguridad (24h)" value={securitySignals ?? <UnknownValue reason="Requiere users.read" />} />
+            <ControlMetric label="Tasa de errores" value={<span className="text-text-muted">No configurado</span>} />
+          </dl>
+        </section>
+      </div>
 
       {dashboardQuery.isLoading && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-busy="true">

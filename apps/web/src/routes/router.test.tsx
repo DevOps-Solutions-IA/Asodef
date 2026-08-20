@@ -230,7 +230,12 @@ describe("router", () => {
     await screen.findByRole("navigation", { name: "Administración" });
     expect(screen.getByRole("link", { name: "Pagos" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Conciliación" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Planes" })).toBeInTheDocument();
+    // Unimplemented placeholders are not advertised as operational
+    // destinations in the canonical shell.
+    for (const label of ["Planes", "Contratos", "Comunicaciones", "Aprobaciones"]) {
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/admin/auditoria");
     expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Legal" })).not.toBeInTheDocument();
     // FINANCE deliberately holds no crm.read (rbac-catalog.spec.ts locks
@@ -238,6 +243,118 @@ describe("router", () => {
     // permission-gated section this role lacks.
     expect(screen.queryByRole("link", { name: "CRM" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Empresas y aliados" })).not.toBeInTheDocument();
+  });
+
+  it("renders the current administrator session view through the existing user-scoped API", async () => {
+    let userDetailRequested = false;
+    const currentUser = buildCurrentUser({
+      id: "current-admin",
+      email: "admin@asodef.test",
+      roles: ["SUPER_ADMIN"],
+      permissions: ["users.sessions.read", "users.sessions.revoke"],
+    });
+    renderAtPath("/admin/sesiones", currentUser, (url) => {
+      if (url.endsWith("/admin/users/current-admin")) {
+        userDetailRequested = true;
+      }
+      if (url.endsWith("/admin/users/current-admin/sessions")) return jsonResponse(200, []);
+      return undefined;
+    });
+
+    expect(await screen.findByRole("heading", { name: "Sesiones de mi cuenta" })).toBeInTheDocument();
+    expect(screen.getByText("Sin sesiones registradas")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Revocar otras sesiones" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sesiones" })).toHaveAttribute("href", "/admin/sesiones");
+    expect(userDetailRequested).toBe(false);
+  });
+
+  it("renders current-admin security events through the existing user-scoped API", async () => {
+    let userDetailRequested = false;
+    const currentUser = buildCurrentUser({
+      id: "current-admin",
+      email: "admin@asodef.test",
+      roles: ["SUPER_ADMIN"],
+      permissions: ["users.security.read"],
+    });
+    renderAtPath("/admin/seguridad", currentUser, (url) => {
+      if (url.endsWith("/admin/users/current-admin")) {
+        userDetailRequested = true;
+      }
+      if (url.includes("/admin/users/current-admin/security-events")) {
+        return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+      }
+      return undefined;
+    });
+
+    expect(await screen.findByRole("heading", { name: "Seguridad de mi cuenta" })).toBeInTheDocument();
+    expect(screen.getByText("Sin eventos de seguridad registrados")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Seguridad" })).toHaveAttribute("href", "/admin/seguridad");
+    expect(userDetailRequested).toBe(false);
+  });
+
+  it.each(["/admin/sesiones", "/admin/seguridad"])("keeps %s behind its explicit permission", async (path) => {
+    renderAtPath(path, buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+  });
+
+  it("renders the real system status page and navigation for settings.manage", async () => {
+    renderAtPath(
+      "/admin/sistema",
+      buildCurrentUser({ roles: ["ADMIN"], permissions: ["settings.manage"] }),
+      (url) => {
+        if (url.endsWith("/admin/sistema")) {
+          return jsonResponse(200, {
+            generatedAt: "2026-08-19T18:00:00.000Z",
+            api: {
+              status: "AVAILABLE",
+              uptimeSeconds: 60,
+              releaseSha: "UNKNOWN",
+              version: "UNKNOWN",
+              migrationVersion: "UNKNOWN",
+            },
+            dependencies: {
+              postgres: { status: "AVAILABLE", latencyMs: 4 },
+              redis: { status: "UNAVAILABLE", latencyMs: 3_000 },
+              master: { status: "NOT_CONFIGURED", latencyMs: 0 },
+            },
+            notifications: { status: "UNKNOWN", backlog: null, failed: null, deadLetter: null },
+          });
+        }
+        return undefined;
+      },
+    );
+
+    expect(await screen.findByRole("heading", { name: "Estado del sistema" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sistema" })).toHaveAttribute("href", "/admin/sistema");
+    expect(await screen.findByText("No disponible")).toBeInTheDocument();
+    expect(screen.getByText("No configurado")).toBeInTheDocument();
+  });
+
+  it("keeps /admin/sistema and its navigation entry behind settings.manage", async () => {
+    renderAtPath("/admin/sistema", buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
+
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Estado del sistema" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sistema" })).not.toBeInTheDocument();
+  });
+
+  it("renders the real audit timeline for audit.read and hides it without permission", async () => {
+    renderAtPath(
+      "/admin/auditoria",
+      buildCurrentUser({ roles: ["AUDITOR"], permissions: ["audit.read"] }),
+      (url) => url.includes("/admin/auditoria?")
+        ? jsonResponse(200, { items: [], total: 0, pageSize: 20, nextCursor: null })
+        : undefined,
+    );
+    expect(await screen.findByRole("heading", { name: "Auditoría" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/admin/auditoria");
+  });
+
+  it("keeps /admin/auditoria and its navigation entry behind audit.read", async () => {
+    renderAtPath("/admin/auditoria", buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Auditoría" })).not.toBeInTheDocument();
   });
 
   it("Example (AC): a COMMERCIAL user with crm.read but not crm.manage can open the CRM section, read-only", async () => {

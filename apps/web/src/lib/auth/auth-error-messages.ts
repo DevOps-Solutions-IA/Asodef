@@ -1,5 +1,5 @@
 import { ApiError } from "../api-error";
-import type { PasswordRecoveryErrorCode } from "./auth-types";
+import type { MfaErrorCode, PasswordRecoveryErrorCode } from "./auth-types";
 
 /**
  * Centralized, safe, user-facing authentication error categories
@@ -123,4 +123,31 @@ export function getSessionErrorMessage(error: unknown): AuthErrorPresentation {
     if (error.kind === "network" || error.kind === "server") return present("SERVICE_UNAVAILABLE");
   }
   return present("GENERIC_ERROR");
+}
+
+const MFA_MESSAGES: Record<MfaErrorCode, string> = {
+  MFA_NOT_AVAILABLE: "MFA no está disponible para esta cuenta.",
+  MFA_ENROLLMENT_REQUIRED: "Debes configurar MFA antes de continuar.",
+  MFA_ENROLLMENT_EXPIRED: "La configuración MFA expiró. Iníciala nuevamente.",
+  MFA_ALREADY_ENABLED: "MFA ya está habilitado.",
+  MFA_INVALID_CODE: "El código de verificación no es válido.",
+  MFA_CHALLENGE_INVALID: "El desafío de verificación no es válido. Inicia sesión nuevamente.",
+  MFA_CHALLENGE_EXPIRED: "El desafío de verificación expiró. Inicia sesión nuevamente.",
+  MFA_CHALLENGE_USED: "El desafío de verificación ya fue utilizado. Inicia sesión nuevamente.",
+  MFA_ATTEMPTS_EXCEEDED: "Se agotaron los intentos de verificación. Inicia sesión nuevamente.",
+  MFA_ADMIN_ONLY: "Esta operación está disponible únicamente para la cuenta administrativa autorizada.",
+  MFA_PASSWORD_INVALID: "La contraseña actual no es válida.",
+  MFA_CONFLICT: "La configuración MFA cambió o no permite esta operación.",
+};
+
+export function getMfaErrorMessage(error: unknown): { code: MfaErrorCode | null; message: string } {
+  if (error instanceof ApiError) {
+    const code = error.envelope?.code as MfaErrorCode | undefined;
+    if (code && code in MFA_MESSAGES) return { code, message: MFA_MESSAGES[code] };
+    if (error.kind === "rate_limited") return { code: null, message: MESSAGES.RATE_LIMITED };
+    if (error.kind === "network" || error.kind === "server") return { code: null, message: MESSAGES.SERVICE_UNAVAILABLE };
+    if (error.kind === "forbidden") return { code: null, message: MESSAGES.FORBIDDEN };
+    if (error.kind === "unauthorized") return { code: null, message: MESSAGES.UNAUTHENTICATED };
+  }
+  return { code: null, message: MESSAGES.GENERIC_ERROR };
 }

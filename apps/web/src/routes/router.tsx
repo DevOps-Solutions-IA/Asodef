@@ -73,6 +73,10 @@ const EditUserPage = lazy(() => import("../pages/admin/EditUserPage").then((m) =
 const UserRolesPage = lazy(() => import("../pages/admin/UserRolesPage").then((m) => ({ default: m.UserRolesPage })));
 const UserSessionsPage = lazy(() => import("../pages/admin/UserSessionsPage").then((m) => ({ default: m.UserSessionsPage })));
 const UserSecurityPage = lazy(() => import("../pages/admin/UserSecurityPage").then((m) => ({ default: m.UserSecurityPage })));
+const CurrentAdminSessionsPage = lazy(() => import("../pages/admin/CurrentAdminSessionsPage").then((m) => ({ default: m.CurrentAdminSessionsPage })));
+const CurrentAdminSecurityPage = lazy(() => import("../pages/admin/CurrentAdminSecurityPage").then((m) => ({ default: m.CurrentAdminSecurityPage })));
+const AdminSystemPage = lazy(() => import("../pages/admin/AdminSystemPage").then((m) => ({ default: m.AdminSystemPage })));
+const AdminAuditPage = lazy(() => import("../pages/admin/AdminAuditPage").then((m) => ({ default: m.AdminAuditPage })));
 const CrmLayout = lazy(() => import("../pages/admin/crm/CrmLayout").then((m) => ({ default: m.CrmLayout })));
 const ProspectsListPage = lazy(() => import("../pages/admin/crm/ProspectsListPage").then((m) => ({ default: m.ProspectsListPage })));
 const OpportunitiesBoardPage = lazy(() => import("../pages/admin/crm/OpportunitiesBoardPage").then((m) => ({ default: m.OpportunitiesBoardPage })));
@@ -249,8 +253,20 @@ export const routeConfig: RouteObject[] = [
                 children: [{ path: "reportes", element: <AdminReportsPage /> }],
               },
               {
+                element: <PermissionRoute permissions={["users.sessions.read"]} />,
+                children: [{ path: "sesiones", element: <CurrentAdminSessionsPage /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["users.security.read"]} />,
+                children: [{ path: "seguridad", element: <CurrentAdminSecurityPage /> }],
+              },
+              {
+                element: <PermissionRoute permissions={["settings.manage"]} />,
+                children: [{ path: "sistema", element: <AdminSystemPage /> }],
+              },
+              {
                 element: <PermissionRoute permissions={["audit.read"]} />,
-                children: [{ path: "auditoria", element: <RoutePlaceholder title="Auditoría" /> }],
+                children: [{ path: "auditoria", element: <AdminAuditPage /> }],
               },
               {
                 path: "usuarios",
