@@ -1082,7 +1082,11 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
     it("schedules a retry and records PASSWORD_NOTIFICATION_FAILED when the first delivery attempt fails", async () => {
       const failingTransport: MailTransport = {
         checkHealth: () => Promise.resolve("UNAVAILABLE"),
-        send: () => Promise.resolve({ delivered: false, failureReason: "SMTP_NOT_CONFIGURED" }),
+        send: () => Promise.resolve({
+          delivered: false as const,
+          disposition: "RETRYABLE" as const,
+          failureReason: "SMTP_DELIVERY_FAILED",
+        }),
       };
 
       const isolatedModule = await Test.createTestingModule({
@@ -1133,7 +1137,7 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
       const job = await prismaLocal.notificationJob.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
       expect(job?.status).toBe("RETRY_PENDING");
       expect(job?.retryCount).toBe(1);
-      expect(job?.failureReason).toBe("SMTP_NOT_CONFIGURED");
+      expect(job?.failureReason).toBe("SMTP_DELIVERY_FAILED");
 
       const event = await prismaLocal.securityEvent.findFirst({
         where: { userId: user.id, type: "PASSWORD_NOTIFICATION_FAILED" },

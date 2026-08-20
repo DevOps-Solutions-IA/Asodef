@@ -19,7 +19,11 @@ describe("NoopMailTransport", () => {
       idempotencyKey: "safe-job-id",
     });
 
-    expect(result).toEqual({ delivered: false, failureReason: "SMTP_NOT_CONFIGURED" });
+    expect(result).toEqual({
+      delivered: false,
+      disposition: "RETRYABLE",
+      failureReason: "SMTP_NOT_CONFIGURED",
+    });
     const logged = JSON.stringify(warn.mock.calls);
     expect(logged).toContain("safe-correlation-id");
     expect(logged).not.toContain("sensitive-recipient");

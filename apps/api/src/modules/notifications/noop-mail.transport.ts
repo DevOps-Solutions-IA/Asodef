@@ -20,6 +20,12 @@ export class NoopMailTransport implements MailTransport {
     this.logger.warn(
       `Mail transport not configured (correlationId=${message.correlationId})`,
     );
-    return Promise.resolve({ delivered: false, failureReason: "SMTP_NOT_CONFIGURED" });
+    return Promise.resolve({
+      delivered: false,
+      // Preserve queued work for a bounded retry after operators restore
+      // configuration; the transport still never claims delivery.
+      disposition: "RETRYABLE",
+      failureReason: "SMTP_NOT_CONFIGURED",
+    });
   }
 }
