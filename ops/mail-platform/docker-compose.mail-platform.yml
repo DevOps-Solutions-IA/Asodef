@@ -1,0 +1,12 @@
+services:
+  api:
+    extra_hosts:
+      - "${MAIL_HOSTNAME:?MAIL_HOSTNAME is required}:${MAIL_GATEWAY:?MAIL_GATEWAY is required}"
+    networks:
+      mail_submission:
+        ipv4_address: ${MAIL_API_ADDRESS:?MAIL_API_ADDRESS is required}
+
+networks:
+  mail_submission:
+    external: true
+    name: ${MAIL_NETWORK_NAME:?MAIL_NETWORK_NAME is required}

@@ -1,0 +1,17 @@
+Syslog                  yes
+SyslogSuccess           yes
+LogWhy                  no
+Canonicalization        relaxed/simple
+Mode                    sv
+MTA                     ORIGINATING
+SubDomains              no
+OversignHeaders         From
+UserID                  opendkim
+UMask                   007
+Socket                  inet:8891@127.0.0.1
+PidFile                 /run/opendkim/opendkim.pid
+TrustAnchorFile         /usr/share/dns/root.key
+KeyTable                refile:/etc/opendkim/key.table
+SigningTable            refile:/etc/opendkim/signing.table
+ExternalIgnoreList      refile:/etc/opendkim/trusted.hosts
+InternalHosts           refile:/etc/opendkim/trusted.hosts
