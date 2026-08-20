@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AuditSource, type Prisma } from "@prisma/client";
+import { AuditEventResult, AuditSource, type Prisma } from "@prisma/client";
 
 interface RecordAuditBase {
   action: string;
@@ -14,6 +14,14 @@ interface RecordAuditBase {
    * create) never set this; legal-workflow actions (US-043), always
    * human-triggered, always do. */
   actorUserId?: string;
+  /** Explicit structured context. Optional for source compatibility; when
+   * result is omitted the historic `applied` signal maps losslessly. */
+  result?: AuditEventResult;
+  reason?: string;
+  requestId?: string;
+  correlationId?: string;
+  ipAddress?: string;
+  userAgent?: string;
   metadata?: Prisma.InputJsonValue;
 }
 
@@ -109,6 +117,12 @@ export class AuditService {
         companyId: params.companyId,
         actorUserId: params.actorUserId,
         action: params.action,
+        result: params.result ?? (params.applied ? AuditEventResult.SUCCESS : AuditEventResult.NO_OP),
+        reason: params.reason,
+        requestId: params.requestId,
+        correlationId: params.correlationId,
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
         previousStatus: params.previousStatus,
         newStatus: params.newStatus,
         applied: params.applied,

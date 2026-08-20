@@ -10,11 +10,20 @@ describe("redactString", () => {
   });
 
   it("scrubs embedded credentials from a redis connection string", () => {
-    const input = "redis://default:my-redis-password@localhost:6379";
+    const input = "redis://:my-redis-password@localhost:6379";
     const output = redactString(input);
 
     expect(output).not.toContain("my-redis-password");
     expect(output).toContain("redis://[REDACTED]@");
+  });
+
+  it("scrubs secret assignments and bearer credentials in driver errors", () => {
+    const output = redactString("password=never-log token:also-secret Authorization: Bearer eyJhbGciOi.secret");
+
+    expect(output).not.toContain("never-log");
+    expect(output).not.toContain("also-secret");
+    expect(output).not.toContain("eyJhbGciOi.secret");
+    expect(output).toContain("[REDACTED]");
   });
 
   it("leaves ordinary text untouched", () => {

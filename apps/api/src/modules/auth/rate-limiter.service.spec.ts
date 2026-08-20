@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Test } from "@nestjs/testing";
 import { ConfigModule } from "@nestjs/config";
-import { RateLimiterService } from "./rate-limiter.service";
+import { RateLimitDependencyUnavailableError, RateLimiterService } from "./rate-limiter.service";
 import { RedisModule } from "../../common/redis/redis.module";
 import { RedisService } from "../../common/redis/redis.service";
 import { validateEnv } from "../../config/env.validation";
@@ -117,6 +117,32 @@ describe("RateLimiterService (real Redis)", () => {
 
       expect(result.limited).toBe(false);
       expect(result.remaining).toBe(5);
+    });
+  });
+
+  describe("strict privileged limits", () => {
+    it("blocks at the configured maximum and peek does not consume attempts", async () => {
+      const key = `strict-${randomUUID()}`;
+      expect((await service.peekStrict(key, 3)).remaining).toBe(3);
+      expect((await service.checkAndIncrementStrict(key, 3, 60)).limited).toBe(false);
+      expect((await service.checkAndIncrementStrict(key, 3, 60)).limited).toBe(false);
+      expect((await service.peekStrict(key, 3)).remaining).toBe(1);
+      expect((await service.checkAndIncrementStrict(key, 3, 60)).limited).toBe(true);
+      expect((await service.peekStrict(key, 3)).limited).toBe(true);
+    });
+
+    it("fails closed when Redis is unavailable", async () => {
+      const brokenClient = {
+        get: jest.fn().mockRejectedValue(new Error("Redis connection lost")),
+        ttl: jest.fn(),
+        incr: jest.fn().mockRejectedValue(new Error("Redis connection lost")),
+      };
+      const strictService = new RateLimiterService({ getClient: () => brokenClient } as unknown as RedisService);
+
+      await expect(strictService.peekStrict("redacted", 5)).rejects.toBeInstanceOf(RateLimitDependencyUnavailableError);
+      await expect(strictService.checkAndIncrementStrict("redacted", 5, 60)).rejects.toBeInstanceOf(
+        RateLimitDependencyUnavailableError,
+      );
     });
   });
 });

@@ -46,23 +46,13 @@ export class SecurityEventService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Best-effort mode for observations that must not alter the outcome of
+   * the protected action (for example, an authorization denial). Critical
+   * business mutations must instead call recordRequired() inside their
+   * existing database transaction. */
   async record(input: RecordSecurityEventInput): Promise<void> {
     try {
-      await this.prisma.securityEvent.create({
-        data: {
-          type: input.type,
-          userId: input.userId ?? null,
-          sessionId: input.sessionId ?? null,
-          ipAddress: input.ipAddress ?? null,
-          userAgent: input.userAgent ?? null,
-          requestId: input.requestId ?? null,
-          metadata: input.metadata ?? undefined,
-        },
-      });
-
-      if (OBSERVABLE_EVENT_TYPES.has(input.type)) {
-        this.logger.log(`security_event=${input.type}`);
-      }
+      await this.create(this.prisma, input);
     } catch (error) {
       // A failure to *record* a security event must never block the
       // security-relevant action itself (e.g. a login should still
@@ -71,6 +61,39 @@ export class SecurityEventService {
         `Failed to record security event ${input.type}`,
         error instanceof Error ? error.stack : undefined,
       );
+    }
+  }
+
+  /** Mandatory transactional mode. Deliberately does not catch errors:
+   * callers pass the same Prisma transaction used for the protected state
+   * change, so an event-write failure rolls the entire mutation back. */
+  async recordRequired(tx: Prisma.TransactionClient, input: RecordSecurityEventInput): Promise<void> {
+    await this.create(tx, input);
+  }
+
+  private async create(
+    client: Pick<Prisma.TransactionClient, "securityEvent">,
+    input: RecordSecurityEventInput,
+  ): Promise<void> {
+    await client.securityEvent.create({
+      data: {
+        type: input.type,
+        userId: input.userId ?? null,
+        actorUserId: input.actorUserId ?? null,
+        subjectUserId: input.subjectUserId ?? null,
+        sessionId: input.sessionId ?? null,
+        result: input.result ?? null,
+        reason: input.reason ?? null,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        requestId: input.requestId ?? null,
+        correlationId: input.correlationId ?? null,
+        metadata: input.metadata ?? undefined,
+      },
+    });
+
+    if (OBSERVABLE_EVENT_TYPES.has(input.type)) {
+      this.logger.log(`security_event=${input.type}`);
     }
   }
 

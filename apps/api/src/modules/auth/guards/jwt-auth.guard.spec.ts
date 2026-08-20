@@ -4,6 +4,7 @@ import { JwtAuthGuard } from "./jwt-auth.guard";
 import { TokenService } from "../token.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
+import { SessionService } from "../session.service";
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -23,6 +24,10 @@ describe("JwtAuthGuard", () => {
   let tokenService: jest.Mocked<Pick<TokenService, "verifyAccessToken">>;
   let prisma: { user: { findUnique: jest.Mock } };
   let configService: { get: jest.Mock };
+  let sessionService: {
+    findUsableByIdForUser: jest.Mock;
+    touchLastUsedIfUsable: jest.Mock;
+  };
   let guard: JwtAuthGuard;
 
   beforeEach(() => {
@@ -30,11 +35,16 @@ describe("JwtAuthGuard", () => {
     tokenService = { verifyAccessToken: jest.fn() };
     prisma = { user: { findUnique: jest.fn() } };
     configService = { get: jest.fn().mockReturnValue("asodef_at") };
+    sessionService = {
+      findUsableByIdForUser: jest.fn().mockResolvedValue({ id: "session-1", userId: "user-1" }),
+      touchLastUsedIfUsable: jest.fn().mockResolvedValue(undefined),
+    };
     guard = new JwtAuthGuard(
       reflector,
       tokenService as unknown as TokenService,
       prisma as unknown as PrismaService,
       configService as never,
+      sessionService as unknown as SessionService,
     );
   });
 
@@ -104,6 +114,28 @@ describe("JwtAuthGuard", () => {
     await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
+  it("rejects an access token when its server-side session was revoked, rotated, expired, or belongs to another user", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1",
+      sid: "session-1",
+      iat: nowSeconds(),
+      exp: nowSeconds() + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "a@example.com",
+      fullName: "A",
+      status: "ACTIVE",
+      roles: [],
+    });
+    sessionService.findUsableByIdForUser.mockResolvedValue(null);
+
+    await expect(guard.canActivate(buildContext({ asodef_at: "a.valid.jwt" }))).rejects.toThrow(UnauthorizedException);
+    expect(sessionService.findUsableByIdForUser).toHaveBeenCalledWith("session-1", "user-1");
+    expect(sessionService.touchLastUsedIfUsable).not.toHaveBeenCalled();
+  });
+
   it("populates request.user with safe fields (no password/token hash) for a valid token", async () => {
     jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
     tokenService.verifyAccessToken.mockReturnValue({
@@ -149,6 +181,7 @@ describe("JwtAuthGuard", () => {
       sessionId: "session-1",
     });
     expect(JSON.stringify(request.user)).not.toContain("should-never-leak");
+    expect(sessionService.touchLastUsedIfUsable).toHaveBeenCalledWith("session-1", "user-1");
   });
 
   it("rejects an access token issued before the user's most recent password change (US-007)", async () => {

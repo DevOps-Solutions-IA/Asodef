@@ -34,6 +34,7 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { SelfServiceModule } from "./modules/self-service/self-service.module";
 import { MasterModule } from "./modules/master/master.module";
+import { AdminSystemModule } from "./modules/admin-system/admin-system.module";
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { MasterModule } from "./modules/master/master.module";
     ReportsModule,
     SelfServiceModule,
     MasterModule,
+    AdminSystemModule,
   ],
   controllers: [AppController],
   providers: [],

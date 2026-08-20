@@ -21,6 +21,22 @@ export const envSchema = z.object({
   PUBLIC_APP_URL: z.string().url().default("http://localhost:5173"),
   PUBLIC_API_URL: z.string().url().default("http://localhost:3000"),
 
+  // Closed-system privileged identity. These addresses are operational
+  // configuration, not secrets. The recovery address is a delivery-only
+  // channel and is never accepted as a login alias.
+  ADMIN_ACCOUNT_EMAIL: z.string({ required_error: "ADMIN_ACCOUNT_EMAIL is required" }).trim().toLowerCase().email(),
+  ADMIN_RECOVERY_EMAIL: z.string({ required_error: "ADMIN_RECOVERY_EMAIL is required" }).trim().toLowerCase().email(),
+  // Staged rollout: enroll and verify the administrator first, then turn
+  // enforcement on explicitly. Enabling this flag without an ACTIVE MFA
+  // credential fails the privileged login closed; ordinary staff are not
+  // affected by this single-admin policy.
+  ADMIN_MFA_REQUIRED: booleanFromString.default("false"),
+  ADMIN_MFA_CHALLENGE_TTL_SECONDS: z.coerce.number().int().min(60).max(600).default(300),
+  ADMIN_MFA_ENROLLMENT_TTL_SECONDS: z.coerce.number().int().min(300).max(3600).default(900),
+  ADMIN_STEP_UP_TTL_SECONDS: z.coerce.number().int().min(60).max(1800).default(300),
+  ADMIN_STEP_UP_MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
+  ADMIN_STEP_UP_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+
   DATABASE_URL: z
     .string({ required_error: "DATABASE_URL is required" })
     .min(1, "DATABASE_URL is required")
@@ -89,12 +105,15 @@ export const envSchema = z.object({
   BOLD_WEBHOOK_SECRET: z.string().default(""),
   PRODUCTION_PAYMENTS_ENABLED: booleanFromString.default("false"),
 
-  SMTP_HOST: z.string().default(""),
-  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_HOST: z.string().trim().default(""),
+  SMTP_PORT: z.preprocess(
+    (value) => value === "" ? undefined : value,
+    z.coerce.number().int().positive().max(65_535).optional(),
+  ),
   SMTP_SECURE: booleanFromString.default("false"),
-  SMTP_USER: z.string().default(""),
+  SMTP_USER: z.string().trim().default(""),
   SMTP_PASSWORD: z.string().default(""),
-  SMTP_FROM: z.string().default(""),
+  SMTP_FROM: z.union([z.literal(""), z.string().trim().email()]).default(""),
 
   // Institutional contact address - used as the notification "from" name
   // and inside email templates. Not itself proof that SMTP delivery is
@@ -228,6 +247,21 @@ export const envSchema = z.object({
   // rationale as the other STORAGE_DIR vars.
   REPORTS_STORAGE_DIR: z.string().default("./storage/reports"),
 }).superRefine((config, context) => {
+  if (config.ADMIN_ACCOUNT_EMAIL === config.ADMIN_RECOVERY_EMAIL) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ADMIN_RECOVERY_EMAIL"],
+      message: "ADMIN_RECOVERY_EMAIL must differ from ADMIN_ACCOUNT_EMAIL",
+    });
+  }
+  if (Boolean(config.SMTP_USER) !== Boolean(config.SMTP_PASSWORD)) {
+    const missingField = config.SMTP_USER ? "SMTP_PASSWORD" : "SMTP_USER";
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [missingField],
+      message: `${missingField} is required when SMTP authentication is configured`,
+    });
+  }
   if (config.EXTERNAL_CORE_PROVIDER === "http") {
     const required: Array<keyof typeof config> = [
       "EXTERNAL_CORE_BASE_URL",

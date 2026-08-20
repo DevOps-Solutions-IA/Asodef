@@ -11,9 +11,9 @@ export enum PasswordRecoveryErrorCode {
   PASSWORD_REUSED = "PASSWORD_REUSED",
   CURRENT_PASSWORD_INVALID = "CURRENT_PASSWORD_INVALID",
   RATE_LIMITED = "RATE_LIMITED",
-  // No code path in this story returns this synchronously today (mail
-  // dispatch is fire-and-forget, strictly after the HTTP response) - kept
-  // for contract completeness/future use (e.g. a future "resend" flow).
+  CONCURRENT_UPDATE = "CONCURRENT_UPDATE",
+  // Durable outbox insertion is awaited, while transport delivery remains
+  // asynchronous. Kept for a future explicit resend/status contract.
   NOTIFICATION_UNAVAILABLE = "NOTIFICATION_UNAVAILABLE",
   GENERIC_FAILURE = "GENERIC_FAILURE",
 }

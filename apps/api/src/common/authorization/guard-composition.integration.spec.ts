@@ -10,9 +10,12 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { JwtAuthGuard } from "../../modules/auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../modules/auth/guards/permissions.guard";
 import { RolesGuard } from "../../modules/auth/guards/roles.guard";
+import { StepUpGuard } from "../../modules/auth/guards/step-up.guard";
 import { RequirePermissions } from "../../modules/auth/decorators/permissions.decorator";
 import { RequireRoles } from "../../modules/auth/decorators/roles.decorator";
+import { RequireStepUp } from "../../modules/auth/decorators/require-step-up.decorator";
 import { TokenService } from "../../modules/auth/token.service";
+import { SessionService } from "../../modules/auth/session.service";
 import { PrismaModule } from "../../database/prisma.module";
 import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventsModule } from "../security-events/security-events.module";
@@ -40,6 +43,15 @@ class CombinedGuardTestController {
   }
 }
 
+@Controller("test-step-up")
+class StepUpGuardTestController {
+  @RequireStepUp()
+  @Get()
+  handle() {
+    return { ok: true };
+  }
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: validateEnv }),
@@ -47,10 +59,12 @@ class CombinedGuardTestController {
     PrismaModule,
     SecurityEventsModule,
   ],
-  controllers: [CombinedGuardTestController],
+  controllers: [CombinedGuardTestController, StepUpGuardTestController],
   providers: [
     TokenService,
+    SessionService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: StepUpGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
@@ -66,6 +80,7 @@ describe("Guard composition and ordering (US-008)", () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   let tokenService: TokenService;
+  let sessionService: SessionService;
   const createdUserIds: string[] = [];
 
   beforeAll(async () => {
@@ -79,6 +94,7 @@ describe("Guard composition and ordering (US-008)", () => {
 
     prisma = moduleRef.get(PrismaService);
     tokenService = moduleRef.get(TokenService);
+    sessionService = moduleRef.get(SessionService);
     await seedRbac(prisma);
   });
 
@@ -104,8 +120,12 @@ describe("Guard composition and ordering (US-008)", () => {
     return user;
   }
 
-  function cookieFor(userId: string, sessionId = randomUUID()): string {
-    const token = tokenService.signAccessToken({ sub: userId, sid: sessionId });
+  async function cookieFor(userId: string): Promise<string> {
+    const { session } = await sessionService.createSession(userId, {
+      ipAddress: "127.0.0.1",
+      userAgent: "guard-composition-integration",
+    });
+    const token = tokenService.signAccessToken({ sub: userId, sid: session.id });
     return `asodef_at=${token}`;
   }
 
@@ -123,7 +143,7 @@ describe("Guard composition and ordering (US-008)", () => {
     // FINANCE satisfies @RequireRoles("FINANCE") but FINANCE's permission
     // set never includes customers.read.
     const user = await createUserWithRoles(["FINANCE"]);
-    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookieFor(user.id));
+    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", await cookieFor(user.id));
     expect(response.status).toBe(403);
   });
 
@@ -132,26 +152,26 @@ describe("Guard composition and ordering (US-008)", () => {
     // is not FINANCE (@RequireRoles fails) - proves both guards must
     // independently pass, not just one of the two.
     const user = await createUserWithRoles(["COMMERCIAL"]);
-    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookieFor(user.id));
+    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", await cookieFor(user.id));
     expect(response.status).toBe(403);
   });
 
   it("returns 403 when the user holds neither the required role nor the required permission", async () => {
     const user = await createUserWithRoles(["AUDITOR"]);
-    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookieFor(user.id));
+    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", await cookieFor(user.id));
     expect(response.status).toBe(403);
   });
 
   it("returns 200 only when the user holds both the required role AND the required permission", async () => {
     const user = await createUserWithRoles(["FINANCE", "COMMERCIAL"]);
-    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookieFor(user.id));
+    const response = await request(app.getHttpServer()).get("/test-combined").set("Cookie", await cookieFor(user.id));
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
   });
 
   it("permission changes take effect on the very next request - no caching/staleness (US-008 section 8)", async () => {
     const user = await createUserWithRoles(["FINANCE"]); // role satisfied, permission still missing
-    const cookie = cookieFor(user.id);
+    const cookie = await cookieFor(user.id);
 
     const before = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookie);
     expect(before.status).toBe(403);
@@ -170,7 +190,7 @@ describe("Guard composition and ordering (US-008)", () => {
 
   it("a permission revoked after the fact stops working on the very next request", async () => {
     const user = await createUserWithRoles(["FINANCE", "COMMERCIAL"]);
-    const cookie = cookieFor(user.id);
+    const cookie = await cookieFor(user.id);
 
     const before = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookie);
     expect(before.status).toBe(200);
@@ -180,5 +200,33 @@ describe("Guard composition and ordering (US-008)", () => {
 
     const after = await request(app.getHttpServer()).get("/test-combined").set("Cookie", cookie);
     expect(after.status).toBe(403);
+  });
+
+  it("fails a step-up route closed until the server-side session has MFA and recent authentication", async () => {
+    const user = await createUserWithRoles(["AUDITOR"]);
+    const cookie = await cookieFor(user.id);
+
+    const before = await request(app.getHttpServer()).get("/test-step-up").set("Cookie", cookie);
+    expect(before.status).toBe(403);
+
+    const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id, revokedAt: null } });
+    await sessionService.markStepUpVerified(session.id, user.id);
+
+    const after = await request(app.getHttpServer()).get("/test-step-up").set("Cookie", cookie);
+    expect(after.status).toBe(200);
+  });
+
+  it("rejects a server-side step-up timestamp after the configured TTL expires", async () => {
+    const user = await createUserWithRoles(["AUDITOR"]);
+    const cookie = await cookieFor(user.id);
+    const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id, revokedAt: null } });
+    const stale = new Date(Date.now() - 301_000);
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: stale, recentAuthenticationAt: stale },
+    });
+
+    const response = await request(app.getHttpServer()).get("/test-step-up").set("Cookie", cookie);
+    expect(response.status).toBe(403);
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Module, Post } from "@nestjs/common";
+import { Body, Controller, Get, Module, Post } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -106,6 +106,11 @@ class ValidationTestController {
   create(@Body() dto: ValidationTestDto) {
     return { received: dto };
   }
+
+  @Get("unexpected")
+  unexpected(): never {
+    throw new Error("password=must-never-reach-the-client");
+  }
 }
 
 @Module({
@@ -166,10 +171,55 @@ describe("Global ValidationPipe (integration, real HTTP via the exact configureA
     expect(response.body).toMatchObject({
       statusCode: 400,
       error: "Bad Request",
+      code: "VALIDATION_ERROR",
+      classification: "VALIDATION",
       path: "/api/v1/test-validation",
     });
     expect(response.body.timestamp).toBeDefined();
     expect(response.body.requestId).toBeDefined();
+    expect(response.body.correlationId).toBeDefined();
     expect(response.body.stack).toBeUndefined();
+  });
+
+  it("returns a generic classified envelope for unexpected errors without stack or secrets", async () => {
+    const response = await request(app.getHttpServer()).get("/api/v1/test-validation/unexpected");
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      statusCode: 500,
+      code: "INTERNAL_ERROR",
+      classification: "UNKNOWN",
+      message: "Internal server error",
+    });
+    expect(JSON.stringify(response.body)).not.toContain("must-never-reach-the-client");
+    expect(response.body.stack).toBeUndefined();
+  });
+
+  it("rejects an explicitly cross-site cookie-authenticated mutation", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/test-validation")
+      .set("Cookie", "asodef_at=opaque-test-cookie")
+      .set("Origin", "https://attacker.example.invalid")
+      .set("Sec-Fetch-Site", "cross-site")
+      .send({ email: "user@example.com", fullName: "María Rojas" });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      code: "CSRF_ORIGIN_REJECTED",
+      classification: "AUTHORIZATION",
+    });
+  });
+
+  it("allows a same-origin cookie-authenticated mutation to reach normal validation", async () => {
+    const configuredOrigin = process.env.CORS_ORIGIN?.split(",")[0]?.trim();
+    expect(configuredOrigin).toBeTruthy();
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/test-validation")
+      .set("Cookie", "asodef_at=opaque-test-cookie")
+      .set("Origin", configuredOrigin!)
+      .set("Sec-Fetch-Site", "same-origin")
+      .send({ email: "user@example.com", fullName: "María Rojas" });
+
+    expect(response.status).toBe(201);
   });
 });

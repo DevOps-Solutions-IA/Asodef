@@ -8,6 +8,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { PasswordService } from "./password.service";
 import { InMemoryMailTransport } from "../notifications/in-memory-mail.transport";
 import { RedisService } from "../../common/redis/redis.service";
+import { NotificationService } from "../notifications/notification.service";
 
 const CURRENT_PASSWORD = "Current-Http-Password-99!";
 
@@ -28,6 +29,7 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
   let prisma: PrismaService;
   let passwordService: PasswordService;
   let mailTransport: InMemoryMailTransport;
+  let notificationService: NotificationService;
   const createdUserIds: string[] = [];
 
   beforeAll(async () => {
@@ -38,6 +40,7 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
     prisma = app.get(PrismaService);
     passwordService = app.get(PasswordService);
     mailTransport = app.get(InMemoryMailTransport);
+    notificationService = app.get(NotificationService);
 
     // Every in-process supertest request in this file resolves to the
     // same loopback address, so the forgot-password/reset-password/login
@@ -83,7 +86,7 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
   }
 
   async function waitForBackgroundWork(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await notificationService.processAvailableJobs();
   }
 
   describe("POST /api/v1/auth/forgot-password", () => {

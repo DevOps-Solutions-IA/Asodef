@@ -226,7 +226,10 @@ describe("POST /me/consent-records/:purposeKey/revoke (US-073, integration, real
     await grantOptionalMarketing(thirdActor.user.id);
 
     const beforeRevoke = await notificationService.send("general_marketing", thirdActor.user.email, {});
-    expect(beforeRevoke.status).toBe("SENT");
+    // Consent allows the attempt, but the legacy communications path has
+    // no real delivery transport and must never claim a false SENT state.
+    expect(beforeRevoke.status).toBe("FAILED");
+    expect(beforeRevoke.errorCategory).toBe("transport_not_implemented");
 
     const revokeResponse = await request(app.getHttpServer())
       .post("/api/v1/me/consent-records/optional_marketing/revoke")

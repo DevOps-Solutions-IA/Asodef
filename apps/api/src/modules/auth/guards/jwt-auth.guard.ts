@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../../database/prisma.service";
 import { TokenService } from "../token.service";
+import { SessionService } from "../session.service";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import type { AuthenticatedRequest, RequestUser } from "../types/request-user.type";
 import type { EnvConfig } from "../../../config/env.validation";
@@ -45,6 +46,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly tokenService: TokenService,
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly sessionService: SessionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -71,22 +73,25 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: {
-        roles: {
-          include: {
-            role: {
-              include: {
-                permissions: { include: { permission: true } },
+    const [user, session] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        include: {
+          roles: {
+            include: {
+              role: {
+                include: {
+                  permissions: { include: { permission: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+      this.sessionService.findUsableByIdForUser(payload.sid, payload.sub),
+    ]);
 
-    if (!user || user.status !== "ACTIVE") {
+    if (!user || user.status !== "ACTIVE" || !session) {
       throw new UnauthorizedException(SAFE_AUTH_ERROR_MESSAGE);
     }
 
@@ -131,6 +136,7 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     request.user = requestUser;
+    await this.sessionService.touchLastUsedIfUsable(payload.sid, payload.sub);
     return true;
   }
 }

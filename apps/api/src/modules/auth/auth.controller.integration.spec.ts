@@ -12,6 +12,8 @@ import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
 import { PasswordRecoveryService } from "./password-recovery.service";
 import { RedisService } from "../../common/redis/redis.service";
+import { AdminMfaService } from "./mfa/admin-mfa.service";
+import { MfaRequiredException } from "./mfa/mfa.types";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -170,6 +172,13 @@ describe("Auth endpoints (integration, real HTTP via the exact configureApp() se
       expect(logoutResponse.status).toBe(200);
       const clearedCookies = getSetCookieHeader(logoutResponse);
       expect(clearedCookies.some((c) => /asodef_at=;/.test(c) || /Max-Age=0/i.test(c))).toBe(true);
+
+      // A copied access cookie must stop working immediately as well; the
+      // global guard validates its server-side session on every request.
+      const replayedAccess = await request(app.getHttpServer())
+        .get("/api/v1/auth/me")
+        .set("Cookie", loginCookies);
+      expect(replayedAccess.status).toBe(401);
     });
 
     it("is idempotent when called with no cookies at all", async () => {
@@ -197,6 +206,7 @@ describe("AuthController -> 429 mapping (RateLimitedException, isolated from rea
           useValue: { setAccessTokenCookie: jest.fn(), setRefreshTokenCookie: jest.fn(), clearAuthCookies: jest.fn() },
         },
         { provide: PasswordRecoveryService, useValue: {} },
+        { provide: AdminMfaService, useValue: {} },
       ],
     }).compile();
 
@@ -212,5 +222,151 @@ describe("AuthController -> 429 mapping (RateLimitedException, isolated from rea
     expect(response.body.retryAfterSeconds).toBe(42);
 
     await app.close();
+  });
+});
+
+describe("AuthController MFA pre-authentication boundary", () => {
+  it("returns an MFA challenge without setting authentication cookies", async () => {
+    const cookieService = {
+      setAccessTokenCookie: jest.fn(),
+      setRefreshTokenCookie: jest.fn(),
+      clearAuthCookies: jest.fn(),
+    };
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        {
+          provide: AuthService,
+          useValue: {
+            login: jest.fn().mockRejectedValue(new MfaRequiredException("opaque-challenge-token-value-123456", new Date("2030-01-01T00:00:00Z"))),
+          },
+        },
+        { provide: AuthCookieService, useValue: cookieService },
+        { provide: PasswordRecoveryService, useValue: {} },
+        { provide: AdminMfaService, useValue: {} },
+      ],
+    }).compile();
+    const isolatedApp = moduleRef.createNestApplication();
+    await isolatedApp.init();
+
+    const response = await request(isolatedApp.getHttpServer())
+      .post("/auth/login")
+      .send({ email: "admin@asodef.com.co", password: "valid-password-value" });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ mfaRequired: true, challengeToken: "opaque-challenge-token-value-123456" });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(cookieService.setAccessTokenCookie).not.toHaveBeenCalled();
+    expect(cookieService.setRefreshTokenCookie).not.toHaveBeenCalled();
+    expect(response.headers["set-cookie"]).toBeUndefined();
+    await isolatedApp.close();
+  });
+
+  it("performs step-up on the current session without minting cookies or a new session", async () => {
+    const cookieService = {
+      setAccessTokenCookie: jest.fn(),
+      setRefreshTokenCookie: jest.fn(),
+      clearAuthCookies: jest.fn(),
+    };
+    const verifyStepUp = jest.fn().mockResolvedValue({ verifiedAt: new Date("2030-01-01T00:00:00Z") });
+    const currentUser = {
+      id: "00000000-0000-4000-8000-000000000001",
+      email: "admin@asodef.com.co",
+      fullName: "Administrator",
+      status: "ACTIVE",
+      roles: ["SUPER_ADMIN"],
+      permissions: [],
+      sessionId: "00000000-0000-4000-8000-000000000002",
+    };
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        { provide: AuthService, useValue: {} },
+        { provide: AuthCookieService, useValue: cookieService },
+        { provide: PasswordRecoveryService, useValue: {} },
+        { provide: AdminMfaService, useValue: { verifyStepUp } },
+      ],
+    }).compile();
+    const isolatedApp = moduleRef.createNestApplication();
+    isolatedApp.use((req: { user?: typeof currentUser }, _res: unknown, next: () => void) => {
+      req.user = currentUser;
+      next();
+    });
+    await isolatedApp.init();
+
+    const response = await request(isolatedApp.getHttpServer())
+      .post("/auth/step-up")
+      .send({ password: TEST_PASSWORD, code: "123456" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ verifiedAt: "2030-01-01T00:00:00.000Z" });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(verifyStepUp).toHaveBeenCalledWith(
+      currentUser.id,
+      currentUser.sessionId,
+      TEST_PASSWORD,
+      "123456",
+      expect.objectContaining({ requestId: null }),
+    );
+    expect(cookieService.setAccessTokenCookie).not.toHaveBeenCalled();
+    expect(cookieService.setRefreshTokenCookie).not.toHaveBeenCalled();
+    expect(response.headers["set-cookie"]).toBeUndefined();
+    await isolatedApp.close();
+  });
+
+  it("requires and forwards the current password at both enrollment boundaries", async () => {
+    const currentUser = {
+      id: "00000000-0000-4000-8000-000000000011",
+      email: "admin@asodef.com.co",
+      fullName: "Administrator",
+      status: "ACTIVE",
+      roles: ["SUPER_ADMIN"],
+      permissions: [],
+      sessionId: "00000000-0000-4000-8000-000000000012",
+    };
+    const beginEnrollment = jest.fn().mockResolvedValue({
+      secret: "SAFE-TEST-SECRET",
+      otpauthUri: "otpauth://totp/ASODEF:test",
+      expiresAt: new Date("2030-01-01T00:00:00Z"),
+    });
+    const confirmEnrollment = jest.fn().mockResolvedValue({ recoveryCodes: ["AAAA-BBBB-CCCC"] });
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        { provide: AuthService, useValue: {} },
+        { provide: AuthCookieService, useValue: {} },
+        { provide: PasswordRecoveryService, useValue: {} },
+        { provide: AdminMfaService, useValue: { beginEnrollment, confirmEnrollment } },
+      ],
+    }).compile();
+    const isolatedApp = moduleRef.createNestApplication();
+    isolatedApp.use((req: { user?: typeof currentUser }, _res: unknown, next: () => void) => {
+      req.user = currentUser;
+      next();
+    });
+    await isolatedApp.init();
+
+    const begin = await request(isolatedApp.getHttpServer())
+      .post("/auth/mfa/enrollment")
+      .send({ password: TEST_PASSWORD });
+    expect(begin.status).toBe(201);
+    expect(beginEnrollment).toHaveBeenCalledWith(
+      currentUser.id,
+      currentUser.sessionId,
+      TEST_PASSWORD,
+      expect.objectContaining({ requestId: null }),
+    );
+
+    const confirm = await request(isolatedApp.getHttpServer())
+      .post("/auth/mfa/enrollment/confirm")
+      .send({ password: TEST_PASSWORD, code: "123456" });
+    expect(confirm.status).toBe(201);
+    expect(confirmEnrollment).toHaveBeenCalledWith(
+      currentUser.id,
+      currentUser.sessionId,
+      TEST_PASSWORD,
+      "123456",
+      expect.objectContaining({ requestId: null }),
+    );
+    await isolatedApp.close();
   });
 });

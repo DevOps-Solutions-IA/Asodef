@@ -18,6 +18,11 @@ import { AccountUnlockService } from "./account-unlock.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { PermissionsGuard } from "./guards/permissions.guard";
 import { RolesGuard } from "./guards/roles.guard";
+import { StepUpGuard } from "./guards/step-up.guard";
+import { AdminIdentityPolicy } from "./admin-identity.policy";
+import { AdminMfaService } from "./mfa/admin-mfa.service";
+import { MfaSecretProtectorService } from "./mfa/mfa-secret-protector.service";
+import { AdminIdentityInvariantService } from "./admin-identity-invariant.service";
 
 @Module({
   imports: [JwtModule.register({}), SecurityEventsModule, NotificationsModule],
@@ -34,15 +39,20 @@ import { RolesGuard } from "./guards/roles.guard";
     PasswordResetTokenService,
     PasswordRecoveryService,
     AccountUnlockService,
+    AdminIdentityPolicy,
+    AdminMfaService,
+    MfaSecretProtectorService,
+    AdminIdentityInvariantService,
     // Global, deny-by-default: JwtAuthGuard runs first (populates
     // request.user or throws), then PermissionsGuard/RolesGuard, which
     // each no-op when a route declares no @RequirePermissions()/
     // @RequireRoles() metadata. Mark a route @Public() to skip the first
     // guard entirely (health checks, login/refresh/logout).
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: StepUpGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, TokenService, SessionService, AccountUnlockService, PasswordResetTokenService, PasswordService, RateLimiterService],
+  exports: [AuthService, TokenService, SessionService, AccountUnlockService, PasswordResetTokenService, PasswordService, RateLimiterService, AdminIdentityPolicy, AdminMfaService, AdminIdentityInvariantService],
 })
 export class AuthModule {}

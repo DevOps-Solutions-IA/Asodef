@@ -1,7 +1,7 @@
 import { randomBytes, createHmac } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { PasswordReset } from "@prisma/client";
+import type { PasswordReset, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { parseDurationToMs } from "./token.service";
 import type { EnvConfig } from "../../config/env.validation";
@@ -16,6 +16,8 @@ export interface CreatePasswordResetResult {
   passwordReset: PasswordReset;
   rawToken: string;
 }
+
+type PasswordResetWriteClient = Pick<Prisma.TransactionClient, "passwordReset">;
 
 /**
  * Mirrors SessionService's design for the same reasons: the raw token is
@@ -50,15 +52,36 @@ export class PasswordResetTokenService {
    * this user (the documented invalidation policy: at most one active
    * token per user at a time), then creates a fresh one.
    */
-  async createToken(userId: string, context: PasswordResetRequestContext): Promise<CreatePasswordResetResult> {
+  async createToken(
+    userId: string,
+    context: PasswordResetRequestContext,
+    client: PasswordResetWriteClient = this.prisma,
+  ): Promise<CreatePasswordResetResult> {
+    const rawToken = this.generateToken();
+    const passwordReset = await this.createTokenFromRaw(userId, context, rawToken, client);
+    return { passwordReset, rawToken };
+  }
+
+  /**
+   * Transaction-aware variant used when token supersession/creation must
+   * commit atomically with another durable command (for example, its outbox
+   * notification and mandatory security events). The caller generates the
+   * raw token before opening the transaction; only its keyed hash reaches
+   * PostgreSQL.
+   */
+  async createTokenFromRaw(
+    userId: string,
+    context: PasswordResetRequestContext,
+    rawToken: string,
+    client: PasswordResetWriteClient,
+  ): Promise<PasswordReset> {
     const now = new Date();
-    await this.prisma.passwordReset.updateMany({
+    await client.passwordReset.updateMany({
       where: { userId, usedAt: null, supersededAt: null, expiresAt: { gt: now } },
       data: { supersededAt: now },
     });
 
-    const rawToken = this.generateToken();
-    const passwordReset = await this.prisma.passwordReset.create({
+    return client.passwordReset.create({
       data: {
         userId,
         tokenHash: this.hashToken(rawToken),
@@ -68,8 +91,6 @@ export class PasswordResetTokenService {
         expiresAt: new Date(now.getTime() + this.getTtlMs()),
       },
     });
-
-    return { passwordReset, rawToken };
   }
 
   async findByRawToken(rawToken: string): Promise<PasswordReset | null> {
@@ -85,10 +106,14 @@ export class PasswordResetTokenService {
    * token may succeed only once" hold under a real race, not just in the
    * common case.
    */
-  async claim(passwordReset: Pick<PasswordReset, "id">): Promise<boolean> {
-    const result = await this.prisma.passwordReset.updateMany({
-      where: { id: passwordReset.id, usedAt: null, supersededAt: null },
-      data: { usedAt: new Date() },
+  async claim(
+    passwordReset: Pick<PasswordReset, "id">,
+    client: PasswordResetWriteClient = this.prisma,
+    claimedAt = new Date(),
+  ): Promise<boolean> {
+    const result = await client.passwordReset.updateMany({
+      where: { id: passwordReset.id, usedAt: null, supersededAt: null, expiresAt: { gt: claimedAt } },
+      data: { usedAt: claimedAt },
     });
     return result.count === 1;
   }

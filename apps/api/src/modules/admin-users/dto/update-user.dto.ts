@@ -1,4 +1,4 @@
-import { IsEmail, IsISO8601, IsOptional, IsString, MinLength } from "class-validator";
+import { IsEmail, IsISO8601, IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
 import { Transform } from "class-transformer";
 
 /**
@@ -30,4 +30,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsISO8601()
   expectedUpdatedAt?: string;
+
+  /** Explicit monotonic CAS token. Older clients may continue sending
+   * expectedUpdatedAt during the rolling rollout; the service always uses
+   * the row's version internally, so even those requests are race-safe. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedVersion?: number;
 }

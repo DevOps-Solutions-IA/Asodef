@@ -6,6 +6,7 @@ import type { User } from "@prisma/client";
 import { AppModule } from "../../app.module";
 import { configureApp } from "../../bootstrap-app";
 import { PrismaService } from "../../database/prisma.service";
+import { RedisService } from "../../common/redis/redis.service";
 import { PasswordService } from "../auth/password.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
@@ -27,6 +28,13 @@ describe("Legal documents endpoints (integration, real HTTP)", () => {
     await app.init();
     prisma = app.get(PrismaService);
     passwordService = app.get(PasswordService);
+
+    // This suite performs three real HTTP logins from the shared supertest
+    // address. Remove only test login counters left by an interrupted or
+    // previous suite run; never flush unrelated Redis state.
+    const redisClient = app.get(RedisService).getClient();
+    const loginKeys = await redisClient.keys("ratelimit:login:*");
+    if (loginKeys.length > 0) await redisClient.del(...loginKeys);
 
     superAdmin = await createActor("SUPER_ADMIN");
     admin = await createActor("ADMIN");

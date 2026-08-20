@@ -12,6 +12,7 @@ export interface AdminUserSummary {
 
 export interface AdminUserDetail extends AdminUserSummary {
   permissions: string[];
+  version: number;
   updatedAt: Date;
   lockedUntil: Date | null;
   isLocked: boolean;
@@ -111,6 +112,7 @@ export function toAdminUserDetail(
   return {
     ...toAdminUserSummary(user),
     permissions,
+    version: user.version,
     updatedAt: user.updatedAt,
     lockedUntil: user.lockedUntil,
     isLocked: !!user.lockedUntil && user.lockedUntil.getTime() > Date.now(),

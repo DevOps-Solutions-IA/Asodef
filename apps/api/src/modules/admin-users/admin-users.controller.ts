@@ -12,6 +12,7 @@ import { ReasonDto } from "./dto/reason.dto";
 import { RevokeSessionDto } from "./dto/revoke-session.dto";
 import { RoleChangeDto } from "./dto/role-change.dto";
 import { SecurityEventsQueryDto } from "./dto/security-events-query.dto";
+import { RequireStepUp } from "../auth/decorators/require-step-up.decorator";
 
 @ApiTags("admin-users")
 @ApiCookieAuth("asodef_at")
@@ -32,6 +33,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.create")
+  @RequireStepUp()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   createUser(@CurrentUser() actor: RequestUser, @Body() dto: CreateUserDto, @Req() request: AuthenticatedRequest) {
@@ -45,6 +47,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.update")
+  @RequireStepUp()
   @Patch(":userId")
   updateUser(
     @CurrentUser() actor: RequestUser,
@@ -56,6 +59,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.deactivate")
+  @RequireStepUp()
   @Post(":userId/deactivate")
   @HttpCode(HttpStatus.OK)
   deactivateUser(
@@ -68,6 +72,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.reactivate")
+  @RequireStepUp()
   @Post(":userId/reactivate")
   @HttpCode(HttpStatus.OK)
   reactivateUser(
@@ -80,6 +85,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.unlock")
+  @RequireStepUp()
   @Post(":userId/unlock")
   @HttpCode(HttpStatus.OK)
   unlockUser(
@@ -98,6 +104,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.roles.manage")
+  @RequireStepUp()
   @Post(":userId/roles")
   @HttpCode(HttpStatus.OK)
   assignRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto) {
@@ -105,6 +112,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.roles.manage")
+  @RequireStepUp()
   @Post(":userId/roles/revoke")
   @HttpCode(HttpStatus.OK)
   removeRole(@CurrentUser() actor: RequestUser, @Param("userId", ParseUUIDPipe) userId: string, @Body() dto: RoleChangeDto) {
@@ -118,6 +126,7 @@ export class AdminUsersController {
   }
 
   @RequirePermissions("users.sessions.revoke")
+  @RequireStepUp()
   @Post(":userId/sessions/revoke")
   @HttpCode(HttpStatus.OK)
   revokeSessions(

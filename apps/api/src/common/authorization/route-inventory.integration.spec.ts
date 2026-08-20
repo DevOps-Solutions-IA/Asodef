@@ -5,6 +5,7 @@ import { AppModule } from "../../app.module";
 import { IS_PUBLIC_KEY } from "../../modules/auth/decorators/public.decorator";
 import { PERMISSIONS_KEY } from "../../modules/auth/decorators/permissions.decorator";
 import { ROLES_KEY } from "../../modules/auth/decorators/roles.decorator";
+import { REQUIRE_STEP_UP_KEY } from "../../modules/auth/decorators/require-step-up.decorator";
 
 /**
  * Every entry here is an *authenticated* route (JwtAuthGuard still
@@ -111,5 +112,37 @@ describe("Route inventory: deny-by-default enforcement (US-008)", () => {
     for (const identifier of DOCUMENTED_NO_PERMISSION_EXCEPTIONS.keys()) {
       expect(realIdentifiers.has(identifier)).toBe(true);
     }
+  });
+
+  it("keeps every declared critical administrative mutation behind step-up metadata", () => {
+    const required = new Set([
+      "AuthController.regenerateMfaRecoveryCodes",
+      "AuthController.revokeMfa",
+      "AdminUsersController.createUser",
+      "AdminUsersController.updateUser",
+      "AdminUsersController.deactivateUser",
+      "AdminUsersController.reactivateUser",
+      "AdminUsersController.unlockUser",
+      "AdminUsersController.assignRole",
+      "AdminUsersController.removeRole",
+      "AdminUsersController.revokeSessions",
+    ]);
+    const protectedRoutes = new Set<string>();
+
+    for (const wrapper of discoveryService.getControllers()) {
+      const instance = wrapper.instance as object | undefined;
+      const metatype = wrapper.metatype as (new (...args: unknown[]) => unknown) | undefined;
+      if (!instance || !metatype) continue;
+      const prototype = Object.getPrototypeOf(instance) as object;
+      for (const methodName of metadataScanner.getAllMethodNames(prototype)) {
+        const handler = (prototype as Record<string, unknown>)[methodName] as (...args: unknown[]) => unknown;
+        if (Reflect.getMetadata(PATH_METADATA, handler) === undefined) continue;
+        if (reflector.getAllAndOverride<boolean>(REQUIRE_STEP_UP_KEY, [handler, metatype])) {
+          protectedRoutes.add(`${metatype.name}.${methodName}`);
+        }
+      }
+    }
+
+    expect([...required].filter((identifier) => !protectedRoutes.has(identifier))).toEqual([]);
   });
 });

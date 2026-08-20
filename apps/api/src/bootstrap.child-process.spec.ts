@@ -19,6 +19,8 @@ const VALID_ENV_WITHOUT_DATABASE_URL: NodeJS.ProcessEnv = {
   JWT_SECRET: "child-process-test-secret-16-chars-min",
   JWT_REFRESH_SECRET: "child-process-test-refresh-secret-16-chars-min",
   ENCRYPTION_KEY: "child-process-test-encryption-key-needs-32-chars",
+  ADMIN_ACCOUNT_EMAIL: "admin@asodef.com.co",
+  ADMIN_RECOVERY_EMAIL: "asodefsas@gmail.com",
 };
 
 describe("main.ts entrypoint (integration, real separate process)", () => {

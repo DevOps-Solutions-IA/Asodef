@@ -61,6 +61,7 @@
     "ioredis": "^5.4.1",
     "node-firebird": "2.14.3",
     "nodemailer": "^9.0.1",
+    "otpauth": "9.5.1",
     "pdf-lib": "^1.17.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
