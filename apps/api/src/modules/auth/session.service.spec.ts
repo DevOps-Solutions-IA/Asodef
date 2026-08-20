@@ -90,7 +90,18 @@ describe("SessionService security invariants", () => {
   });
 
   it("preserves assurance timestamps across refresh rotation without renewing them", async () => {
+    const current = {
+      id: "old-session",
+      userId: "user-1",
+      familyId: "00000000-0000-4000-8000-000000000001",
+      revokedAt: null,
+      rotatedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      mfaVerifiedAt: new Date("2026-08-19T10:00:00.000Z"),
+      recentAuthenticationAt: new Date("2026-08-19T10:03:00.000Z"),
+    };
     const sessionDelegate = {
+      findUnique: jest.fn().mockResolvedValue(current),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "new-session", ...data })),
       update: jest.fn().mockResolvedValue(undefined),
@@ -106,16 +117,84 @@ describe("SessionService security invariants", () => {
     const mfaVerifiedAt = new Date("2026-08-19T10:00:00.000Z");
     const recentAuthenticationAt = new Date("2026-08-19T10:03:00.000Z");
 
+    const tx = { session: sessionDelegate, $queryRaw: jest.fn() };
     await service.rotateSession({
       id: "old-session",
       userId: "user-1",
       familyId: "00000000-0000-4000-8000-000000000001",
       mfaVerifiedAt,
       recentAuthenticationAt,
-    } as never, {});
+    } as never, {}, tx as never);
 
     expect(sessionDelegate.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ mfaVerifiedAt, recentAuthenticationAt }),
+    });
+  });
+
+  it("revokes a replayed refresh family under the same serialized transaction", async () => {
+    const sessionDelegate = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "old-session", familyId: "00000000-0000-4000-8000-000000000001",
+        revokedAt: null, rotatedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: jest.fn().mockResolvedValue({ count: 2 }),
+      create: jest.fn(),
+      update: jest.fn(),
+    };
+    const service = new SessionService(
+      {} as PrismaService,
+      { generateRefreshToken: jest.fn().mockReturnValue("unused"), hashRefreshToken: jest.fn().mockReturnValue("unused") } as never,
+    );
+    const tx = { session: sessionDelegate, $queryRaw: jest.fn() };
+
+    await expect(service.rotateSession({ id: "old-session" } as never, {}, tx as never))
+      .resolves.toEqual({ outcome: "replay", familyId: "00000000-0000-4000-8000-000000000001" });
+    expect(sessionDelegate.updateMany).toHaveBeenCalledWith({
+      where: { familyId: "00000000-0000-4000-8000-000000000001", revokedAt: null },
+      data: { revokedAt: expect.any(Date), revokedReason: "REFRESH_TOKEN_REUSE_DETECTED" },
+    });
+    expect(sessionDelegate.create).not.toHaveBeenCalled();
+  });
+
+  it("never resurrects assurance cleared after the caller's initial refresh-token lookup", async () => {
+    const sessionDelegate = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "old-session", userId: "user-1", familyId: "00000000-0000-4000-8000-000000000001",
+        revokedAt: null, rotatedAt: null, expiresAt: new Date(Date.now() + 60_000),
+        mfaVerifiedAt: null, recentAuthenticationAt: null,
+      }),
+      updateMany: jest.fn(),
+      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: "new-session", ...data })),
+      update: jest.fn(),
+    };
+    const service = new SessionService(
+      {} as PrismaService,
+      {
+        generateRefreshToken: jest.fn().mockReturnValue("raw-refresh"),
+        hashRefreshToken: jest.fn().mockReturnValue("hashed-refresh"),
+        getRefreshTtlMs: jest.fn().mockReturnValue(60_000),
+      } as never,
+    );
+    const staleAssurance = new Date();
+    await service.rotateSession({
+      id: "old-session", userId: "user-1", familyId: "00000000-0000-4000-8000-000000000001",
+      mfaVerifiedAt: staleAssurance, recentAuthenticationAt: staleAssurance,
+    } as never, {}, { session: sessionDelegate, $queryRaw: jest.fn() } as never);
+
+    expect(sessionDelegate.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ mfaVerifiedAt: null, recentAuthenticationAt: null }),
+    });
+  });
+
+  it("clears assurance only on the exact usable current session", async () => {
+    const { service, session } = harness();
+    session.updateMany.mockResolvedValue({ count: 1 });
+    const now = new Date();
+    await expect(service.clearAssuranceForUsableSession("session-1", "user-1", { session } as never, now))
+      .resolves.toBe(true);
+    expect(session.updateMany).toHaveBeenCalledWith({
+      where: { id: "session-1", userId: "user-1", revokedAt: null, rotatedAt: null, expiresAt: { gt: now } },
+      data: { mfaVerifiedAt: null, recentAuthenticationAt: null },
     });
   });
 

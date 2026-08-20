@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Session, SessionRevocationReason } from "@prisma/client";
+import { Prisma, type Session, type SessionRevocationReason } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { TokenService } from "./token.service";
 
@@ -19,7 +19,10 @@ export interface InitialSessionAssurance {
   recentAuthenticationAt?: Date;
 }
 
-export type RotateSessionResult = { outcome: "rotated"; session: Session; rawRefreshToken: string } | { outcome: "replay"; familyId: string };
+export type RotateSessionResult =
+  | { outcome: "rotated"; session: Session; rawRefreshToken: string }
+  | { outcome: "replay"; familyId: string }
+  | { outcome: "invalid" };
 
 export interface SessionStepUpState {
   mfaVerifiedAt: Date | null;
@@ -27,6 +30,7 @@ export interface SessionStepUpState {
 }
 
 type SessionWriteClient = Pick<Prisma.TransactionClient, "session">;
+type SessionRotationClient = Pick<Prisma.TransactionClient, "session" | "$queryRaw">;
 
 @Injectable()
 export class SessionService {
@@ -120,29 +124,45 @@ export class SessionService {
    * response. This is what makes "two concurrent refresh attempts must
    * not both succeed with the same token" hold even under a real race.
    */
-  async rotateSession(session: Session, context: SessionRequestContext): Promise<RotateSessionResult> {
+  async rotateSession(
+    session: Session,
+    context: SessionRequestContext,
+    client: SessionRotationClient,
+  ): Promise<RotateSessionResult> {
     const rawRefreshToken = this.tokenService.generateRefreshToken();
     const newRefreshTokenHash = this.tokenService.hashRefreshToken(rawRefreshToken);
     const now = new Date();
 
-    const claim = await this.prisma.session.updateMany({
-      where: { id: session.id, rotatedAt: null, revokedAt: null },
-      data: { rotatedAt: now },
-    });
-
-    if (claim.count === 0) {
-      // Lost the race, or the token was already rotated/revoked before we
-      // got here - either way, the caller must treat this as a replay.
-      return { outcome: "replay", familyId: session.familyId };
+    // Serialize every consumer of the same refresh generation. A plain
+    // updateMany claim followed by an out-of-transaction child INSERT leaves
+    // an exploitable interleaving: a losing request can revoke the family
+    // before the winner inserts its child, allowing that child to escape the
+    // replay revocation. The row lock keeps claim, child creation and a losing
+    // family revocation in one ordered transaction.
+    await client.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "sessions"
+      WHERE "id" = ${session.id}::uuid
+      FOR UPDATE
+    `);
+    const current = await client.session.findUnique({ where: { id: session.id } });
+    if (!current || current.revokedAt || current.expiresAt.getTime() <= now.getTime()) {
+      return { outcome: "invalid" };
+    }
+    if (current.rotatedAt) {
+      await client.session.updateMany({
+        where: { familyId: current.familyId, revokedAt: null },
+        data: { revokedAt: now, revokedReason: "REFRESH_TOKEN_REUSE_DETECTED" },
+      });
+      return { outcome: "replay", familyId: current.familyId };
     }
 
-    // The atomic claim above is the only step that needs race protection.
-    // Creating the next-generation session and linking it back is safe to
-    // do as two plain sequential statements: on a crash between them, the
-    // old token is already invalidated (rotatedAt is set) and no new
-    // token was issued, so the user simply has to log in again - not a
-    // security hole, just a UX hiccup on an extremely rare failure.
-    const newSession = await this.prisma.session.create({
+    await client.session.update({ where: { id: current.id }, data: { rotatedAt: now } });
+
+    // Child creation and the back-link remain inside the caller-owned
+    // transaction. A crash or mandatory-event failure therefore rolls the
+    // entire generation change back; no unreachable child or half-rotated
+    // parent can be committed.
+    const newSession = await client.session.create({
       data: {
         userId: session.userId,
         familyId: session.familyId,
@@ -153,16 +173,42 @@ export class SessionService {
         lastUsedAt: now,
         // Rotation preserves the original assurance timestamps; it must
         // never manufacture a fresh step-up window merely by refreshing.
-        mfaVerifiedAt: session.mfaVerifiedAt,
-        recentAuthenticationAt: session.recentAuthenticationAt,
+        // Copy only the row re-read under lock. Credential/password changes
+        // may have cleared assurance after the caller's initial token lookup;
+        // propagating the stale input object would resurrect that assurance.
+        mfaVerifiedAt: current.mfaVerifiedAt,
+        recentAuthenticationAt: current.recentAuthenticationAt,
       },
     });
-    await this.prisma.session.update({
+    await client.session.update({
       where: { id: session.id },
       data: { rotatedToSessionId: newSession.id },
     });
 
     return { outcome: "rotated", session: newSession, rawRefreshToken };
+  }
+
+  /** Invalidates all authentication assurance derived before a sensitive
+   * credential change. The exact live session must still exist; callers use
+   * the boolean as a CAS result and roll their surrounding transaction back
+   * when revocation/rotation won the race. */
+  async clearAssuranceForUsableSession(
+    sessionId: string,
+    userId: string,
+    client: SessionWriteClient,
+    now = new Date(),
+  ): Promise<boolean> {
+    const result = await client.session.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { mfaVerifiedAt: null, recentAuthenticationAt: null },
+    });
+    return result.count === 1;
   }
 
   /** Every session ever created for this user, newest first - the

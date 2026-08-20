@@ -2,6 +2,10 @@ import { Logger } from "@nestjs/common";
 import { NoopMailTransport } from "./noop-mail.transport";
 
 describe("NoopMailTransport", () => {
+  it("reports that delivery is not configured without probing a network", async () => {
+    await expect(new NoopMailTransport().checkHealth()).resolves.toBe("NOT_CONFIGURED");
+  });
+
   it("fails closed without logging recipient or message content", async () => {
     const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
     const transport = new NoopMailTransport();

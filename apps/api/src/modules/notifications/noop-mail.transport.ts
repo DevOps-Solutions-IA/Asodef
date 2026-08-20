@@ -12,6 +12,10 @@ import type { MailSendResult, MailTransport, OutboundEmailMessage } from "./mail
 export class NoopMailTransport implements MailTransport {
   private readonly logger = new Logger(NoopMailTransport.name);
 
+  checkHealth(): Promise<"NOT_CONFIGURED"> {
+    return Promise.resolve("NOT_CONFIGURED");
+  }
+
   send(message: OutboundEmailMessage): Promise<MailSendResult> {
     this.logger.warn(
       `Mail transport not configured (correlationId=${message.correlationId})`,

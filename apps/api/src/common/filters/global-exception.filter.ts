@@ -115,6 +115,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       error: errorName,
       message,
       code,
+      // Enterprise aliases retained alongside the established fields so
+      // clients can migrate without a breaking error-envelope cutover.
+      errorCode: code,
+      safeMessage: message,
       classification,
       ...extra,
       path: request.originalUrl ?? request.url,

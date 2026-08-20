@@ -161,7 +161,7 @@ describe("AdminMfaPanel", () => {
     await user.type(screen.getByLabelText("Código de verificación", { exact: false }), "123456");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos verificar la contraseña y el código.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("La contraseña actual no es válida.");
     expect(screen.getByRole("alert")).not.toHaveTextContent("raw password detail");
     expect(regenerateAttempts).toBe(1);
   });

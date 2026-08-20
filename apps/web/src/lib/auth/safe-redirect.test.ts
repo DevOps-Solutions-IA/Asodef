@@ -13,9 +13,14 @@ describe("isSafeInternalPath", () => {
 
   it("rejects backslash and encoded-separator normalization bypasses", () => {
     expect(isSafeInternalPath("/\\evil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/\\\\evil.example.com")).toBe(false);
     expect(isSafeInternalPath("/%5cevil.example.com")).toBe(false);
     expect(isSafeInternalPath("/%5C%5Cevil.example.com")).toBe(false);
     expect(isSafeInternalPath("/%255cevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%25255C%25255Cevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%2F%2Fevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/%252F%252Fevil.example.com")).toBe(false);
+    expect(isSafeInternalPath("/https:%2F%2Fevil.example.com")).toBe(false);
   });
 
   it("rejects an absolute external URL", () => {

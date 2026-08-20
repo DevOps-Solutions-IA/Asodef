@@ -63,7 +63,19 @@ describe("RoleAssignmentService (integration, real Postgres)", () => {
       const actorId = await createUser();
       const targetId = await createUser();
 
-      const result = await service.assignRole(superAdminActor(actorId), targetId, "FINANCE", "onboarding new finance staff");
+      const context = {
+        requestId: randomUUID(),
+        correlationId: randomUUID(),
+        ipAddress: "203.0.113.10",
+        userAgent: "governance-test",
+      };
+      const result = await service.assignRole(
+        superAdminActor(actorId),
+        targetId,
+        "FINANCE",
+        "onboarding new finance staff",
+        { context },
+      );
 
       expect(result.applied).toBe(true);
       const assignment = await prisma.userRole.findUnique({
@@ -73,6 +85,16 @@ describe("RoleAssignmentService (integration, real Postgres)", () => {
 
       const event = await prisma.securityEvent.findFirst({ where: { userId: actorId, type: "ROLE_ASSIGNED" } });
       expect(event).not.toBeNull();
+      expect(event).toMatchObject({
+        actorUserId: actorId,
+        subjectUserId: targetId,
+        result: "SUCCESS",
+        reason: "onboarding new finance staff",
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
       expect(event?.metadata).toMatchObject({ targetUserId: targetId, roleName: "FINANCE" });
     });
 

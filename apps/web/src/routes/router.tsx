@@ -336,12 +336,9 @@ export const routeConfig: RouteObject[] = [
   },
 ];
 
-// Opt into React Router v7's behavior now (still on v6) so this codebase
-// doesn't accumulate deprecation debt before the next major upgrade.
-// Note: v7_startTransition is a *render*-level flag read by RouterProvider
-// itself (passed as its own `future` prop in App.tsx/router.test.tsx), not
-// by createBrowserRouter/createMemoryRouter - the flags below are the
-// router/data-level ones.
+// Keep the previously adopted data-router behavior explicit. React Router 7
+// made transition scheduling the default and removed RouterProvider's former
+// v7_startTransition compatibility prop.
 export const routerFutureConfig = {
   v7_relativeSplatPath: true,
   v7_fetcherPersist: true,

@@ -24,6 +24,7 @@ describe("JwtAuthGuard", () => {
   let tokenService: jest.Mocked<Pick<TokenService, "verifyAccessToken">>;
   let prisma: { user: { findUnique: jest.Mock } };
   let configService: { get: jest.Mock };
+  let adminIdentityPolicy: { mayAuthenticate: jest.Mock; isPrivilegedAdminEmail: jest.Mock };
   let sessionService: {
     findUsableByIdForUser: jest.Mock;
     touchLastUsedIfUsable: jest.Mock;
@@ -34,7 +35,13 @@ describe("JwtAuthGuard", () => {
     reflector = new Reflector();
     tokenService = { verifyAccessToken: jest.fn() };
     prisma = { user: { findUnique: jest.fn() } };
-    configService = { get: jest.fn().mockReturnValue("asodef_at") };
+    configService = {
+      get: jest.fn((key: string) => key === "COOKIE_ACCESS_TOKEN_NAME" ? "asodef_at" : false),
+    };
+    adminIdentityPolicy = {
+      mayAuthenticate: jest.fn().mockReturnValue(true),
+      isPrivilegedAdminEmail: jest.fn().mockReturnValue(false),
+    };
     sessionService = {
       findUsableByIdForUser: jest.fn().mockResolvedValue({ id: "session-1", userId: "user-1" }),
       touchLastUsedIfUsable: jest.fn().mockResolvedValue(undefined),
@@ -45,6 +52,7 @@ describe("JwtAuthGuard", () => {
       prisma as unknown as PrismaService,
       configService as never,
       sessionService as unknown as SessionService,
+      adminIdentityPolicy as never,
     );
   });
 
@@ -134,6 +142,42 @@ describe("JwtAuthGuard", () => {
     await expect(guard.canActivate(buildContext({ asodef_at: "a.valid.jwt" }))).rejects.toThrow(UnauthorizedException);
     expect(sessionService.findUsableByIdForUser).toHaveBeenCalledWith("session-1", "user-1");
     expect(sessionService.touchLastUsedIfUsable).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a password-only official-admin session immediately when MFA enforcement is enabled", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    configService.get.mockImplementation((key: string) => key === "COOKIE_ACCESS_TOKEN_NAME" ? "asodef_at" : true);
+    adminIdentityPolicy.isPrivilegedAdminEmail.mockReturnValue(true);
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1", sid: "session-1", iat: nowSeconds(), exp: nowSeconds() + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1", email: "admin@asodef.com.co", fullName: "Admin", status: "ACTIVE", roles: [],
+    });
+    sessionService.findUsableByIdForUser.mockResolvedValue({
+      id: "session-1", userId: "user-1", mfaVerifiedAt: null,
+    });
+
+    await expect(guard.canActivate(buildContext({ asodef_at: "a.valid.jwt" })))
+      .rejects.toThrow(UnauthorizedException);
+    expect(sessionService.touchLastUsedIfUsable).not.toHaveBeenCalled();
+  });
+
+  it("accepts an MFA-verified official-admin session after enforcement is enabled", async () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    configService.get.mockImplementation((key: string) => key === "COOKIE_ACCESS_TOKEN_NAME" ? "asodef_at" : true);
+    adminIdentityPolicy.isPrivilegedAdminEmail.mockReturnValue(true);
+    tokenService.verifyAccessToken.mockReturnValue({
+      sub: "user-1", sid: "session-1", iat: nowSeconds(), exp: nowSeconds() + 900,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1", email: "admin@asodef.com.co", fullName: "Admin", status: "ACTIVE", roles: [],
+    });
+    sessionService.findUsableByIdForUser.mockResolvedValue({
+      id: "session-1", userId: "user-1", mfaVerifiedAt: new Date(),
+    });
+
+    await expect(guard.canActivate(buildContext({ asodef_at: "a.valid.jwt" }))).resolves.toBe(true);
   });
 
   it("populates request.user with safe fields (no password/token hash) for a valid token", async () => {

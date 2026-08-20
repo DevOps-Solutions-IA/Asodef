@@ -1,8 +1,12 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { NotificationStatus } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { RedisService } from "../../common/redis/redis.service";
 import { MasterHealthService } from "../master/health/master-health.service";
+import { AdminIdentityInvariantService } from "../auth/admin-identity-invariant.service";
+import type { EnvConfig } from "../../config/env.validation";
+import { NotificationService } from "../notifications/notification.service";
 import type { AdminSystemStatus, OperationalStatus } from "./admin-system.types";
 
 const PROBE_TIMEOUT_MS = 3_000;
@@ -19,13 +23,17 @@ export class AdminSystemService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly masterHealth: MasterHealthService,
+    private readonly adminIdentityInvariant: AdminIdentityInvariantService,
+    private readonly config: ConfigService<EnvConfig, true>,
+    private readonly notifications: NotificationService,
   ) {}
 
   async getStatus(): Promise<AdminSystemStatus> {
-    const [postgres, redis, master, operationalData] = await Promise.all([
+    const [postgres, redis, master, notificationTransport, operationalData] = await Promise.all([
       probe(() => this.prisma.isDatabaseHealthy()),
       probe(() => this.redis.isHealthy()),
       probe(() => this.masterHealth.check()),
+      probe(() => this.notifications.checkTransportHealth()),
       withinTimeout(this.loadOperationalData(), PROBE_TIMEOUT_MS).catch(() => null),
     ]);
 
@@ -37,10 +45,23 @@ export class AdminSystemService {
           ? "AVAILABLE"
           : "UNAVAILABLE";
     const postgresAvailable = postgres.value === true;
+    const redisAvailable = redis.value === true;
     const trustedOperationalData = postgresAvailable ? operationalData : null;
+    const identityStatus = this.adminIdentityInvariant.getStatus().status;
+    const smtpConfigured = this.config.get("SMTP_HOST", { infer: true }).trim().length > 0;
+    const notificationTransportStatus: OperationalStatus = notificationTransport.value ?? "UNAVAILABLE";
+    const notificationsAvailable = trustedOperationalData !== null;
+    const coreHealthy = postgresAvailable && redisAvailable && identityStatus === "VERIFIED"
+      && smtpConfigured && notificationTransportStatus === "AVAILABLE";
+    const overallStatus = !coreHealthy
+      ? "CORE_UNHEALTHY" as const
+      : masterStatus === "AVAILABLE"
+        ? "CORE_HEALTHY" as const
+        : "DEGRADED_OPTIONAL_DEPENDENCY" as const;
 
     return {
       generatedAt: new Date().toISOString(),
+      overallStatus,
       api: {
         status: "AVAILABLE",
         uptimeSeconds: Math.max(0, Math.floor(process.uptime())),
@@ -50,24 +71,50 @@ export class AdminSystemService {
       },
       dependencies: {
         postgres: { status: postgresAvailable ? "AVAILABLE" : "UNAVAILABLE", latencyMs: postgres.latencyMs },
-        redis: { status: redis.value === true ? "AVAILABLE" : "UNAVAILABLE", latencyMs: redis.latencyMs },
+        redis: { status: redisAvailable ? "AVAILABLE" : "UNAVAILABLE", latencyMs: redis.latencyMs },
         master: { status: masterStatus, latencyMs: master.latencyMs },
       },
-      notifications: trustedOperationalData
+      security: {
+        status: identityStatus,
+        recoveryChannel: identityStatus === "VERIFIED" ? "CONFIGURED" : "NOT_CONFIGURED",
+        mfaRequired: this.config.get("ADMIN_MFA_REQUIRED", { infer: true }),
+      },
+      notifications: notificationsAvailable && trustedOperationalData
         ? {
-            status: "AVAILABLE",
+            status: notificationTransportStatus,
+            transport: smtpConfigured ? "SMTP" : "NOOP",
+            transportConfigured: smtpConfigured,
             backlog: trustedOperationalData.backlog,
+            queued: trustedOperationalData.queued,
+            processing: trustedOperationalData.processing,
+            retryPending: trustedOperationalData.retryPending,
             failed: trustedOperationalData.failed,
+            unknownResult: trustedOperationalData.unknownResult,
             deadLetter: trustedOperationalData.deadLetter,
           }
-        : { status: "UNKNOWN", backlog: null, failed: null, deadLetter: null },
+        : {
+            status: "UNAVAILABLE",
+            transport: smtpConfigured ? "SMTP" : "NOOP",
+            transportConfigured: smtpConfigured,
+            backlog: null,
+            queued: null,
+            processing: null,
+            retryPending: null,
+            failed: null,
+            unknownResult: null,
+            deadLetter: null,
+          },
     };
   }
 
   private async loadOperationalData(): Promise<{
     migrationVersion: string | "UNKNOWN";
     backlog: number;
+    queued: number;
+    processing: number;
+    retryPending: number;
     failed: number;
+    unknownResult: number;
     deadLetter: number;
   }> {
     const [migrations, groupedJobs] = await Promise.all([
@@ -86,7 +133,11 @@ export class AdminSystemService {
     return {
       migrationVersion: migrations[0]?.migration_name ?? UNKNOWN,
       backlog: BACKLOG_STATUSES.reduce((total, status) => total + count(status), 0),
-      failed: count("FAILED") + count("UNKNOWN_RESULT") + deadLetter,
+      queued: count("QUEUED"),
+      processing: count("PROCESSING"),
+      retryPending: count("RETRY_PENDING"),
+      failed: count("FAILED"),
+      unknownResult: count("UNKNOWN_RESULT"),
       deadLetter,
     };
   }

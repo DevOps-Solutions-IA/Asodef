@@ -69,7 +69,7 @@ export class AdminIdentityInvariantService implements OnApplicationBootstrap {
           throw new AdminIdentityInvariantError("OFFICIAL_RECOVERY_MISMATCH");
         }
         const officialRoles = new Set(official.roles.map(({ role }) => role.name));
-        if (!PRIVILEGED_ROLE_NAMES.some((roleName) => officialRoles.has(roleName))) {
+        if (!officialRoles.has("SUPER_ADMIN")) {
           throw new AdminIdentityInvariantError("OFFICIAL_PRIVILEGE_MISSING");
         }
         if (privilegedUsers.some((user) => !this.policy.isPrivilegedAdminEmail(user.email))) {

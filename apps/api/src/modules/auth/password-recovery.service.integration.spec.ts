@@ -877,7 +877,13 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
 
     it("keeps the current session active but revokes every other session (documented decision)", async () => {
       const user = await createUser();
-      const currentSession = await sessionService.createSession(user.id, uniqueContext());
+      const assuranceAt = new Date();
+      const currentSession = await sessionService.createSession(
+        user.id,
+        uniqueContext(),
+        undefined,
+        { mfaVerifiedAt: assuranceAt, recentAuthenticationAt: assuranceAt },
+      );
       const otherSession = await sessionService.createSession(user.id, uniqueContext());
 
       await service.changePassword(
@@ -893,6 +899,8 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
       ]);
 
       expect(refreshedCurrent.revokedAt).toBeNull(); // stays active - documented decision
+      expect(refreshedCurrent.mfaVerifiedAt).toBeNull();
+      expect(refreshedCurrent.recentAuthenticationAt).toBeNull();
       expect(refreshedOther.revokedAt).not.toBeNull();
       expect(refreshedOther.revokedReason).toBe("PASSWORD_CHANGED");
     });
@@ -1073,6 +1081,7 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
   describe("notification failure handling", () => {
     it("schedules a retry and records PASSWORD_NOTIFICATION_FAILED when the first delivery attempt fails", async () => {
       const failingTransport: MailTransport = {
+        checkHealth: () => Promise.resolve("UNAVAILABLE"),
         send: () => Promise.resolve({ delivered: false, failureReason: "SMTP_NOT_CONFIGURED" }),
       };
 

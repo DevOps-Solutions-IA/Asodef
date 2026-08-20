@@ -21,6 +21,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventsModule } from "../security-events/security-events.module";
 import { seedRbac } from "../../database/seed-rbac";
 import { validateEnv } from "../../config/env.validation";
+import { AdminIdentityPolicy } from "../../modules/auth/admin-identity.policy";
 
 /**
  * A throwaway route requiring *both* a role and a permission, used only
@@ -63,6 +64,7 @@ class StepUpGuardTestController {
   providers: [
     TokenService,
     SessionService,
+    AdminIdentityPolicy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: StepUpGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },

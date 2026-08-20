@@ -37,6 +37,15 @@ export class SmtpMailTransport implements MailTransport {
     return user ? { user, pass } : undefined;
   }
 
+  async checkHealth(): Promise<"AVAILABLE" | "UNAVAILABLE"> {
+    try {
+      await this.transporter.verify();
+      return "AVAILABLE";
+    } catch {
+      return "UNAVAILABLE";
+    }
+  }
+
   async send(message: OutboundEmailMessage): Promise<MailSendResult> {
     try {
       const info: { messageId?: string } = await this.transporter.sendMail({

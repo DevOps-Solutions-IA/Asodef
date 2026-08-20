@@ -317,56 +317,62 @@ export class AuthService {
       throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
     }
 
-    if (session.rotatedAt || session.revokedAt) {
-      await this.detectReplay(session.familyId, session.id, session.userId, context);
-      throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
-    }
-
-    if (session.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
-    }
-
     const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
-    if (!user || user.status !== "ACTIVE") {
+    if (!user || user.status !== "ACTIVE" || !this.adminIdentityPolicy.mayAuthenticate(user.email)) {
       throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
     }
 
-    const rotation = await this.sessionService.rotateSession(session, context);
-    if (rotation.outcome === "replay") {
-      await this.detectReplay(rotation.familyId, session.id, session.userId, context);
+    // Turning enforcement on invalidates every password-only administrator
+    // session immediately. Refresh must enforce the same server-side rule as
+    // JwtAuthGuard or an old cookie could mint a fresh access token forever.
+    if (this.adminMfaService.isEnforcementRequiredFor(user.email) && !session.mfaVerifiedAt) {
       throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
     }
 
-    const accessToken = this.tokenService.signAccessToken({ sub: user.id, sid: rotation.session.id });
+    const result = await this.prisma.$transaction(async (tx) => {
+      const rotation = await this.sessionService.rotateSession(session, context, tx);
+      if (rotation.outcome === "invalid") return rotation;
+      if (rotation.outcome === "replay") {
+        await this.securityEventService.recordRequired(tx, {
+          type: "REFRESH_TOKEN_REUSE_DETECTED",
+          userId: user.id,
+          sessionId: session.id,
+          result: "DENIED",
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          metadata: { familyId: rotation.familyId },
+        });
+        return rotation;
+      }
 
-    await this.securityEventService.record({
-      type: "SESSION_REFRESHED",
-      userId: user.id,
-      sessionId: rotation.session.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
+      // Recheck the locked generation. A password/MFA mutation may clear
+      // assurance after the pre-transaction lookup; returning a fresh but
+      // immediately unusable privileged token would make the enforcement
+      // boundary racy and obscure the required re-login.
+      if (this.adminMfaService.isEnforcementRequiredFor(user.email) && !rotation.session.mfaVerifiedAt) {
+        throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
+      }
+
+      await this.securityEventService.recordRequired(tx, {
+        type: "SESSION_REFRESHED",
+        userId: user.id,
+        actorUserId: user.id,
+        subjectUserId: user.id,
+        sessionId: rotation.session.id,
+        result: "SUCCESS",
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+      });
+      const accessToken = this.tokenService.signAccessToken({ sub: user.id, sid: rotation.session.id });
+      return { outcome: "rotated" as const, accessToken, rawRefreshToken: rotation.rawRefreshToken };
     });
 
-    return { accessToken, rawRefreshToken: rotation.rawRefreshToken };
-  }
-
-  private async detectReplay(
-    familyId: string,
-    sessionId: string,
-    userId: string,
-    context: RequestContext,
-  ): Promise<void> {
-    await this.sessionService.revokeFamily(familyId, "REFRESH_TOKEN_REUSE_DETECTED");
-    await this.securityEventService.record({
-      type: "REFRESH_TOKEN_REUSE_DETECTED",
-      userId,
-      sessionId,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { familyId },
-    });
+    if (result.outcome !== "rotated") throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
+    return { accessToken: result.accessToken, rawRefreshToken: result.rawRefreshToken };
   }
 
   /** Idempotent by design: a missing cookie or an already-revoked session
@@ -377,37 +383,37 @@ export class AuthService {
     const session = await this.sessionService.findByRawRefreshToken(rawRefreshToken);
     if (!session) return;
 
-    if (!session.revokedAt) {
-      await this.sessionService.revokeSession(session.id, "LOGOUT");
-      await this.securityEventService.record({
-        type: "SESSION_REVOKED",
-        userId: session.userId,
-        sessionId: session.id,
-        ipAddress: context.ipAddress,
-        userAgent: context.userAgent,
-        requestId: context.requestId,
-        metadata: { reason: "LOGOUT" },
+    await this.prisma.$transaction(async (tx) => {
+      const revoked = await tx.session.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: new Date(), revokedReason: "LOGOUT" },
       });
-    }
-
-    await this.securityEventService.record({
-      type: "LOGOUT",
-      userId: session.userId,
-      sessionId: session.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
+      if (revoked.count === 1) {
+        await this.securityEventService.recordRequired(tx, {
+          type: "SESSION_REVOKED", userId: session.userId, actorUserId: session.userId,
+          subjectUserId: session.userId, sessionId: session.id, result: "SUCCESS",
+          ipAddress: context.ipAddress, userAgent: context.userAgent,
+          requestId: context.requestId, correlationId: context.correlationId,
+          metadata: { reason: "LOGOUT" },
+        });
+      }
+      await this.securityEventService.recordRequired(tx, {
+        type: "LOGOUT", userId: session.userId, actorUserId: session.userId,
+        subjectUserId: session.userId, sessionId: session.id, result: "SUCCESS",
+        ipAddress: context.ipAddress, userAgent: context.userAgent,
+        requestId: context.requestId, correlationId: context.correlationId,
+      });
     });
   }
 
   async logoutAll(userId: string, context: RequestContext): Promise<void> {
-    await this.sessionService.revokeAllForUser(userId, "LOGOUT_ALL");
-    await this.securityEventService.record({
-      type: "LOGOUT_ALL",
-      userId,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
+    await this.prisma.$transaction(async (tx) => {
+      await this.sessionService.revokeAllForUser(userId, "LOGOUT_ALL", tx);
+      await this.securityEventService.recordRequired(tx, {
+        type: "LOGOUT_ALL", userId, actorUserId: userId, subjectUserId: userId,
+        result: "SUCCESS", ipAddress: context.ipAddress, userAgent: context.userAgent,
+        requestId: context.requestId, correlationId: context.correlationId,
+      });
     });
   }
 

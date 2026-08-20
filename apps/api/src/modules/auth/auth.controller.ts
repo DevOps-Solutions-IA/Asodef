@@ -299,6 +299,7 @@ export class AuthController {
   @ApiCookieAuth("asodef_at")
   @Post("change-password")
   @HttpCode(HttpStatus.OK)
+  @RequireStepUp()
   async changePassword(
     @CurrentUser() user: RequestUser | undefined,
     @Body() dto: ChangePasswordDto,

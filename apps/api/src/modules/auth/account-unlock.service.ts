@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import type { RequestContext } from "./auth.service";
@@ -6,6 +7,7 @@ import type { RequestContext } from "./auth.service";
 const SAFE_FORBIDDEN_MESSAGE = "No tienes permisos para realizar esta acción.";
 const SAFE_REASON_MESSAGE = "Debes indicar un motivo para desbloquear esta cuenta.";
 const SAFE_NOT_FOUND_MESSAGE = "Usuario no encontrado.";
+const SAFE_CONCURRENT_UPDATE_MESSAGE = "La cuenta cambió durante la operación. Intenta nuevamente.";
 
 export interface AccountUnlockActor {
   actorId: string;
@@ -58,7 +60,11 @@ export class AccountUnlockService {
       await this.securityEventService.record({
         type: "GOVERNANCE_CHANGE_ATTEMPTED",
         userId: actor.actorId,
+        actorUserId: actor.actorId,
+        result: "DENIED",
+        reason: "MISSING_USERS_UNLOCK_PERMISSION",
         requestId: context.requestId,
+        correlationId: context.correlationId,
         ipAddress: context.ipAddress,
         userAgent: context.userAgent,
         metadata: { action: "unlockAccount", targetUserId, result: "denied" },
@@ -75,7 +81,11 @@ export class AccountUnlockService {
       await this.securityEventService.record({
         type: "ACCOUNT_UNLOCK_FAILED",
         userId: actor.actorId,
+        actorUserId: actor.actorId,
+        result: "FAILURE",
+        reason: "TARGET_NOT_FOUND",
         requestId: context.requestId,
+        correlationId: context.correlationId,
         ipAddress: context.ipAddress,
         userAgent: context.userAgent,
         metadata: { targetUserId, reason: "target_not_found" },
@@ -87,6 +97,21 @@ export class AccountUnlockService {
     if (!isCurrentlyLocked && target.failedLoginAttempts === 0) {
       // Nothing to do - the desired end state already holds. Not a
       // failure, and idempotent: calling this twice in a row is safe.
+      if (!options.preview) {
+        await this.prisma.$transaction((tx) => this.securityEventService.recordRequired(tx, {
+          type: "ADMINISTRATIVE_UNLOCK",
+          userId: actor.actorId,
+          actorUserId: actor.actorId,
+          subjectUserId: targetUserId,
+          result: "NO_OP",
+          reason,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          metadata: { targetUserId, reason, alreadyUnlocked: true },
+        }));
+      }
       return { applied: false, alreadyUnlocked: true };
     }
 
@@ -94,19 +119,32 @@ export class AccountUnlockService {
       return { applied: false };
     }
 
-    await this.prisma.user.update({
-      where: { id: targetUserId },
-      data: { failedLoginAttempts: 0, lockedUntil: null },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: {
+          id: targetUserId,
+          version: target.version,
+          failedLoginAttempts: target.failedLoginAttempts,
+          lockedUntil: target.lockedUntil,
+        },
+        data: { failedLoginAttempts: 0, lockedUntil: null, version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException(SAFE_CONCURRENT_UPDATE_MESSAGE);
 
-    await this.securityEventService.record({
-      type: "ADMINISTRATIVE_UNLOCK",
-      userId: actor.actorId,
-      requestId: context.requestId,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      metadata: { targetUserId, reason },
-    });
+      await this.securityEventService.recordRequired(tx, {
+        type: "ADMINISTRATIVE_UNLOCK",
+        userId: actor.actorId,
+        actorUserId: actor.actorId,
+        subjectUserId: targetUserId,
+        result: "SUCCESS",
+        reason,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { targetUserId, reason },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return { applied: true };
   }

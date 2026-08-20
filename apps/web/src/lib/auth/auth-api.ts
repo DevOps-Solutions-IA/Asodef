@@ -25,7 +25,8 @@ import type {
  * Thin, typed wrappers over the real backend endpoints - no auth logic
  * lives here (no token handling, no retry, no redirect). login/refresh/
  * logout/forgot-password/reset-password are marked skipAuthRefresh so a
- * 401 from any of them is never itself eligible to trigger the
+ * credential-verification MFA endpoints are also marked: a 401 from any
+ * of them is never itself eligible to trigger the
  * refresh-and-retry cycle in api-client.ts (US-010 section 5) - refresh
  * failing would otherwise try to refresh via calling refresh again, and
  * login/forgot-password/reset-password failing has nothing to refresh
@@ -50,15 +51,17 @@ export function getMfaStatus(signal?: AbortSignal): Promise<MfaStatusResponse> {
 }
 
 export function beginMfaEnrollment(input: BeginMfaEnrollmentRequest): Promise<MfaEnrollmentResponse> {
-  return apiClient.post<MfaEnrollmentResponse>("/auth/mfa/enrollment", input);
+  return apiClient.post<MfaEnrollmentResponse>("/auth/mfa/enrollment", input, { skipAuthRefresh: true });
 }
 
 export function confirmMfaEnrollment(input: ConfirmMfaEnrollmentRequest): Promise<MfaRecoveryCodesResponse> {
-  return apiClient.post<MfaRecoveryCodesResponse>("/auth/mfa/enrollment/confirm", input);
+  return apiClient.post<MfaRecoveryCodesResponse>("/auth/mfa/enrollment/confirm", input, { skipAuthRefresh: true });
 }
 
 export function verifyMfaStepUp(input: ManageMfaRequest): Promise<MfaStepUpResponse> {
-  return apiClient.post<MfaStepUpResponse>("/auth/step-up", input);
+  // A credential rejection is itself a 401. It must never enter the global
+  // refresh-and-retry path or the same wrong factor would be submitted twice.
+  return apiClient.post<MfaStepUpResponse>("/auth/step-up", input, { skipAuthRefresh: true });
 }
 
 export function regenerateMfaRecoveryCodes(): Promise<MfaRecoveryCodesResponse> {

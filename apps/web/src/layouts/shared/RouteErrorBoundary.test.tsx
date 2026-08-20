@@ -13,7 +13,7 @@ function renderWithError(routes: RouteObject[], initialPath = "/") {
     initialEntries: [initialPath],
     future: { v7_relativeSplatPath: true },
   });
-  return render(<RouterProvider router={router} future={{ v7_startTransition: true }} />);
+  return render(<RouterProvider router={router} />);
 }
 
 describe("RouteErrorBoundary", () => {

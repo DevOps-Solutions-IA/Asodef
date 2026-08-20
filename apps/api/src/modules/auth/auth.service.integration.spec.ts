@@ -582,6 +582,31 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
       const outcomes = [first.status, second.status];
       expect(outcomes.filter((status) => status === "fulfilled")).toHaveLength(1);
       expect(outcomes.filter((status) => status === "rejected")).toHaveLength(1);
+
+      // A concurrent use is replay, not a harmless duplicate. Once both
+      // requests settle, even the token returned by the winner belongs to the
+      // compromised family and must be unusable.
+      const winner = [first, second].find((result): result is PromiseFulfilledResult<Awaited<ReturnType<AuthService["refresh"]>>> =>
+        result.status === "fulfilled",
+      );
+      expect(winner).toBeDefined();
+      await expect(authService.refresh(winner!.value.rawRefreshToken, uniqueContext()))
+        .rejects.toThrow(UnauthorizedException);
+    });
+
+    it("rolls refresh rotation back when its mandatory event cannot persist", async () => {
+      const user = await createUser();
+      const login = await authService.login({ email: user.email, password: TEST_PASSWORD }, uniqueContext());
+      const original = await prisma.session.findFirstOrThrow({ where: { userId: user.id, rotatedAt: null } });
+      const events = moduleRef.get(SecurityEventService);
+      const failure = jest.spyOn(events, "recordRequired").mockRejectedValueOnce(new Error("event unavailable"));
+      try {
+        await expect(authService.refresh(login.rawRefreshToken, uniqueContext())).rejects.toThrow("event unavailable");
+      } finally {
+        failure.mockRestore();
+      }
+      expect(await prisma.session.findUniqueOrThrow({ where: { id: original.id } })).toMatchObject({ rotatedAt: null });
+      expect(await prisma.session.count({ where: { familyId: original.familyId } })).toBe(1);
     });
 
     it("rejects an expired session", async () => {
@@ -641,6 +666,20 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
 
       const logoutAllEvent = await prisma.securityEvent.findFirst({ where: { userId: user.id, type: "LOGOUT_ALL" } });
       expect(logoutAllEvent).not.toBeNull();
+    });
+
+    it("rolls logout revocation back when its mandatory event cannot persist", async () => {
+      const user = await createUser();
+      const login = await authService.login({ email: user.email, password: TEST_PASSWORD }, uniqueContext());
+      const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id, revokedAt: null } });
+      const events = moduleRef.get(SecurityEventService);
+      const failure = jest.spyOn(events, "recordRequired").mockRejectedValueOnce(new Error("event unavailable"));
+      try {
+        await expect(authService.logout(login.rawRefreshToken, uniqueContext())).rejects.toThrow("event unavailable");
+      } finally {
+        failure.mockRestore();
+      }
+      expect(await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ revokedAt: null });
     });
   });
 

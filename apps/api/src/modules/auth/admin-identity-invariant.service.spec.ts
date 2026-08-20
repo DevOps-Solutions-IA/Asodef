@@ -54,6 +54,7 @@ describe("AdminIdentityInvariantService", () => {
     ["OFFICIAL_ACCOUNT_NOT_ACTIVE", [{ ...official, status: "INACTIVE" }]],
     ["OFFICIAL_RECOVERY_MISMATCH", [{ ...official, recoveryEmail: "mismatch@example.com" }]],
     ["OFFICIAL_PRIVILEGE_MISSING", [{ ...official, roles: [] }]],
+    ["OFFICIAL_PRIVILEGE_MISSING", [{ ...official, roles: [{ role: { name: "ADMIN" } }] }]],
   ] as const)("fails closed with sanitized code %s", async (code, identities) => {
     const { service } = harness({ identities: identities as unknown as IdentityRow[] });
     await expect(service.verify()).rejects.toMatchObject({ code });

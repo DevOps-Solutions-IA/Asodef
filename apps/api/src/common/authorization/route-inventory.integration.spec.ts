@@ -118,6 +118,7 @@ describe("Route inventory: deny-by-default enforcement (US-008)", () => {
     const required = new Set([
       "AuthController.regenerateMfaRecoveryCodes",
       "AuthController.revokeMfa",
+      "AuthController.changePassword",
       "AdminUsersController.createUser",
       "AdminUsersController.updateUser",
       "AdminUsersController.deactivateUser",

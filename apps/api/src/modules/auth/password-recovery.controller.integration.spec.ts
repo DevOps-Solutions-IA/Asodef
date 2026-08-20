@@ -89,6 +89,18 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
     await notificationService.processAvailableJobs();
   }
 
+  async function establishTestStepUp(userId: string): Promise<void> {
+    const session = await prisma.session.findFirstOrThrow({
+      where: { userId, revokedAt: null, rotatedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    const verifiedAt = new Date();
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: verifiedAt, recentAuthenticationAt: verifiedAt },
+    });
+  }
+
   describe("POST /api/v1/auth/forgot-password", () => {
     it("returns 200 with the identical generic message for an existing account", async () => {
       const user = await createUser();
@@ -191,6 +203,7 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
         .post("/api/v1/auth/login")
         .send({ email: user.email, password: CURRENT_PASSWORD });
       const cookies = getSetCookieHeader(loginResponse);
+      await establishTestStepUp(user.id);
 
       // JWT `iat` only has whole-second resolution, and the guard
       // deliberately treats a token issued in the *same* second as
@@ -243,6 +256,7 @@ describe("Password recovery endpoints (integration, real HTTP via the exact conf
         .post("/api/v1/auth/login")
         .send({ email: user.email, password: CURRENT_PASSWORD });
       const cookies = getSetCookieHeader(loginResponse);
+      await establishTestStepUp(user.id);
 
       const response = await request(app.getHttpServer())
         .post("/api/v1/auth/change-password")
