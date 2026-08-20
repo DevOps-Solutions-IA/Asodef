@@ -10,6 +10,7 @@ for mail_file in $required; do [ -f "$SCRIPT_DIR/$mail_file" ] || { echo "missin
 
 grep -F 'reject_unauth_destination' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
 grep -F 'mynetworks =' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
+grep -Fx 'inet_protocols = ipv4' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
 grep -F 'authorized_submit_users = root' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
 if grep -F 'permit_mynetworks' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null; then
   echo 'trusted_network_relay_scan=FAIL' >&2
@@ -74,6 +75,7 @@ if grep -R '@@' "$mail_stage" >/dev/null; then
   exit 1
 fi
 grep -F '198.51.100.1:submission' "$mail_stage/postfix-master.cf.fragment" >/dev/null
+grep -Fx 'inet_protocols = ipv4' "$mail_stage/postfix-main.cf" >/dev/null
 grep -Eq '^[[:space:]]*MTA[[:space:]]+ORIGINATING[[:space:]]*$' "$mail_stage/opendkim.conf"
 grep -Fx '198.51.100.2' "$mail_stage/trusted.hosts" >/dev/null
 cleanup_stage

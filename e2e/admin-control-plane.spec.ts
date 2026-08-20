@@ -36,13 +36,20 @@ test.describe("single-admin control plane (real E2E)", () => {
     await expect(stepUpDialog).toBeVisible();
     await stepUpDialog.getByLabel("Contraseña actual", { exact: false }).fill(getPrivilegedTestPassword());
     await stepUpDialog.getByLabel("Código de verificación", { exact: false }).fill(adminRecoveryCode(5));
+    const stepUpVerification = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname.endsWith("/auth/step-up"),
+      { timeout: 30_000 },
+    );
     const retriedRevocation = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname.endsWith("/sessions/revoke"),
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
     await stepUpDialog.getByRole("button", { name: "Continuar" }).click();
+    expect((await stepUpVerification).status()).toBe(200);
     expect((await retriedRevocation).status()).toBe(200);
     await expect(reasonDialog).not.toBeVisible({ timeout: 10_000 });
     await expect(revokableRow.getByText("Revocada", { exact: true })).toBeVisible();

@@ -34,25 +34,31 @@ export const CUSTOMER_SERVICE_TEST_PASSWORD = TEST_ACTOR_PASSWORD;
 export async function ensureTestActor(email: string, fullName: string, roleName: string): Promise<void> {
   const privileged = roleName === "SUPER_ADMIN" || roleName === "ADMIN";
   const effectiveEmail = privileged ? PRIVILEGED_TEST_EMAIL : email;
-  const passwordHash = await argon2.hash(privileged ? getPrivilegedTestPassword() : TEST_ACTOR_PASSWORD, {
-    type: argon2.argon2id,
-  });
-
-  const user = await prisma.user.upsert({
-    where: { email: effectiveEmail },
-    update: {
-      passwordHash,
-      recoveryEmail: privileged ? PRIVILEGED_RECOVERY_EMAIL : undefined,
-      status: "ACTIVE",
-    },
-    create: {
-      email: effectiveEmail,
-      recoveryEmail: privileged ? PRIVILEGED_RECOVERY_EMAIL : null,
-      passwordHash,
-      fullName,
-      status: "ACTIVE",
-    },
-  });
+  let user;
+  if (privileged) {
+    // prepare-e2e-runtime owns the single-admin credential. Re-hashing the
+    // same password here is not idempotent because Argon2 uses a fresh salt;
+    // parallel beforeAll hooks could otherwise mutate passwordHash during a
+    // real step-up transaction and correctly trigger its concurrent-change
+    // protection. Verify the prepared invariant without rewriting it.
+    user = await prisma.user.findUniqueOrThrow({ where: { email: effectiveEmail } });
+    if (!(await argon2.verify(user.passwordHash, getPrivilegedTestPassword()))) {
+      throw new Error("Prepared privileged E2E credential does not match the ephemeral password.");
+    }
+  } else {
+    const passwordHash = await argon2.hash(TEST_ACTOR_PASSWORD, { type: argon2.argon2id });
+    user = await prisma.user.upsert({
+      where: { email: effectiveEmail },
+      update: { passwordHash, status: "ACTIVE" },
+      create: {
+        email: effectiveEmail,
+        recoveryEmail: null,
+        passwordHash,
+        fullName,
+        status: "ACTIVE",
+      },
+    });
+  }
 
   const role = await prisma.role.findUniqueOrThrow({ where: { name: roleName } });
   await prisma.userRole.upsert({
