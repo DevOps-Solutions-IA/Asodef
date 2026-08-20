@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { Session, SessionRevocationReason } from "@prisma/client";
+import type { Prisma, Session, SessionRevocationReason } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { TokenService } from "./token.service";
 
@@ -14,7 +14,19 @@ export interface CreateSessionResult {
   rawRefreshToken: string;
 }
 
+export interface InitialSessionAssurance {
+  mfaVerifiedAt?: Date;
+  recentAuthenticationAt?: Date;
+}
+
 export type RotateSessionResult = { outcome: "rotated"; session: Session; rawRefreshToken: string } | { outcome: "replay"; familyId: string };
+
+export interface SessionStepUpState {
+  mfaVerifiedAt: Date | null;
+  recentAuthenticationAt: Date | null;
+}
+
+type SessionWriteClient = Pick<Prisma.TransactionClient, "session">;
 
 @Injectable()
 export class SessionService {
@@ -24,9 +36,14 @@ export class SessionService {
   ) {}
 
   /** Starts a brand-new family (a fresh login) - never used for rotation. */
-  async createSession(userId: string, context: SessionRequestContext): Promise<CreateSessionResult> {
+  async createSession(
+    userId: string,
+    context: SessionRequestContext,
+    client: SessionWriteClient = this.prisma,
+    assurance: InitialSessionAssurance = {},
+  ): Promise<CreateSessionResult> {
     const rawRefreshToken = this.tokenService.generateRefreshToken();
-    const session = await this.prisma.session.create({
+    const session = await client.session.create({
       data: {
         userId,
         familyId: randomUUID(),
@@ -35,6 +52,8 @@ export class SessionService {
         userAgent: context.userAgent ?? undefined,
         expiresAt: new Date(Date.now() + this.tokenService.getRefreshTtlMs()),
         lastUsedAt: new Date(),
+        mfaVerifiedAt: assurance.mfaVerifiedAt,
+        recentAuthenticationAt: assurance.recentAuthenticationAt,
       },
     });
     return { session, rawRefreshToken };
@@ -43,6 +62,52 @@ export class SessionService {
   async findByRawRefreshToken(rawToken: string): Promise<Session | null> {
     const hash = this.tokenService.hashRefreshToken(rawToken);
     return this.prisma.session.findUnique({ where: { refreshTokenHash: hash } });
+  }
+
+  /** Resolves the exact server-side session bound into an access token.
+   * Binding both identifiers prevents a valid session id from another user
+   * being substituted into a forged/malformed token payload. */
+  async findUsableByIdForUser(sessionId: string, userId: string, now = new Date()): Promise<Session | null> {
+    return this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+      },
+    });
+  }
+
+  /** Reads only server-authoritative assurance state from a usable session. */
+  async findStepUpState(sessionId: string, userId: string, now = new Date()): Promise<SessionStepUpState | null> {
+    return this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+      },
+      select: { mfaVerifiedAt: true, recentAuthenticationAt: true },
+    });
+  }
+
+  /** Trusted MFA workflows call this only after completing their own
+   * verification. The ownership/usable predicates prevent a stale,
+   * revoked, rotated, or cross-user session from gaining assurance. */
+  async markStepUpVerified(sessionId: string, userId: string, verifiedAt = new Date()): Promise<boolean> {
+    const result = await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: verifiedAt },
+      },
+      data: { mfaVerifiedAt: verifiedAt, recentAuthenticationAt: verifiedAt },
+    });
+    return result.count === 1;
   }
 
   /**
@@ -86,6 +151,10 @@ export class SessionService {
         userAgent: context.userAgent ?? undefined,
         expiresAt: new Date(Date.now() + this.tokenService.getRefreshTtlMs()),
         lastUsedAt: now,
+        // Rotation preserves the original assurance timestamps; it must
+        // never manufacture a fresh step-up window merely by refreshing.
+        mfaVerifiedAt: session.mfaVerifiedAt,
+        recentAuthenticationAt: session.recentAuthenticationAt,
       },
     });
     await this.prisma.session.update({
@@ -114,6 +183,62 @@ export class SessionService {
     });
   }
 
+  /** Ownership-aware revocation for administrative cross-user actions.
+   * A session id supplied for one user can never revoke another user's
+   * session. Returns whether one active row was actually claimed. */
+  async revokeSessionForUser(sessionId: string, userId: string, reason: SessionRevocationReason): Promise<boolean> {
+    const result = await this.prisma.session.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: reason },
+    });
+    return result.count === 1;
+  }
+
+  /** Atomically revokes one currently usable session through a caller-owned
+   * transaction. Administrative mutations use this variant so the session
+   * state change and its mandatory SecurityEvent either both commit or both
+   * roll back. Rotated/expired rows are deliberately not counted as active. */
+  async revokeUsableSessionForUser(
+    sessionId: string,
+    userId: string,
+    reason: SessionRevocationReason,
+    client: SessionWriteClient,
+    now = new Date(),
+  ): Promise<boolean> {
+    const result = await client.session.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now, revokedReason: reason },
+    });
+    return result.count === 1;
+  }
+
+  /** Revokes and returns the exact number of usable sessions claimed. */
+  async revokeUsableSessionsForUser(
+    userId: string,
+    reason: SessionRevocationReason,
+    client: SessionWriteClient,
+    exceptSessionId?: string,
+    now = new Date(),
+  ): Promise<number> {
+    const result = await client.session.updateMany({
+      where: {
+        userId,
+        ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}),
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now, revokedReason: reason },
+    });
+    return result.count;
+  }
+
   async revokeFamily(familyId: string, reason: SessionRevocationReason): Promise<void> {
     await this.prisma.session.updateMany({
       where: { familyId, revokedAt: null },
@@ -121,8 +246,12 @@ export class SessionService {
     });
   }
 
-  async revokeAllForUser(userId: string, reason: SessionRevocationReason): Promise<void> {
-    await this.prisma.session.updateMany({
+  async revokeAllForUser(
+    userId: string,
+    reason: SessionRevocationReason,
+    client: SessionWriteClient = this.prisma,
+  ): Promise<void> {
+    await client.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
@@ -144,8 +273,13 @@ export class SessionService {
    * possibly-compromised email access, not an active authenticated
    * session.
    */
-  async revokeAllForUserExcept(userId: string, exceptSessionId: string, reason: SessionRevocationReason): Promise<void> {
-    await this.prisma.session.updateMany({
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptSessionId: string,
+    reason: SessionRevocationReason,
+    client: SessionWriteClient = this.prisma,
+  ): Promise<void> {
+    await client.session.updateMany({
       where: { userId, id: { not: exceptSessionId }, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
@@ -160,5 +294,23 @@ export class SessionService {
 
   async touchLastUsed(sessionId: string): Promise<void> {
     await this.prisma.session.update({ where: { id: sessionId }, data: { lastUsedAt: new Date() } });
+  }
+
+  /** Bounded activity write: at most once per minute and only while the
+   * same user/session binding remains usable. Revocation racing this update
+   * wins safely because the WHERE predicate no longer matches. */
+  async touchLastUsedIfUsable(sessionId: string, userId: string, now = new Date()): Promise<void> {
+    const staleBefore = new Date(now.getTime() - 60_000);
+    await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        rotatedAt: null,
+        expiresAt: { gt: now },
+        OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: staleBefore } }],
+      },
+      data: { lastUsedAt: now },
+    });
   }
 }

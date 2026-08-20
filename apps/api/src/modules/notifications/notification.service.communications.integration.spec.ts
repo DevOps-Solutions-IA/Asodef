@@ -81,15 +81,15 @@ describe("NotificationService.send()/unsubscribe() - US-059 (integration, real P
     await expect(notificationService.send("this-template-does-not-exist", "someone@example.com", {})).rejects.toThrow();
   });
 
-  it("Example (AC): a marketing template to a recipient with GRANTED consent and no suppression entry logs status='SENT' (stub)", async () => {
+  it("fails closed when a consented marketing template has no real delivery transport", async () => {
     const customer = await createCustomerWithGrantedMarketingConsent();
 
     const log = await notificationService.send("general_marketing", customer.email, { name: customer.fullName });
 
-    expect(log.status).toBe("SENT");
-    expect(log.sentAt).not.toBeNull();
+    expect(log.status).toBe("FAILED");
+    expect(log.sentAt).toBeNull();
     expect(log.channel).toBe("email");
-    expect(log.errorCategory).toBeNull();
+    expect(log.errorCategory).toBe("transport_not_implemented");
   });
 
   it("Example (AC): the same marketing template for a suppressed recipient logs status='SUPPRESSED'", async () => {
@@ -116,7 +116,7 @@ describe("NotificationService.send()/unsubscribe() - US-059 (integration, real P
     expect(log.errorCategory).toBe("marketing_consent_not_granted");
   });
 
-  it("Negative case (AC): a transactional template (payment_result) is still sent/logged even if the recipient revoked optional_marketing - the two are independent", async () => {
+  it("does not suppress a transactional template after marketing revocation, but still fails closed without a transport", async () => {
     const customer = await createCustomerWithGrantedMarketingConsent();
     await notificationService.unsubscribe("email", customer.email, "Prueba de baja.");
 
@@ -125,7 +125,8 @@ describe("NotificationService.send()/unsubscribe() - US-059 (integration, real P
       expect(revokedRecord?.status).toBe("DENIED");
 
       const log = await notificationService.send("payment_result", customer.email, { amount: 100_000 });
-      expect(log.status).toBe("SENT");
+      expect(log.status).toBe("FAILED");
+      expect(log.errorCategory).toBe("transport_not_implemented");
     } finally {
       await cleanupSuppressionEntry("email", customer.email);
     }

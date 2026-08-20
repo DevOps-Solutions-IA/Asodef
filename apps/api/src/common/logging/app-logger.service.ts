@@ -50,9 +50,10 @@ export class AppLogger implements LoggerService {
     };
 
     // Stack traces are useful for local debugging but are never emitted in
-    // production log lines, and are never part of any HTTP response.
+    // production log lines, and are never part of any HTTP response. Even
+    // locally the trace is redacted because driver errors may embed a DSN.
     if (trace && !this.isProduction) {
-      entry.trace = trace;
+      entry.trace = redactString(trace);
     }
 
     if (this.isProduction) {

@@ -43,6 +43,6 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
       ): MasterReadRepository => getMasterFirebirdRuntimeConfig(config).enabled ? firebird : disabled,
     },
   ],
-  exports: [MasterQueryService, MasterConnectionGateService, MASTER_READ_REPOSITORY],
+  exports: [MasterQueryService, MasterConnectionGateService, MasterHealthService, MASTER_READ_REPOSITORY],
 })
 export class MasterModule {}

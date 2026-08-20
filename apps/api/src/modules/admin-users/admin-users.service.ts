@@ -32,6 +32,7 @@ import {
   type AdminUserStats,
 } from "./admin-users.types";
 import type { EnvConfig } from "../../config/env.validation";
+import { AdminIdentityPolicy, AdminIdentityPolicyViolation } from "../auth/admin-identity.policy";
 
 const SAFE_NOT_FOUND_MESSAGE = "Usuario no encontrado.";
 const SAFE_FORBIDDEN_MESSAGE = "No tienes permisos para realizar esta acción.";
@@ -41,6 +42,8 @@ const SAFE_SELF_DEACTIVATE_MESSAGE = "No puedes desactivar tu propia cuenta.";
 const SAFE_SUSPENDED_MESSAGE = "No se puede reactivar una cuenta suspendida por esta vía.";
 const SAFE_SELF_ROLE_CREATE_MESSAGE = "Solo un SUPER_ADMIN puede asignar roles al crear un usuario.";
 const SAFE_SELF_SESSION_MESSAGE = "No puedes revocar tu sesión actual desde aquí. Usa cerrar sesión.";
+const SAFE_SESSION_NOT_FOUND_MESSAGE = "Sesión no encontrada o ya revocada.";
+const SAFE_ADMIN_IDENTITY_MESSAGE = "La operación viola la política de identidad administrativa protegida.";
 
 /** Holds SUPER_ADMIN or ADMIN - see US-011 section 3: "lower-privileged
  * users must not manage higher-privileged users." */
@@ -71,6 +74,7 @@ export class AdminUsersService {
     private readonly roleAssignmentService: RoleAssignmentService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly adminIdentityPolicy: AdminIdentityPolicy,
   ) {}
 
   async listUsers(query: ListUsersQueryDto): Promise<AdminUserListResponse> {
@@ -155,10 +159,54 @@ export class AdminUsersService {
     const unusablePassword = randomBytes(32).toString("hex");
     const passwordHash = await this.passwordService.hash(unusablePassword);
 
+    this.assertAdminIdentityPolicy(() => this.adminIdentityPolicy.assertMayChangePrivilegedEmail(dto.email, dto.email));
+
     let user: Prisma.UserGetPayload<Record<string, never>>;
     try {
-      user = await this.prisma.user.create({
-        data: { email: dto.email, fullName: dto.fullName, passwordHash, status: "ACTIVE" },
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: dto.email,
+            recoveryEmail: this.adminIdentityPolicy.isPrivilegedAdminEmail(dto.email)
+              ? this.adminIdentityPolicy.recoveryEmail
+              : null,
+            fullName: dto.fullName,
+            passwordHash,
+            status: "ACTIVE",
+          },
+        });
+
+        await this.roleAssignmentService.assignInitialRolesRequired(
+          tx,
+          { actorId: actor.id, actorRoles: actor.roles },
+          created.id,
+          created.email,
+          dto.roles ?? [],
+          "Asignación inicial al crear el usuario",
+        );
+
+        await this.securityEventService.recordRequired(tx, {
+          type: "USER_CREATED",
+          userId: actor.id,
+          actorUserId: actor.id,
+          subjectUserId: created.id,
+          result: "SUCCESS",
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          metadata: { targetUserId: created.id, email: created.email, roles: (dto.roles ?? []).join(","), outcome: "success" },
+        });
+
+        const { passwordReset, rawToken } = await this.passwordResetTokenService.createToken(created.id, context, tx);
+        await this.notificationService.queueAccountInvitationEmailRequired(tx, {
+          recipientEmail: created.email,
+          userId: created.id,
+          fullName: created.fullName,
+          setupUrl: this.buildSetupUrl(rawToken),
+          correlationId: context.requestId ?? passwordReset.id,
+        });
+        return created;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -167,42 +215,20 @@ export class AdminUsersService {
       throw error;
     }
 
-    if (dto.roles && dto.roles.length > 0) {
-      for (const roleName of dto.roles) {
-        await this.roleAssignmentService.assignRole(
-          { actorId: actor.id, actorRoles: actor.roles },
-          user.id,
-          roleName,
-          "Asignación inicial al crear el usuario",
-        );
-      }
-    }
-
-    await this.securityEventService.record({
-      type: "USER_CREATED",
-      userId: actor.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { targetUserId: user.id, email: user.email, roles: (dto.roles ?? []).join(","), outcome: "success" },
-    });
-
-    const { passwordReset, rawToken } = await this.passwordResetTokenService.createToken(user.id, context);
-    await this.notificationService.queueAccountInvitationEmail({
-      recipientEmail: user.email,
-      userId: user.id,
-      fullName: user.fullName,
-      setupUrl: this.buildSetupUrl(rawToken),
-      correlationId: context.requestId ?? passwordReset.id,
-    });
-
     return this.getUserDetail(user.id);
   }
 
   async updateUser(actor: RequestUser, targetUserId: string, dto: UpdateUserDto, context: RequestContext): Promise<AdminUserDetail> {
     const target = await this.findUserWithRolesOrThrow(targetUserId);
     this.assertActorMayManageTarget(actor.id, target.id, actor.roles, this.roleNamesOf(target));
+    this.assertAdminIdentityPolicy(() => {
+      this.adminIdentityPolicy.assertMayChangePrivilegedEmail(target.email, dto.email ?? target.email);
+      this.adminIdentityPolicy.assertMayChangePrivilegedRecovery(target.email, target.recoveryEmail);
+    });
 
+    if (dto.expectedVersion !== undefined && target.version !== dto.expectedVersion) {
+      throw new ConflictException(SAFE_CONCURRENT_UPDATE_MESSAGE);
+    }
     if (dto.expectedUpdatedAt) {
       const expected = new Date(dto.expectedUpdatedAt).getTime();
       if (target.updatedAt.getTime() !== expected) {
@@ -211,34 +237,51 @@ export class AdminUsersService {
     }
 
     const before = { email: target.email, fullName: target.fullName };
-    const data: Prisma.UserUpdateInput = {};
+    const data: Prisma.UserUpdateManyMutationInput = { version: { increment: 1 } };
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.email !== undefined) data.email = dto.email;
 
-    let updated: Prisma.UserGetPayload<Record<string, never>>;
     try {
-      updated = await this.prisma.user.update({ where: { id: targetUserId }, data });
+      await this.prisma.$transaction(async (tx) => {
+        const result = await tx.user.updateMany({
+          where: {
+            id: targetUserId,
+            version: target.version,
+            ...(dto.expectedUpdatedAt ? { updatedAt: new Date(dto.expectedUpdatedAt) } : {}),
+          },
+          data,
+        });
+        if (result.count !== 1) {
+          throw new ConflictException(SAFE_CONCURRENT_UPDATE_MESSAGE);
+        }
+        const persisted = await tx.user.findUniqueOrThrow({ where: { id: targetUserId } });
+        await this.securityEventService.recordRequired(tx, {
+          type: "USER_UPDATED",
+          userId: actor.id,
+          actorUserId: actor.id,
+          subjectUserId: targetUserId,
+          result: "SUCCESS",
+          reason: dto.reason,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          metadata: {
+            targetUserId,
+            reason: dto.reason,
+            before: JSON.stringify(before),
+            after: JSON.stringify({ email: persisted.email, fullName: persisted.fullName }),
+            outcome: "success",
+          },
+        });
+        return persisted;
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         throw new ConflictException(SAFE_DUPLICATE_EMAIL_MESSAGE);
       }
       throw error;
     }
-
-    await this.securityEventService.record({
-      type: "USER_UPDATED",
-      userId: actor.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: {
-        targetUserId,
-        reason: dto.reason,
-        before: JSON.stringify(before),
-        after: JSON.stringify({ email: updated.email, fullName: updated.fullName }),
-        outcome: "success",
-      },
-    });
 
     return this.getUserDetail(targetUserId);
   }
@@ -250,21 +293,32 @@ export class AdminUsersService {
 
     const target = await this.findUserWithRolesOrThrow(targetUserId);
     this.assertActorMayManageTarget(actor.id, target.id, actor.roles, this.roleNamesOf(target));
+    this.assertAdminIdentityPolicy(() => this.adminIdentityPolicy.assertMayDeactivate(target.email));
 
     if (target.status === "INACTIVE") {
       return this.buildDetail(target);
     }
 
-    await this.prisma.user.update({ where: { id: targetUserId }, data: { status: "INACTIVE" } });
-    await this.sessionService.revokeAllForUser(targetUserId, "ADMIN_ACTION");
-
-    await this.securityEventService.record({
-      type: "USER_DEACTIVATED",
-      userId: actor.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { targetUserId, reason, outcome: "success" },
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: { id: targetUserId, status: target.status, version: target.version },
+        data: { status: "INACTIVE", version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException(SAFE_CONCURRENT_UPDATE_MESSAGE);
+      await this.sessionService.revokeUsableSessionsForUser(targetUserId, "ADMIN_ACTION", tx);
+      await this.securityEventService.recordRequired(tx, {
+        type: "USER_DEACTIVATED",
+        userId: actor.id,
+        actorUserId: actor.id,
+        subjectUserId: targetUserId,
+        result: "SUCCESS",
+        reason,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        metadata: { targetUserId, reason, outcome: "success" },
+      });
     });
 
     return this.getUserDetail(targetUserId);
@@ -284,15 +338,25 @@ export class AdminUsersService {
     // Deliberately does not touch sessions - every session was already
     // revoked at deactivation time and stays revoked (US-011 section 8:
     // "not automatically restore previous sessions").
-    await this.prisma.user.update({ where: { id: targetUserId }, data: { status: "ACTIVE" } });
-
-    await this.securityEventService.record({
-      type: "USER_REACTIVATED",
-      userId: actor.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { targetUserId, reason, outcome: "success" },
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: { id: targetUserId, status: "INACTIVE", version: target.version },
+        data: { status: "ACTIVE", version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException(SAFE_CONCURRENT_UPDATE_MESSAGE);
+      await this.securityEventService.recordRequired(tx, {
+        type: "USER_REACTIVATED",
+        userId: actor.id,
+        actorUserId: actor.id,
+        subjectUserId: targetUserId,
+        result: "SUCCESS",
+        reason,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        metadata: { targetUserId, reason, outcome: "success" },
+      });
     });
 
     return this.getUserDetail(targetUserId);
@@ -351,43 +415,57 @@ export class AdminUsersService {
       if (dto.sessionId === actor.sessionId && targetUserId === actor.id) {
         throw new ForbiddenException(SAFE_SELF_SESSION_MESSAGE);
       }
-      await this.sessionService.revokeSession(dto.sessionId, "ADMIN_ACTION");
-      await this.securityEventService.record({
-        type: "SESSION_REVOKED",
-        userId: targetUserId,
-        sessionId: dto.sessionId,
-        ipAddress: context.ipAddress,
-        userAgent: context.userAgent,
-        requestId: context.requestId,
-        metadata: { reason: dto.reason, actorId: actor.id, source: "admin" },
+      await this.prisma.$transaction(async (tx) => {
+        const revoked = await this.sessionService.revokeUsableSessionForUser(
+          dto.sessionId!, targetUserId, "ADMIN_ACTION", tx,
+        );
+        if (!revoked) throw new NotFoundException(SAFE_SESSION_NOT_FOUND_MESSAGE);
+        await this.securityEventService.recordRequired(tx, {
+          type: "SESSION_REVOKED",
+          userId: targetUserId,
+          actorUserId: actor.id,
+          subjectUserId: targetUserId,
+          sessionId: dto.sessionId,
+          result: "SUCCESS",
+          reason: dto.reason,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          metadata: { reason: dto.reason, actorId: actor.id, source: "admin" },
+        });
       });
       return { revokedCount: 1 };
     }
-
-    const activeSessions = await this.sessionService.listSessionsForUser(targetUserId);
-    const revokableCount = activeSessions.filter((session) => !session.revokedAt).length;
 
     // Revoking "all sessions" for one's own account must never revoke the
     // acting administrator's own current session by accident (US-011
     // section 10) - preserve it automatically via the same
     // exclude-current-session primitive change-password already uses,
     // rather than requiring a separate confirmation flag.
-    if (targetUserId === actor.id) {
-      await this.sessionService.revokeAllForUserExcept(targetUserId, actor.sessionId, "ADMIN_ACTION");
-    } else {
-      await this.sessionService.revokeAllForUser(targetUserId, "ADMIN_ACTION");
-    }
-
-    await this.securityEventService.record({
-      type: "SESSION_REVOKED",
-      userId: targetUserId,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { reason: dto.reason, actorId: actor.id, source: "admin", scope: "all" },
+    const revokedCount = await this.prisma.$transaction(async (tx) => {
+      const count = await this.sessionService.revokeUsableSessionsForUser(
+        targetUserId,
+        "ADMIN_ACTION",
+        tx,
+        targetUserId === actor.id ? actor.sessionId : undefined,
+      );
+      await this.securityEventService.recordRequired(tx, {
+        type: "SESSION_REVOKED",
+        userId: targetUserId,
+        actorUserId: actor.id,
+        subjectUserId: targetUserId,
+        result: "SUCCESS",
+        reason: dto.reason,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        metadata: { reason: dto.reason, actorId: actor.id, source: "admin", scope: "all", revokedCount: count },
+      });
+      return count;
     });
-
-    return { revokedCount: targetUserId === actor.id ? Math.max(revokableCount - 1, 0) : revokableCount };
+    return { revokedCount };
   }
 
   async listSecurityEvents(targetUserId: string, query: SecurityEventsQueryDto): Promise<AdminSecurityEventListResponse> {
@@ -440,6 +518,17 @@ export class AdminUsersService {
 
   private roleNamesOf(user: UserWithRoles): string[] {
     return user.roles.map((r) => r.role.name);
+  }
+
+  private assertAdminIdentityPolicy(assertion: () => void): void {
+    try {
+      assertion();
+    } catch (error) {
+      if (error instanceof AdminIdentityPolicyViolation) {
+        throw new ConflictException(SAFE_ADMIN_IDENTITY_MESSAGE);
+      }
+      throw error;
+    }
   }
 
   /** US-011 section 3: lower-privileged actors (anyone without

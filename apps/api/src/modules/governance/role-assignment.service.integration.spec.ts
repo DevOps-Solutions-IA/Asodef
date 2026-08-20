@@ -6,6 +6,7 @@ import { SecurityEventsModule } from "../../common/security-events/security-even
 import { PrismaModule } from "../../database/prisma.module";
 import { PrismaService } from "../../database/prisma.service";
 import { seedRbac } from "../../database/seed-rbac";
+import { AdminIdentityPolicy } from "../auth/admin-identity.policy";
 
 describe("RoleAssignmentService (integration, real Postgres)", () => {
   let moduleRef: TestingModule;
@@ -16,7 +17,16 @@ describe("RoleAssignmentService (integration, real Postgres)", () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule, SecurityEventsModule],
-      providers: [RoleAssignmentService],
+      providers: [
+        RoleAssignmentService,
+        {
+          provide: AdminIdentityPolicy,
+          useValue: {
+            assertMayHoldPrivilegedRole: () => undefined,
+            assertMayRemoveRole: () => undefined,
+          },
+        },
+      ],
     }).compile();
 
     service = moduleRef.get(RoleAssignmentService);
@@ -98,6 +108,20 @@ describe("RoleAssignmentService (integration, real Postgres)", () => {
       expect(count).toBe(1);
     });
 
+    it("rolls the assignment back when its mandatory security event cannot persist", async () => {
+      const nonexistentActorId = randomUUID();
+      const targetId = await createUser();
+      const financeRoleId = await roleId("FINANCE");
+
+      await expect(service.assignRole(
+        superAdminActor(nonexistentActorId), targetId, "FINANCE", "required event rollback",
+      )).rejects.toBeDefined();
+
+      expect(await prisma.userRole.findUnique({
+        where: { userId_roleId: { userId: targetId, roleId: financeRoleId } },
+      })).toBeNull();
+    });
+
     it("rejects assigning an unknown role name", async () => {
       const actorId = await createUser();
       const targetId = await createUser();
@@ -146,6 +170,50 @@ describe("RoleAssignmentService (integration, real Postgres)", () => {
   });
 
   describe("removeRole", () => {
+    it("serializes concurrent SUPER_ADMIN removals so at least one assignment survives", async () => {
+      const superAdminRoleId = await roleId("SUPER_ADMIN");
+      const preexistingAssignments = await prisma.userRole.findMany({ where: { roleId: superAdminRoleId } });
+      await prisma.userRole.deleteMany({ where: { roleId: superAdminRoleId } });
+      const actorId = await createUser();
+      const firstTargetId = await createUser();
+      const secondTargetId = await createUser();
+      try {
+        await service.assignRole(superAdminActor(actorId), firstTargetId, "SUPER_ADMIN", "concurrency setup A");
+        await service.assignRole(superAdminActor(actorId), secondTargetId, "SUPER_ADMIN", "concurrency setup B");
+
+        const outcomes = await Promise.allSettled([
+          service.removeRole(superAdminActor(actorId), firstTargetId, "SUPER_ADMIN", "concurrent removal A"),
+          service.removeRole(superAdminActor(actorId), secondTargetId, "SUPER_ADMIN", "concurrent removal B"),
+        ]);
+
+        expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+        expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+        expect(await prisma.userRole.count({ where: { roleId: superAdminRoleId } })).toBe(1);
+      } finally {
+        await prisma.userRole.deleteMany({
+          where: { userId: { in: [firstTargetId, secondTargetId] }, roleId: superAdminRoleId },
+        });
+        if (preexistingAssignments.length > 0) {
+          await prisma.userRole.createMany({ data: preexistingAssignments, skipDuplicates: true });
+        }
+      }
+    });
+
+    it("rolls the removal back when its mandatory security event cannot persist", async () => {
+      const nonexistentActorId = randomUUID();
+      const targetId = await createUser();
+      const auditorRoleId = await roleId("AUDITOR");
+      await prisma.userRole.create({ data: { userId: targetId, roleId: auditorRoleId } });
+
+      await expect(service.removeRole(
+        superAdminActor(nonexistentActorId), targetId, "AUDITOR", "required event rollback",
+      )).rejects.toBeDefined();
+
+      expect(await prisma.userRole.findUnique({
+        where: { userId_roleId: { userId: targetId, roleId: auditorRoleId } },
+      })).not.toBeNull();
+    });
+
     it("removes a role and records a ROLE_REMOVED security event", async () => {
       const actorId = await createUser();
       const targetId = await createUser();

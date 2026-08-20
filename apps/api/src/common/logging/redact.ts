@@ -57,13 +57,19 @@ export function redactObject(input: unknown, seen: WeakSet<object> = new WeakSet
   return output;
 }
 
-// Matches scheme://user:password@ in connection strings (postgres, redis, etc.)
-const CONNECTION_STRING_CREDENTIALS = /(\b\w+:\/\/)[^\s@:/]+:[^\s@]+@/gi;
+// Matches scheme://user:password@ and scheme://:password@ connection
+// strings (postgres, redis, etc.).
+const CONNECTION_STRING_CREDENTIALS = /(\b[a-z][a-z0-9+.-]*:\/\/)(?:[^\s/@:]+)?:[^\s@]+@/gi;
+const SENSITIVE_ASSIGNMENTS = /\b(password|passwd|pwd|token|secret|api[_-]?key|authorization)\s*([=:])\s*([^\s,;]+)/gi;
+const BEARER_CREDENTIAL = /\b(Bearer)\s+[A-Za-z0-9._~+/-]+=*/gi;
 
 /**
  * Scrubs connection-string-style embedded credentials from a plain string
  * message (e.g. an error thrown by a driver that echoes DATABASE_URL).
  */
 export function redactString(input: string): string {
-  return input.replace(CONNECTION_STRING_CREDENTIALS, (_match, scheme: string) => `${scheme}[REDACTED]@`);
+  return input
+    .replace(CONNECTION_STRING_CREDENTIALS, (_match, scheme: string) => `${scheme}[REDACTED]@`)
+    .replace(BEARER_CREDENTIAL, (_match, scheme: string) => `${scheme} [REDACTED]`)
+    .replace(SENSITIVE_ASSIGNMENTS, (_match, name: string, separator: string) => `${name}${separator}[REDACTED]`);
 }

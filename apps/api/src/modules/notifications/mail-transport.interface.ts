@@ -4,10 +4,16 @@ export interface OutboundEmailMessage {
   textBody: string;
   templateVersion: string;
   correlationId: string;
+  /** Stable outbox-job identity. Transports should propagate it as their
+   * provider idempotency/message identity whenever supported. */
+  idempotencyKey?: string;
 }
 
 export interface MailSendResult {
   delivered: boolean;
+  /** True when the transport cannot establish whether the provider accepted
+   * the message. Callers must not blindly retry this result. */
+  uncertain?: boolean;
   providerMessageId?: string;
   failureReason?: string;
 }

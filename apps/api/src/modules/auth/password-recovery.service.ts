@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { User } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import { NotificationService } from "../notifications/notification.service";
@@ -22,11 +22,13 @@ import {
   type ChangePasswordResponse,
 } from "./password-recovery.types";
 import type { EnvConfig } from "../../config/env.validation";
+import { AdminIdentityPolicy, PrivilegedRecoveryConfigurationError } from "./admin-identity.policy";
 
 const GENERIC_FORGOT_PASSWORD_MESSAGE = "Si la cuenta existe, se enviarán instrucciones de recuperación de contraseña.";
 const GENERIC_RESET_SUCCESS_MESSAGE = "Tu contraseña ha sido restablecida correctamente. Ya puedes iniciar sesión.";
 const GENERIC_CHANGE_SUCCESS_MESSAGE = "Tu contraseña ha sido actualizada correctamente.";
 const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más tarde.";
+const FORGOT_PASSWORD_RESPONSE_FLOOR_MS = 250;
 
 /**
  * Orchestrates forgot-password / reset-password / change-password
@@ -36,6 +38,8 @@ const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más 
  */
 @Injectable()
 export class PasswordRecoveryService {
+  private readonly logger = new Logger(PasswordRecoveryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwordService: PasswordService,
@@ -46,37 +50,37 @@ export class PasswordRecoveryService {
     private readonly rateLimiterService: RateLimiterService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly adminIdentityPolicy: AdminIdentityPolicy,
   ) {}
 
   /**
-   * The synchronous (awaited) part of this method does only two things
-   * regardless of whether the account exists: check rate limits, and run
-   * one indexed `findUnique`. Everything with variable cost - creating a
-   * token, writing a NotificationJob, attempting delivery - happens in
-   * `processForgotPassword`, fired without awaiting it. That is what
-   * makes response timing identical for an existing vs. unknown account:
-   * the expensive work happens strictly *after* the response has already
-   * been decided, not because it is disguised with dummy work.
+   * Token creation and durable outbox insertion are awaited: an API process
+   * exit after returning 200 can no longer lose the recovery command. The
+   * public response remains generic and is held to a common minimum duration
+   * for existing, unknown, ineligible and rate-limited identities. Delivery
+   * itself remains the durable NotificationJob worker's responsibility.
    */
   async forgotPassword(dto: ForgotPasswordDto, context: RequestContext): Promise<ForgotPasswordResponse> {
+    const responseNotBefore = Date.now() + FORGOT_PASSWORD_RESPONSE_FLOOR_MS;
     const email = dto.email.trim().toLowerCase();
+    const rateLimited = await this.isForgotPasswordRateLimited(email, context);
 
-    const ipLimit = await this.rateLimiterService.checkAndIncrement(
-      `forgot-password:ip:${context.ipAddress ?? "unknown"}`,
-      this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IP_MAX", { infer: true }),
-      this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IP_WINDOW_SECONDS", { infer: true }),
-    );
-    const identifierLimit = await this.rateLimiterService.checkAndIncrement(
-      `forgot-password:identifier:${sha256Hex(email)}`,
-      this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_MAX", { infer: true }),
-      this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_WINDOW_SECONDS", { infer: true }),
-    );
-
-    if (!ipLimit.limited && !identifierLimit.limited) {
+    if (!rateLimited) {
       const user = await this.prisma.user.findUnique({ where: { email } });
       if (user && user.status === "ACTIVE") {
-        void this.processForgotPassword(user, context).catch(() => undefined);
+        await this.processForgotPassword(user, context).catch(() => {
+          // Preserve the non-enumerating public response, but never make a
+          // failed durable recovery command operationally invisible. Do not
+          // include the exception, identity, address or request metadata: a
+          // driver/transport error can contain connection details.
+          this.logger.error("Password recovery command could not be persisted");
+        });
       }
+    }
+
+    const remainingDelay = responseNotBefore - Date.now();
+    if (remainingDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remainingDelay));
     }
 
     // Identical response whether the account exists, is ineligible, or
@@ -84,32 +88,132 @@ export class PasswordRecoveryService {
     return { message: GENERIC_FORGOT_PASSWORD_MESSAGE };
   }
 
+  private async isForgotPasswordRateLimited(email: string, context: RequestContext): Promise<boolean> {
+    const ipKey = `forgot-password:ip:${context.ipAddress ?? "unknown"}`;
+    const identifierKey = `forgot-password:identifier:${sha256Hex(email)}`;
+    const ipMax = this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IP_MAX", { infer: true });
+    const ipWindow = this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IP_WINDOW_SECONDS", { infer: true });
+    const identifierMax = this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_MAX", { infer: true });
+    const identifierWindow = this.configService.get("FORGOT_PASSWORD_RATE_LIMIT_IDENTIFIER_WINDOW_SECONDS", { infer: true });
+
+    if (!this.adminIdentityPolicy.isPrivilegedAdminEmail(email)) {
+      const [ipLimit, identifierLimit] = await Promise.all([
+        this.rateLimiterService.checkAndIncrement(ipKey, ipMax, ipWindow),
+        this.rateLimiterService.checkAndIncrement(identifierKey, identifierMax, identifierWindow),
+      ]);
+      return ipLimit.limited || identifierLimit.limited;
+    }
+
+    try {
+      // Recovery of the only privileged administrator has no database-backed
+      // abuse counter to compensate for a Redis outage. It therefore uses the
+      // strict variants and blocks issuance when either control is unavailable.
+      // Strict counters report limited at `count >= threshold`; add one so the
+      // existing forgot-password contract still permits exactly the configured
+      // maximum and blocks the following request (`count > max`).
+      const [ipLimit, identifierLimit] = await Promise.all([
+        this.rateLimiterService.checkAndIncrementStrict(ipKey, ipMax + 1, ipWindow),
+        this.rateLimiterService.checkAndIncrementStrict(identifierKey, identifierMax + 1, identifierWindow),
+      ]);
+      return ipLimit.limited || identifierLimit.limited;
+    } catch {
+      // Keep the same generic response and response floor. This log contains
+      // neither email, IP, Redis key nor error details.
+      this.logger.warn("Privileged recovery rate-limit unavailable - issuance blocked");
+      return true;
+    }
+  }
+
   private async processForgotPassword(user: User, context: RequestContext): Promise<void> {
+    // Generate the bearer value before opening the transaction. Only its
+    // keyed hash is persisted; token supersession, new token, mandatory
+    // audit evidence and encrypted outbox command then commit as one unit.
+    // The stable User row is locked first: concurrent requests for the same
+    // identity therefore serialize before either request can supersede or
+    // insert a token. Without that lock, two READ COMMITTED transactions
+    // could both observe no active token and each create one.
+    const rawToken = this.passwordResetTokenService.generateToken();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const lockedUsers = await tx.$queryRaw<Array<{
+          id: string;
+          email: string;
+          recoveryEmail: string | null;
+          status: string;
+        }>>(Prisma.sql`
+          SELECT "id",
+                 "email",
+                 "recovery_email" AS "recoveryEmail",
+                 "status"::text AS "status"
+          FROM "users"
+          WHERE "id" = ${user.id}::uuid
+          FOR UPDATE
+        `);
+        const lockedUser = lockedUsers[0];
+        if (lockedUsers.length !== 1 || !lockedUser || lockedUser.status !== "ACTIVE") {
+          return;
+        }
+
+        // Resolve the delivery address from the locked, current database
+        // row—not the pre-transaction lookup. This prevents an admin email
+        // change racing recovery issuance from sending a bearer link to a
+        // stale address, and rechecks the privileged recovery invariant at
+        // the exact point of issuance.
+        const recipientEmail = this.adminIdentityPolicy.resolvePasswordRecoveryRecipient(lockedUser);
+
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_RESET_REQUESTED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+        });
+
+        const passwordReset = await this.passwordResetTokenService.createTokenFromRaw(user.id, context, rawToken, tx);
+
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_RESET_TOKEN_CREATED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          metadata: { passwordResetId: passwordReset.id },
+        });
+
+        await this.notificationService.queuePasswordResetEmailRequired(tx, {
+          recipientEmail,
+          userId: user.id,
+          resetUrl: this.buildResetUrl(rawToken),
+          correlationId: context.requestId ?? passwordReset.id,
+        });
+      });
+    } catch (error) {
+      if (!(error instanceof PrivilegedRecoveryConfigurationError)) throw error;
+      await this.recordInvalidPrivilegedRecovery(user.id, context);
+    }
+  }
+
+  private async recordInvalidPrivilegedRecovery(userId: string, context: RequestContext): Promise<void> {
     await this.securityEventService.record({
-      type: "PASSWORD_RESET_REQUESTED",
-      userId: user.id,
+      type: "PASSWORD_RESET_FAILED",
+      userId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
       requestId: context.requestId,
+      metadata: { reason: "PRIVILEGED_RECOVERY_CONFIGURATION_INVALID" },
     });
 
-    const { passwordReset, rawToken } = await this.passwordResetTokenService.createToken(user.id, context);
-
-    await this.securityEventService.record({
-      type: "PASSWORD_RESET_TOKEN_CREATED",
-      userId: user.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { passwordResetId: passwordReset.id },
-    });
-
-    await this.notificationService.queuePasswordResetEmail({
-      recipientEmail: user.email,
-      userId: user.id,
-      resetUrl: this.buildResetUrl(rawToken),
-      correlationId: context.requestId ?? passwordReset.id,
-    });
+    // The alert uses the independently configured recovery-only address,
+    // never the missing/mismatched database value. Failure to queue the
+    // alert is swallowed here to avoid recursively invoking recovery or
+    // changing the generic public forgot-password response.
+    await this.notificationService.queueSecurityAlert({
+      recipientEmail: this.adminIdentityPolicy.recoveryEmail,
+      userId,
+      correlationId: context.requestId ?? randomUUID(),
+      subject: "Configuración de recuperación administrativa requiere atención",
+      textBody: "La recuperación de la cuenta administrativa fue bloqueada porque su canal privilegiado no coincide con la configuración aprobada.",
+    }).catch(() => undefined);
   }
 
   private buildResetUrl(rawToken: string): string {
@@ -181,58 +285,56 @@ export class PasswordRecoveryService {
       );
     }
 
-    const claimed = await this.passwordResetTokenService.claim(passwordReset);
-    if (!claimed) {
-      // Lost a race with a concurrent request already consuming this
-      // exact token - a genuine, if rare, single-use violation attempt.
-      await this.securityEventService.record({
-        type: "PASSWORD_RESET_TOKEN_REUSED",
-        userId: user.id,
-        ipAddress: context.ipAddress,
-        userAgent: context.userAgent,
-        requestId: context.requestId,
-        metadata: { passwordResetId: passwordReset.id, reason: "concurrent_claim_lost" },
-      });
-      throw new PasswordRecoveryException(
-        PasswordRecoveryErrorCode.TOKEN_ALREADY_USED,
-        "Este enlace ya fue utilizado. Solicita uno nuevo.",
-      );
+    const newHash = await this.passwordService.hash(dto.newPassword);
+    const changedAt = new Date();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const claimed = await this.passwordResetTokenService.claim(passwordReset, tx, changedAt);
+        if (!claimed) throw this.tokenAlreadyUsed();
+
+        const updated = await tx.user.updateMany({
+          where: { id: user.id, status: "ACTIVE", passwordHash: user.passwordHash },
+          data: { passwordHash: newHash, passwordChangedAt: changedAt, failedLoginAttempts: 0, lockedUntil: null },
+        });
+        if (updated.count !== 1) throw this.concurrentUpdate();
+
+        await tx.passwordHistoryEntry.create({ data: { userId: user.id, passwordHash: user.passwordHash } });
+
+        // A reset proves identity only via (possibly-compromised) email
+        // access, so every session is revoked in the same atomic commit.
+        await this.sessionService.revokeAllForUser(user.id, "PASSWORD_RESET", tx);
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_SESSIONS_REVOKED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          metadata: { reason: "PASSWORD_RESET" },
+        });
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_RESET_SUCCEEDED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof PasswordRecoveryException && error.code === PasswordRecoveryErrorCode.TOKEN_ALREADY_USED) {
+        await this.securityEventService.record({
+          type: "PASSWORD_RESET_TOKEN_REUSED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          metadata: { passwordResetId: passwordReset.id, reason: "concurrent_claim_lost" },
+        });
+      }
+      if (this.isSerializationConflict(error)) throw this.concurrentUpdate();
+      throw error;
     }
 
-    const newHash = await this.passwordService.hash(dto.newPassword);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.passwordHistoryEntry.create({ data: { userId: user.id, passwordHash: user.passwordHash } });
-      await tx.user.update({
-        where: { id: user.id },
-        data: { passwordHash: newHash, passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null },
-      });
-    });
-
-    // A reset proves identity only via (possibly-compromised) email
-    // access, not an active session, so - unlike change-password - every
-    // session including the one that just requested this is revoked.
-    await this.sessionService.revokeAllForUser(user.id, "PASSWORD_RESET");
-    await this.securityEventService.record({
-      type: "PASSWORD_SESSIONS_REVOKED",
-      userId: user.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { reason: "PASSWORD_RESET" },
-    });
-    await this.securityEventService.record({
-      type: "PASSWORD_RESET_SUCCEEDED",
-      userId: user.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-    });
-
-    await this.notificationService.queuePasswordChangedEmail({
-      recipientEmail: user.email,
-      userId: user.id,
-      correlationId: context.requestId ?? passwordReset.id,
-    });
+    await this.queuePasswordChangedConfirmation(user, context, context.requestId ?? passwordReset.id);
 
     // Deliberately does NOT log the user in / issue tokens - see US-007
     // section 2 ("never automatically log the user in after reset unless
@@ -290,47 +392,43 @@ export class PasswordRecoveryService {
     }
 
     const newHash = await this.passwordService.hash(dto.newPassword);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.passwordHistoryEntry.create({ data: { userId: user.id, passwordHash: user.passwordHash } });
-      await tx.user.update({ where: { id: user.id }, data: { passwordHash: newHash, passwordChangedAt: new Date() } });
-    });
+    const changedAt = new Date();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.user.updateMany({
+          where: { id: user.id, status: "ACTIVE", passwordHash: user.passwordHash },
+          data: { passwordHash: newHash, passwordChangedAt: changedAt },
+        });
+        if (updated.count !== 1) throw this.concurrentUpdate();
 
-    // Documented decision (US-007 section 3): the session performing
-    // this change keeps its refresh token (the user already proved both
-    // the old and new password within it) while every *other* session's
-    // refresh token is revoked. This does NOT exempt the current access
-    // token from JwtAuthGuard's universal passwordChangedAt check below -
-    // every already-issued access token, including this session's, is
-    // invalidated the instant passwordChangedAt is stamped. The acting
-    // device transparently mints a new one via /refresh; it is never
-    // forced through a full re-login the way other devices effectively
-    // are once their own already-issued access tokens expire. See
-    // SessionService.revokeAllForUserExcept and the dedicated tests
-    // covering both halves of this behavior.
-    await this.sessionService.revokeAllForUserExcept(user.id, currentSessionId, "PASSWORD_CHANGED");
+        await tx.passwordHistoryEntry.create({ data: { userId: user.id, passwordHash: user.passwordHash } });
 
-    await this.securityEventService.record({
-      type: "PASSWORD_CHANGED",
-      userId: user.id,
-      sessionId: currentSessionId,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-    });
-    await this.securityEventService.record({
-      type: "PASSWORD_SESSIONS_REVOKED",
-      userId: user.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-      metadata: { reason: "PASSWORD_CHANGED", currentSessionPreserved: true },
-    });
+        // The acting session retains its refresh token; all other sessions,
+        // the password mutation and both mandatory events commit atomically.
+        await this.sessionService.revokeAllForUserExcept(user.id, currentSessionId, "PASSWORD_CHANGED", tx);
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_CHANGED",
+          userId: user.id,
+          sessionId: currentSessionId,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+        });
+        await this.securityEventService.recordRequired(tx, {
+          type: "PASSWORD_SESSIONS_REVOKED",
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: context.requestId,
+          metadata: { reason: "PASSWORD_CHANGED", currentSessionPreserved: true },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (this.isSerializationConflict(error)) throw this.concurrentUpdate();
+      throw error;
+    }
 
-    await this.notificationService.queuePasswordChangedEmail({
-      recipientEmail: user.email,
-      userId: user.id,
-      correlationId: context.requestId ?? randomUUID(),
-    });
+    await this.queuePasswordChangedConfirmation(user, context, context.requestId ?? randomUUID());
 
     return { message: GENERIC_CHANGE_SUCCESS_MESSAGE };
   }
@@ -360,6 +458,54 @@ export class PasswordRecoveryService {
       requestId: context.requestId,
       metadata: { reason },
     });
+  }
+
+  private async queuePasswordChangedConfirmation(
+    user: Pick<User, "id" | "email">,
+    context: RequestContext,
+    correlationId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.queuePasswordChangedEmail({
+        recipientEmail: user.email,
+        userId: user.id,
+        correlationId,
+      });
+    } catch {
+      await this.securityEventService.record({
+        type: "PASSWORD_NOTIFICATION_FAILED",
+        userId: user.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: context.requestId,
+        metadata: { reason: "PASSWORD_CHANGED_NOTIFICATION_QUEUE_FAILED" },
+      });
+      await this.notificationService.queueSecurityAlert({
+        recipientEmail: this.adminIdentityPolicy.recoveryEmail,
+        userId: user.id,
+        correlationId,
+        subject: "Notificación de cambio de contraseña requiere atención",
+        textBody: "La contraseña fue modificada, pero no fue posible encolar su confirmación. Revisa el canal de notificaciones.",
+      }).catch(() => undefined);
+    }
+  }
+
+  private tokenAlreadyUsed(): PasswordRecoveryException {
+    return new PasswordRecoveryException(
+      PasswordRecoveryErrorCode.TOKEN_ALREADY_USED,
+      "Este enlace ya fue utilizado. Solicita uno nuevo.",
+    );
+  }
+
+  private concurrentUpdate(): PasswordRecoveryException {
+    return new PasswordRecoveryException(
+      PasswordRecoveryErrorCode.CONCURRENT_UPDATE,
+      "La cuenta cambió durante la operación. Intenta nuevamente.",
+    );
+  }
+
+  private isSerializationConflict(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
   }
 
   private invalidOrExpired(): PasswordRecoveryException {

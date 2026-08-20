@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { LoginFailureCategory, User } from "@prisma/client";
+import type { LoginFailureCategory, Prisma, User } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 
@@ -13,6 +13,8 @@ export interface RecordAttemptInput {
   failureCategory?: LoginFailureCategory;
   requestId?: string | null;
 }
+
+type LoginAttemptWriteClient = Pick<Prisma.TransactionClient, "loginAttempt" | "user">;
 
 /**
  * Owns both halves of lockout tracking: LoginAttempt rows (a full audit
@@ -35,8 +37,8 @@ export class LoginAttemptService {
     this.lockoutDurationMs = configService.get("LOGIN_LOCKOUT_DURATION_MINUTES", { infer: true }) * 60_000;
   }
 
-  async recordAttempt(input: RecordAttemptInput): Promise<void> {
-    await this.prisma.loginAttempt.create({
+  async recordAttempt(input: RecordAttemptInput, client: LoginAttemptWriteClient = this.prisma): Promise<void> {
+    await client.loginAttempt.create({
       data: {
         email: input.email,
         userId: input.userId ?? null,
@@ -132,10 +134,14 @@ export class LoginAttemptService {
 
   /** Successful authentication resets the lockout state and stamps
    * lastLoginAt, per the approved security policy. */
-  async registerSuccessfulLogin(userId: string): Promise<void> {
-    await this.prisma.user.update({
+  async registerSuccessfulLogin(
+    userId: string,
+    client: LoginAttemptWriteClient = this.prisma,
+    loggedInAt = new Date(),
+  ): Promise<void> {
+    await client.user.update({
       where: { id: userId },
-      data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
+      data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: loggedInAt },
     });
   }
 }

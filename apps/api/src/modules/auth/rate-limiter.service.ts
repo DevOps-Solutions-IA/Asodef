@@ -7,6 +7,13 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
+export class RateLimitDependencyUnavailableError extends Error {
+  constructor() {
+    super("Rate-limit dependency unavailable.");
+    this.name = "RateLimitDependencyUnavailableError";
+  }
+}
+
 /**
  * Fixed-window counter backed by Redis (INCR + conditional EXPIRE), used
  * for coarse IP-based login rate limiting - independent of and in
@@ -74,5 +81,46 @@ export class RateLimiterService {
       this.logger.warn("Redis unavailable for rate limiting - failing open (request not rate-limited)");
       return { limited: false, remaining: max, retryAfterSeconds: 0 };
     }
+  }
+
+  /** Strict variants are reserved for privileged re-authentication. A
+   * Redis outage must not silently remove brute-force protection from a
+   * step-up boundary; the ordinary login path retains its documented DB
+   * lockout-backed degradation policy. */
+  async checkAndIncrementStrict(key: string, max: number, windowSeconds: number): Promise<RateLimitResult> {
+    try {
+      return await this.checkAndIncrementOrThrow(key, max, windowSeconds);
+    } catch {
+      throw new RateLimitDependencyUnavailableError();
+    }
+  }
+
+  async peekStrict(key: string, max: number): Promise<RateLimitResult> {
+    try {
+      const client = this.redisService.getClient();
+      const redisKey = `ratelimit:${key}`;
+      const [countRaw, ttl] = await Promise.all([client.get(redisKey), client.ttl(redisKey)]);
+      const count = countRaw ? Number(countRaw) : 0;
+      return {
+        limited: count >= max,
+        remaining: Math.max(0, max - count),
+        retryAfterSeconds: ttl > 0 ? ttl : 0,
+      };
+    } catch {
+      throw new RateLimitDependencyUnavailableError();
+    }
+  }
+
+  private async checkAndIncrementOrThrow(key: string, max: number, windowSeconds: number): Promise<RateLimitResult> {
+    const client = this.redisService.getClient();
+    const redisKey = `ratelimit:${key}`;
+    const count = await client.incr(redisKey);
+    if (count === 1) await client.expire(redisKey, windowSeconds);
+    const ttl = await client.ttl(redisKey);
+    return {
+      limited: count >= max,
+      remaining: Math.max(0, max - count),
+      retryAfterSeconds: ttl > 0 ? ttl : windowSeconds,
+    };
   }
 }

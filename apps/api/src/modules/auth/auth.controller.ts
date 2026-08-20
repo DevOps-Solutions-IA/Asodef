@@ -13,6 +13,14 @@ import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { buildRequestContext } from "../../common/http/request-context.util";
 import type { AuthenticatedRequest, RequestUser } from "./types/request-user.type";
+import { AdminMfaService } from "./mfa/admin-mfa.service";
+import { VerifyMfaLoginDto } from "./mfa/dto/verify-mfa-login.dto";
+import { ConfirmMfaEnrollmentDto } from "./mfa/dto/confirm-mfa-enrollment.dto";
+import { BeginMfaEnrollmentDto } from "./mfa/dto/begin-mfa-enrollment.dto";
+import { ManageMfaDto } from "./mfa/dto/manage-mfa.dto";
+import { MfaException, MfaRequiredException, type MfaErrorCode } from "./mfa/mfa.types";
+import { RequireRoles } from "./decorators/roles.decorator";
+import { RequireStepUp } from "./decorators/require-step-up.decorator";
 
 const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más tarde.";
 
@@ -20,7 +28,9 @@ const SAFE_RATE_LIMITED_MESSAGE = "Demasiados intentos. Intenta nuevamente más 
  * token/policy problems are 400 (bad request input), rate limiting is
  * 429, matching the existing RateLimitedException convention below. */
 function passwordRecoveryHttpStatus(code: PasswordRecoveryErrorCode): number {
-  return code === PasswordRecoveryErrorCode.RATE_LIMITED ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_REQUEST;
+  if (code === PasswordRecoveryErrorCode.RATE_LIMITED) return HttpStatus.TOO_MANY_REQUESTS;
+  if (code === PasswordRecoveryErrorCode.CONCURRENT_UPDATE) return HttpStatus.CONFLICT;
+  return HttpStatus.BAD_REQUEST;
 }
 
 @ApiTags("auth")
@@ -30,12 +40,14 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly cookieService: AuthCookieService,
     private readonly passwordRecoveryService: PasswordRecoveryService,
+    private readonly adminMfaService: AdminMfaService,
   ) {}
 
   @Public()
   @Post("login")
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Req() request: AuthenticatedRequest, @Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", "no-store");
     const context = buildRequestContext(request);
     try {
       const result = await this.authService.login(dto, context);
@@ -43,13 +55,158 @@ export class AuthController {
       this.cookieService.setRefreshTokenCookie(response, result.rawRefreshToken);
       return { user: result.user };
     } catch (error) {
+      if (error instanceof MfaRequiredException) {
+        return { mfaRequired: true, challengeToken: error.challengeToken, expiresAt: error.expiresAt };
+      }
       if (error instanceof RateLimitedException) {
         throw new HttpException(
           { message: SAFE_RATE_LIMITED_MESSAGE, retryAfterSeconds: error.retryAfterSeconds },
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
-      throw error;
+      throw mapMfaError(error);
+    }
+  }
+
+  @Public()
+  @Post("mfa/verify-login")
+  @HttpCode(HttpStatus.OK)
+  async verifyMfaLogin(
+    @Body() dto: VerifyMfaLoginDto,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    try {
+      const result = await this.authService.completeMfaLogin(dto.challengeToken, dto.code, buildRequestContext(request));
+      this.cookieService.setAccessTokenCookie(response, result.accessToken);
+      this.cookieService.setRefreshTokenCookie(response, result.rawRefreshToken);
+      return { user: result.user };
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Post("step-up")
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles("SUPER_ADMIN")
+  async stepUp(
+    @CurrentUser() user: RequestUser | undefined,
+    @Body() dto: ManageMfaDto,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      return await this.adminMfaService.verifyStepUp(
+        user.id,
+        user.sessionId,
+        dto.password,
+        dto.code,
+        buildRequestContext(request),
+      );
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Get("mfa/status")
+  @RequireRoles("SUPER_ADMIN")
+  async mfaStatus(@CurrentUser() user: RequestUser | undefined, @Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      return await this.adminMfaService.getStatus(user.id);
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Post("mfa/enrollment")
+  @RequireRoles("SUPER_ADMIN")
+  async beginMfaEnrollment(
+    @CurrentUser() user: RequestUser | undefined,
+    @Body() dto: BeginMfaEnrollmentDto,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      return await this.adminMfaService.beginEnrollment(
+        user.id,
+        user.sessionId,
+        dto.password,
+        buildRequestContext(request),
+      );
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Post("mfa/enrollment/confirm")
+  @RequireRoles("SUPER_ADMIN")
+  async confirmMfaEnrollment(
+    @CurrentUser() user: RequestUser | undefined,
+    @Body() dto: ConfirmMfaEnrollmentDto,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      return await this.adminMfaService.confirmEnrollment(
+        user.id,
+        user.sessionId,
+        dto.password,
+        dto.code,
+        buildRequestContext(request),
+      );
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Post("mfa/recovery-codes/regenerate")
+  @RequireRoles("SUPER_ADMIN")
+  @RequireStepUp()
+  async regenerateMfaRecoveryCodes(
+    @CurrentUser() user: RequestUser | undefined,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      return await this.adminMfaService.regenerateRecoveryCodes(user.id, buildRequestContext(request));
+    } catch (error) {
+      throw mapMfaError(error);
+    }
+  }
+
+  @ApiCookieAuth("asodef_at")
+  @Post("mfa/revoke")
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles("SUPER_ADMIN")
+  @RequireStepUp()
+  async revokeMfa(
+    @CurrentUser() user: RequestUser | undefined,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    if (!user) throw new HttpException("No autenticado.", HttpStatus.UNAUTHORIZED);
+    try {
+      await this.adminMfaService.revoke(user.id, buildRequestContext(request));
+      return { status: "ok" };
+    } catch (error) {
+      throw mapMfaError(error);
     }
   }
 
@@ -173,4 +330,20 @@ function mapPasswordRecoveryError(error: unknown): unknown {
     return new HttpException({ message: error.message, code: error.code }, passwordRecoveryHttpStatus(error.code));
   }
   return error;
+}
+
+function mapMfaError(error: unknown): unknown {
+  if (!(error instanceof MfaException)) return error;
+  const statusByCode: Partial<Record<MfaErrorCode, HttpStatus>> = {
+    MFA_ADMIN_ONLY: HttpStatus.FORBIDDEN,
+    MFA_PASSWORD_INVALID: HttpStatus.UNAUTHORIZED,
+    MFA_CHALLENGE_INVALID: HttpStatus.UNAUTHORIZED,
+    MFA_CHALLENGE_EXPIRED: HttpStatus.UNAUTHORIZED,
+    MFA_CHALLENGE_USED: HttpStatus.UNAUTHORIZED,
+    MFA_ATTEMPTS_EXCEEDED: HttpStatus.TOO_MANY_REQUESTS,
+    MFA_ENROLLMENT_REQUIRED: HttpStatus.CONFLICT,
+    MFA_ALREADY_ENABLED: HttpStatus.CONFLICT,
+    MFA_CONFLICT: HttpStatus.CONFLICT,
+  };
+  return new HttpException({ code: error.code, message: error.message }, statusByCode[error.code] ?? HttpStatus.BAD_REQUEST);
 }

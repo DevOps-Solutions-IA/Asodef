@@ -65,4 +65,13 @@ describe("AppLogger", () => {
     const calls = consoleLogSpy.mock.calls.map((call) => call[0] as string);
     expect(calls.some((line) => line.includes("at somewhere.ts:1:1"))).toBe(true);
   });
+
+  it("redacts credentials embedded in a development stack trace", () => {
+    const logger = new AppLogger(false);
+    logger.error("dependency failure", "Error: postgresql://user:never-log-me@database.invalid/app\n    at driver.ts:1:1");
+
+    const output = consoleLogSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(output).not.toContain("never-log-me");
+    expect(output).toContain("postgresql://[REDACTED]@");
+  });
 });

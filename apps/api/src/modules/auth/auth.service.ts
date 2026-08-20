@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { LoginFailureCategory, User } from "@prisma/client";
+import { Prisma, type LoginFailureCategory, type User } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
@@ -11,6 +11,9 @@ import { RateLimiterService } from "./rate-limiter.service";
 import type { LoginDto } from "./dto/login.dto";
 import type { EnvConfig } from "../../config/env.validation";
 import type { RequestUser } from "./types/request-user.type";
+import { AdminIdentityPolicy } from "./admin-identity.policy";
+import { AdminMfaService } from "./mfa/admin-mfa.service";
+import { MfaRequiredException } from "./mfa/mfa.types";
 
 const SAFE_INVALID_CREDENTIALS_MESSAGE = "Credenciales inválidas.";
 const SAFE_UNAUTHENTICATED_MESSAGE = "No autenticado.";
@@ -22,6 +25,7 @@ export interface RequestContext {
   ipAddress?: string | null;
   userAgent?: string | null;
   requestId?: string | null;
+  correlationId?: string | null;
 }
 
 export interface SafeUser {
@@ -65,6 +69,8 @@ export class AuthService {
     private readonly securityEventService: SecurityEventService,
     private readonly rateLimiterService: RateLimiterService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly adminIdentityPolicy: AdminIdentityPolicy,
+    private readonly adminMfaService: AdminMfaService,
   ) {}
 
   /** Computed once and cached so every "user not found" login takes
@@ -133,20 +139,19 @@ export class AuthService {
     const hashToVerify = user?.passwordHash ?? (await this.getDummyHash());
     const passwordMatches = await this.passwordService.verify(hashToVerify, dto.password);
 
-    const failureCategory = this.classifyLoginFailure(user, passwordMatches);
+    const failureCategory = this.classifyLoginFailure(user, passwordMatches, this.adminIdentityPolicy.mayAuthenticate(email));
     const succeeded = failureCategory === null;
 
-    await this.loginAttemptService.recordAttempt({
-      email,
-      userId: user?.id ?? null,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      success: succeeded,
-      failureCategory: failureCategory ?? undefined,
-      requestId: context.requestId,
-    });
-
     if (!succeeded) {
+      await this.loginAttemptService.recordAttempt({
+        email,
+        userId: user?.id ?? null,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        success: false,
+        failureCategory,
+        requestId: context.requestId,
+      });
       await this.handleFailedLogin(user, failureCategory, context);
       // Identical response for every failure reason - invalid email,
       // wrong password, locked, inactive, suspended - so none of them are
@@ -155,40 +160,113 @@ export class AuthService {
     }
 
     // succeeded === true guarantees `user` is non-null and ACTIVE.
-    const activeUser = user as User;
+    let activeUser = user as User;
 
     if (this.passwordService.needsRehash(activeUser.passwordHash)) {
       const rehashed = await this.passwordService.hash(dto.password);
-      await this.prisma.user.update({ where: { id: activeUser.id }, data: { passwordHash: rehashed } });
+      activeUser = await this.prisma.user.update({ where: { id: activeUser.id }, data: { passwordHash: rehashed } });
     }
 
-    await this.loginAttemptService.registerSuccessfulLogin(activeUser.id);
+    if (this.adminMfaService.isEnforcementRequiredFor(activeUser.email)) {
+      const challenge = await this.adminMfaService.createLoginChallenge(activeUser, context);
+      throw new MfaRequiredException(challenge.challengeToken, challenge.expiresAt);
+    }
 
-    const { session, rawRefreshToken } = await this.sessionService.createSession(activeUser.id, context);
-    const accessToken = this.tokenService.signAccessToken({ sub: activeUser.id, sid: session.id });
-
-    await this.securityEventService.record({
-      type: "SESSION_CREATED",
-      userId: activeUser.id,
-      sessionId: session.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-    });
-    await this.securityEventService.record({
-      type: "LOGIN_SUCCEEDED",
-      userId: activeUser.id,
-      sessionId: session.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      requestId: context.requestId,
-    });
-
-    return { accessToken, rawRefreshToken, user: toSafeUser(activeUser) };
+    return this.completeAuthenticatedLogin(activeUser, context);
   }
 
-  private classifyLoginFailure(user: User | null, passwordMatches: boolean): LoginFailureCategory | null {
+  async completeMfaLogin(challengeToken: string, code: string, context: RequestContext): Promise<LoginResult> {
+    const persisted = await this.adminMfaService.completeLoginChallenge(
+      challengeToken,
+      code,
+      context,
+      (tx, user, verifiedAt) => this.persistAuthenticatedLogin(tx, user, context, verifiedAt),
+    );
+    return this.issueLoginResult(persisted);
+  }
+
+  private async completeAuthenticatedLogin(activeUser: User, context: RequestContext): Promise<LoginResult> {
+    const persisted = await this.prisma.$transaction((tx) =>
+      this.persistAuthenticatedLogin(tx, activeUser, context),
+    );
+    return this.issueLoginResult(persisted);
+  }
+
+  private async persistAuthenticatedLogin(
+    tx: Prisma.TransactionClient,
+    authenticatedUser: User,
+    context: RequestContext,
+    mfaVerifiedAt?: Date,
+  ) {
+    // Serialize against password/account-state mutations. Re-reading after
+    // the row lock prevents a password reset/deactivation racing between
+    // credential verification and Session creation.
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "users"
+      WHERE "id" = ${authenticatedUser.id}::uuid
+      FOR UPDATE
+    `);
+    const currentUser = await tx.user.findUnique({ where: { id: authenticatedUser.id } });
+    if (!currentUser || currentUser.status !== "ACTIVE" ||
+        !this.adminIdentityPolicy.mayAuthenticate(currentUser.email) ||
+        currentUser.email !== authenticatedUser.email ||
+        currentUser.passwordHash !== authenticatedUser.passwordHash ||
+        currentUser.passwordChangedAt?.getTime() !== authenticatedUser.passwordChangedAt?.getTime()) {
+      throw new UnauthorizedException(SAFE_UNAUTHENTICATED_MESSAGE);
+    }
+
+    const loginAt = mfaVerifiedAt ?? new Date();
+    await this.loginAttemptService.recordAttempt({
+      email: currentUser.email,
+      userId: currentUser.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      success: true,
+      requestId: context.requestId,
+    }, tx);
+    await this.loginAttemptService.registerSuccessfulLogin(currentUser.id, tx, loginAt);
+
+    const { session, rawRefreshToken } = await this.sessionService.createSession(
+      currentUser.id,
+      context,
+      tx,
+      mfaVerifiedAt ? { mfaVerifiedAt, recentAuthenticationAt: mfaVerifiedAt } : {},
+    );
+    const eventContext = {
+      userId: currentUser.id,
+      actorUserId: currentUser.id,
+      subjectUserId: currentUser.id,
+      sessionId: session.id,
+      result: "SUCCESS" as const,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: context.requestId,
+      correlationId: context.correlationId,
+    };
+    await this.securityEventService.recordRequired(tx, { type: "SESSION_CREATED", ...eventContext });
+    await this.securityEventService.recordRequired(tx, { type: "LOGIN_SUCCEEDED", ...eventContext });
+
+    // Sign before the transaction commits. A signing/configuration failure
+    // therefore cannot leave behind an unreachable "successful" session.
+    const accessToken = this.tokenService.signAccessToken({ sub: currentUser.id, sid: session.id });
+    return { accessToken, rawRefreshToken, user: currentUser };
+  }
+
+  private issueLoginResult(persisted: Awaited<ReturnType<AuthService["persistAuthenticatedLogin"]>>): LoginResult {
+    return {
+      accessToken: persisted.accessToken,
+      rawRefreshToken: persisted.rawRefreshToken,
+      user: toSafeUser(persisted.user),
+    };
+  }
+
+  private classifyLoginFailure(
+    user: User | null,
+    passwordMatches: boolean,
+    identityMayAuthenticate: boolean,
+  ): LoginFailureCategory | null {
     if (!user) return "INVALID_CREDENTIALS";
+    if (!identityMayAuthenticate) return "INVALID_CREDENTIALS";
     if (user.status === "SUSPENDED") return "ACCOUNT_SUSPENDED";
     if (user.status === "INACTIVE") return "ACCOUNT_INACTIVE";
     if (this.loginAttemptService.isLocked(user)) return "ACCOUNT_LOCKED";

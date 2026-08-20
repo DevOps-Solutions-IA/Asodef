@@ -15,6 +15,8 @@ import { PrismaModule } from "../../database/prisma.module";
 import { PrismaService } from "../../database/prisma.service";
 import { RedisModule } from "../../common/redis/redis.module";
 import { validateEnv } from "../../config/env.validation";
+import { AdminIdentityPolicy } from "./admin-identity.policy";
+import { AdminMfaService } from "./mfa/admin-mfa.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -42,6 +44,8 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
         LoginAttemptService,
         SecurityEventService,
         RateLimiterService,
+        AdminIdentityPolicy,
+        { provide: AdminMfaService, useValue: { isEnforcementRequiredFor: () => false } },
       ],
     }).compile();
 
@@ -114,6 +118,24 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
       await expect(
         authService.login({ email: user.email, password: "totally-wrong-password" }, uniqueContext()),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it("rejects the recovery-only email even when a matching active User row and password exist", async () => {
+      const recoveryUser = await prisma.user.create({
+        data: {
+          email: "asodefsas@gmail.com",
+          passwordHash: await passwordService.hash(TEST_PASSWORD),
+          fullName: "Recovery channel must not authenticate",
+          status: "ACTIVE",
+        },
+      });
+      createdUserIds.push(recoveryUser.id);
+
+      await expect(authService.login(
+        { email: recoveryUser.email, password: TEST_PASSWORD },
+        uniqueContext(),
+      )).rejects.toThrow(UnauthorizedException);
+      expect(await prisma.session.count({ where: { userId: recoveryUser.id } })).toBe(0);
     });
 
     it("returns the identical public error message for an unknown email and a wrong password", async () => {
@@ -292,6 +314,31 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
       expect(updated.lastLoginAt).not.toBeNull();
     });
 
+    it("rolls Session, successful LoginAttempt, lastLoginAt, and success events back as one unit", async () => {
+      const user = await createUser();
+      await prisma.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 3 } });
+      const requiredEventFailure = jest
+        .spyOn(moduleRef.get(SecurityEventService), "recordRequired")
+        .mockRejectedValueOnce(new Error("mandatory login audit unavailable"));
+
+      try {
+        await expect(
+          authService.login({ email: user.email, password: TEST_PASSWORD }, uniqueContext()),
+        ).rejects.toThrow("mandatory login audit unavailable");
+      } finally {
+        requiredEventFailure.mockRestore();
+      }
+
+      const persistedUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(persistedUser.lastLoginAt).toBeNull();
+      expect(persistedUser.failedLoginAttempts).toBe(3);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+      expect(await prisma.loginAttempt.count({ where: { userId: user.id, success: true } })).toBe(0);
+      expect(await prisma.securityEvent.count({
+        where: { userId: user.id, type: { in: ["SESSION_CREATED", "LOGIN_SUCCEEDED"] } },
+      })).toBe(0);
+    });
+
     it("transparently rehashes a password stored with weaker-than-configured argon2 parameters", async () => {
       const argon2 = await import("argon2");
       const weakHash = await argon2.hash(TEST_PASSWORD, {
@@ -433,6 +480,8 @@ describe("AuthService (integration, real Postgres + Redis, no mocking of busines
           SessionService,
           LoginAttemptService,
           SecurityEventService,
+          AdminIdentityPolicy,
+          { provide: AdminMfaService, useValue: { isEnforcementRequiredFor: () => false } },
           { provide: RateLimiterService, useValue: brokenRateLimiter },
         ],
       }).compile();

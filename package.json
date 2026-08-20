@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.19.0"
   },
   "packageManager": "pnpm@10.16.0",
   "scripts": {
@@ -14,7 +14,7 @@
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "prepare:generated": "turbo run prisma:generate --filter=@asodef/api",
-    "ci:check": "bash scripts/ci-check.sh",
+    "ci:check": "bash scripts/ci-security-check.sh && bash scripts/ci-check.sh",
     "ci:verify": "bash scripts/ci-verify.sh",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "prisma:generate": "pnpm --filter api prisma:generate",

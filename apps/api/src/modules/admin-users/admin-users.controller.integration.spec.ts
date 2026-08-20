@@ -8,6 +8,9 @@ import { PrismaService } from "../../database/prisma.service";
 import { PasswordService } from "../auth/password.service";
 import { RedisService } from "../../common/redis/redis.service";
 import type { User } from "@prisma/client";
+import { AdminUsersService } from "./admin-users.service";
+import type { RequestUser } from "../auth/types/request-user.type";
+import { SecurityEventService } from "../../common/security-events/security-event.service";
 
 const TEST_PASSWORD = "correct-horse-battery-staple-123";
 
@@ -15,6 +18,8 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   let passwordService: PasswordService;
+  let adminUsersService: AdminUsersService;
+  let securityEventService: SecurityEventService;
   const createdUserIds: string[] = [];
 
   // Shared actors, logged in exactly once each (see the beforeAll doc
@@ -33,6 +38,8 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
 
     prisma = app.get(PrismaService);
     passwordService = app.get(PasswordService);
+    adminUsersService = app.get(AdminUsersService);
+    securityEventService = app.get(SecurityEventService);
 
     // Same rationale as auth.controller.integration.spec.ts: clear any
     // residual IP-keyed login-rate-limit counter once at the start, so
@@ -86,6 +93,15 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
   async function loginAs(user: User): Promise<string[]> {
     const response = await request(app.getHttpServer()).post("/api/v1/auth/login").send({ email: user.email, password: TEST_PASSWORD });
     expect(response.status).toBe(200);
+    // These endpoint tests exercise user-management behavior, not the MFA
+    // ceremony (covered end-to-end in step-up-flow.integration.spec.ts).
+    // Establish server-side assurance explicitly so critical-route guards
+    // do not shadow the domain assertion each test is intended to make.
+    const assuredAt = new Date();
+    await prisma.session.updateMany({
+      where: { userId: user.id, revokedAt: null, rotatedAt: null },
+      data: { mfaVerifiedAt: assuredAt, recentAuthenticationAt: assuredAt },
+    });
     const raw = response.headers["set-cookie"];
     return Array.isArray(raw) ? raw : raw ? [raw] : [];
   }
@@ -108,6 +124,33 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
     const user = await createUser();
     await assignRole(user.id, roleName);
     return user;
+  }
+
+  /** A syntactically valid but non-existent actor forces the mandatory
+   * SecurityEvent FK write to fail, proving the surrounding transaction
+   * rolls its business mutation back. */
+  function nonexistentSuperAdminActor(): RequestUser {
+    return {
+      id: randomUUID(),
+      email: "transaction-test@example.com",
+      fullName: "Transaction Test Actor",
+      status: "ACTIVE",
+      roles: ["SUPER_ADMIN"],
+      permissions: ["users.manage"],
+      sessionId: randomUUID(),
+    };
+  }
+
+  function existingSuperAdminActor(): RequestUser {
+    return {
+      id: sharedSuperAdmin.user.id,
+      email: sharedSuperAdmin.user.email,
+      fullName: sharedSuperAdmin.user.fullName,
+      status: sharedSuperAdmin.user.status,
+      roles: ["SUPER_ADMIN"],
+      permissions: ["users.manage"],
+      sessionId: randomUUID(),
+    };
   }
 
   describe("GET /api/v1/admin/users", () => {
@@ -282,6 +325,19 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
 
       expect(response.status).toBe(400);
     });
+
+    it("rolls the complete invitation aggregate back when USER_CREATED cannot persist", async () => {
+      const email = `atomic-create-${randomUUID()}@example.com`;
+      await expect(adminUsersService.createUser(
+        nonexistentSuperAdminActor(),
+        { email, fullName: "Must Not Persist" },
+        { requestId: randomUUID() },
+      )).rejects.toBeDefined();
+
+      expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+      expect(await prisma.passwordReset.count({ where: { user: { email } } })).toBe(0);
+      expect(await prisma.notificationJob.count({ where: { recipientEmail: email } })).toBe(0);
+    });
   });
 
   describe("PATCH /api/v1/admin/users/:userId", () => {
@@ -338,6 +394,43 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
         .send({ fullName: "Should Conflict", reason: "concurrency test", expectedUpdatedAt: staleTimestamp });
 
       expect(response.status).toBe(409);
+    });
+
+    it("allows only one of two concurrent profile updates to claim the same user version", async () => {
+      const adminCookies = sharedAdmin.cookies;
+      const target = await createUser();
+      const body = { reason: "atomic CAS concurrency test", expectedVersion: target.version };
+
+      const [first, second] = await Promise.all([
+        request(app.getHttpServer())
+          .patch(`/api/v1/admin/users/${target.id}`)
+          .set("Cookie", adminCookies)
+          .send({ ...body, fullName: "Concurrent Update A" }),
+        request(app.getHttpServer())
+          .patch(`/api/v1/admin/users/${target.id}`)
+          .set("Cookie", adminCookies)
+          .send({ ...body, fullName: "Concurrent Update B" }),
+      ]);
+
+      expect([first.status, second.status].sort()).toEqual([200, 409]);
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+      expect(persisted.version).toBe(target.version + 1);
+      expect(["Concurrent Update A", "Concurrent Update B"]).toContain(persisted.fullName);
+    });
+
+    it("rolls the profile mutation back when its mandatory security event cannot persist", async () => {
+      const target = await createUser({ fullName: "Before Required Event" });
+
+      await expect(adminUsersService.updateUser(
+        nonexistentSuperAdminActor(),
+        target.id,
+        { fullName: "Must Roll Back", reason: "required event rollback", expectedVersion: target.version },
+        { requestId: randomUUID() },
+      )).rejects.toBeDefined();
+
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+      expect(persisted.fullName).toBe("Before Required Event");
+      expect(persisted.version).toBe(target.version);
     });
 
     it("prevents an ADMIN (non-SUPER_ADMIN) from editing another ADMIN (actor-target hierarchy)", async () => {
@@ -412,6 +505,43 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
         .set("Cookie", adminCookies)
         .send({ reason: "trying to reactivate a suspended account" });
       expect(suspendedAttempt.status).toBe(409);
+    });
+
+    it("rolls deactivation and session revocation back when the mandatory event fails", async () => {
+      const target = await createUser();
+      await loginAs(target);
+      const session = await prisma.session.findFirstOrThrow({ where: { userId: target.id, revokedAt: null } });
+
+      await expect(adminUsersService.deactivateUser(
+        nonexistentSuperAdminActor(), target.id, "required event rollback", { requestId: randomUUID() },
+      )).rejects.toBeDefined();
+
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).status).toBe("ACTIVE");
+      expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
+    });
+
+    it("rolls reactivation back when the mandatory event fails", async () => {
+      const target = await createUser({ status: "INACTIVE" });
+
+      await expect(adminUsersService.reactivateUser(
+        nonexistentSuperAdminActor(), target.id, "required event rollback", { requestId: randomUUID() },
+      )).rejects.toBeDefined();
+
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).status).toBe("INACTIVE");
+    });
+
+    it("allows only one concurrent deactivation to claim the observed user version", async () => {
+      const target = await createUser();
+      const actor = existingSuperAdminActor();
+      const results = await Promise.allSettled([
+        adminUsersService.deactivateUser(actor, target.id, "concurrent A", { requestId: randomUUID() }),
+        adminUsersService.deactivateUser(actor, target.id, "concurrent B", { requestId: randomUUID() }),
+      ]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
+      expect(persisted).toMatchObject({ status: "INACTIVE", version: target.version + 1 });
     });
   });
 
@@ -555,6 +685,43 @@ describe("Admin users endpoints (integration, real HTTP)", () => {
         .send({ sessionId: currentSessionId, reason: "trying to revoke my own current session" });
 
       expect(response.status).toBe(403);
+    });
+
+    it("cannot revoke a session through a different target user's URL", async () => {
+      const adminCookies = sharedAdmin.cookies;
+      const targetA = await createUser();
+      const targetB = await createUser();
+      await loginAs(targetB);
+      const sessionB = await prisma.session.findFirstOrThrow({ where: { userId: targetB.id } });
+
+      const response = await request(app.getHttpServer())
+        .post(`/api/v1/admin/users/${targetA.id}/sessions/revoke`)
+        .set("Cookie", adminCookies)
+        .send({ sessionId: sessionB.id, reason: "cross-target ownership test" });
+
+      expect(response.status).toBe(404);
+      const persisted = await prisma.session.findUniqueOrThrow({ where: { id: sessionB.id } });
+      expect(persisted.revokedAt).toBeNull();
+    });
+
+    it("rolls session revocation back when its mandatory event cannot persist", async () => {
+      const target = await createUser();
+      await loginAs(target);
+      const session = await prisma.session.findFirstOrThrow({
+        where: { userId: target.id, revokedAt: null, rotatedAt: null, expiresAt: { gt: new Date() } },
+      });
+      const eventFailure = jest.spyOn(securityEventService, "recordRequired").mockRejectedValueOnce(new Error("event unavailable"));
+      try {
+        await expect(adminUsersService.revokeSessions(
+          existingSuperAdminActor(),
+          target.id,
+          { sessionId: session.id, reason: "required event rollback" },
+          { requestId: randomUUID() },
+        )).rejects.toThrow("event unavailable");
+      } finally {
+        eventFailure.mockRestore();
+      }
+      expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
     });
   });
 

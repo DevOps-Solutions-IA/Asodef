@@ -12,5 +12,6 @@ export function buildRequestContext(request: AuthenticatedRequest): RequestConte
     ipAddress: request.ip ?? null,
     userAgent: typeof userAgent === "string" ? userAgent : null,
     requestId: (request as AuthenticatedRequest & { requestId?: string }).requestId ?? null,
+    correlationId: (request as AuthenticatedRequest & { correlationId?: string }).correlationId ?? null,
   };
 }

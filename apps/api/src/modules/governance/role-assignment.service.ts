@@ -3,12 +3,14 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import { ROLE_NAMES, type RoleName } from "../../database/rbac-catalog";
+import { AdminIdentityPolicy, AdminIdentityPolicyViolation } from "../auth/admin-identity.policy";
 
 const SAFE_FORBIDDEN_MESSAGE = "No tienes permisos para realizar esta acción.";
 const SAFE_LAST_SUPER_ADMIN_MESSAGE = "No se puede eliminar el último SUPER_ADMIN de la plataforma.";
 const SAFE_SELF_LOCKOUT_MESSAGE = "No puedes quitarte a ti mismo el rol SUPER_ADMIN.";
 const SAFE_REASON_MESSAGE = "Debes indicar un motivo para este cambio de gobernanza.";
 const SAFE_UNKNOWN_ROLE_MESSAGE = "Rol desconocido.";
+const SAFE_ADMIN_IDENTITY_MESSAGE = "La operación viola la política de identidad administrativa protegida.";
 
 export interface GovernanceActor {
   actorId: string;
@@ -47,7 +49,41 @@ export class RoleAssignmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly securityEventService: SecurityEventService,
+    private readonly adminIdentityPolicy: AdminIdentityPolicy,
   ) {}
+
+  /** Transaction-aware initial assignment used by account provisioning.
+   * The caller owns the transaction containing the User row, reset token,
+   * outbox job and USER_CREATED event. This preserves the same role catalog
+   * and protected-admin policy without opening a nested transaction. */
+  async assignInitialRolesRequired(
+    tx: Prisma.TransactionClient,
+    actor: GovernanceActor,
+    targetUserId: string,
+    targetEmail: string,
+    roleNames: readonly string[],
+    reason: string,
+  ): Promise<void> {
+    if (roleNames.length === 0) return;
+    await this.assertActorIsSuperAdmin(actor, "assignInitialRoles", targetUserId, roleNames.join(","));
+    this.assertValidReason(reason);
+    for (const roleName of roleNames) {
+      if (!ROLE_NAMES.includes(roleName as RoleName)) throw new BadRequestException(SAFE_UNKNOWN_ROLE_MESSAGE);
+      this.assertAdminIdentityPolicy(() => this.adminIdentityPolicy.assertMayHoldPrivilegedRole(targetEmail, roleName));
+      const role = await tx.role.findUnique({ where: { name: roleName } });
+      if (!role) throw new BadRequestException(SAFE_UNKNOWN_ROLE_MESSAGE);
+      await tx.userRole.create({ data: { userId: targetUserId, roleId: role.id } });
+      await this.securityEventService.recordRequired(tx, {
+        type: "ROLE_ASSIGNED",
+        userId: actor.actorId,
+        actorUserId: actor.actorId,
+        subjectUserId: targetUserId,
+        result: "SUCCESS",
+        reason,
+        metadata: { targetUserId, roleName, reason },
+      });
+    }
+  }
 
   async assignRole(
     actor: GovernanceActor,
@@ -59,6 +95,9 @@ export class RoleAssignmentService {
     await this.assertActorIsSuperAdmin(actor, "assignRole", targetUserId, roleName);
     this.assertValidReason(reason);
     const role = await this.assertKnownRole(roleName);
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { email: true } });
+    if (!target) throw new BadRequestException(SAFE_FORBIDDEN_MESSAGE);
+    this.assertAdminIdentityPolicy(() => this.adminIdentityPolicy.assertMayHoldPrivilegedRole(target.email, roleName));
 
     const existing = await this.prisma.userRole.findUnique({
       where: { userId_roleId: { userId: targetUserId, roleId: role.id } },
@@ -74,6 +113,15 @@ export class RoleAssignmentService {
     const applied = await this.prisma
       .$transaction(async (tx) => {
         await tx.userRole.create({ data: { userId: targetUserId, roleId: role.id } });
+        await this.securityEventService.recordRequired(tx, {
+          type: "ROLE_ASSIGNED",
+          userId: actor.actorId,
+          actorUserId: actor.actorId,
+          subjectUserId: targetUserId,
+          result: "SUCCESS",
+          reason,
+          metadata: { targetUserId, roleName, reason },
+        });
         return true;
       })
       .catch((error: unknown) => {
@@ -86,14 +134,6 @@ export class RoleAssignmentService {
         }
         throw error;
       });
-
-    if (applied) {
-      await this.securityEventService.record({
-        type: "ROLE_ASSIGNED",
-        userId: actor.actorId,
-        metadata: { targetUserId, roleName, reason },
-      });
-    }
 
     return { applied, alreadyAssigned: !applied };
   }
@@ -108,38 +148,77 @@ export class RoleAssignmentService {
     await this.assertActorIsSuperAdmin(actor, "removeRole", targetUserId, roleName);
     this.assertValidReason(reason);
     const role = await this.assertKnownRole(roleName);
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { email: true } });
+    if (!target) throw new BadRequestException(SAFE_FORBIDDEN_MESSAGE);
+    this.assertAdminIdentityPolicy(() => this.adminIdentityPolicy.assertMayRemoveRole(target.email, roleName));
 
-    if (roleName === "SUPER_ADMIN") {
-      if (actor.actorId === targetUserId) {
-        throw new ForbiddenException(SAFE_SELF_LOCKOUT_MESSAGE);
-      }
-      const targetHasRole = await this.prisma.userRole.findUnique({
-        where: { userId_roleId: { userId: targetUserId, roleId: role.id } },
-      });
-      if (targetHasRole) {
-        const superAdminCount = await this.prisma.userRole.count({ where: { roleId: role.id } });
-        if (superAdminCount <= 1) {
-          throw new ConflictException(SAFE_LAST_SUPER_ADMIN_MESSAGE);
-        }
-      }
+    if (roleName === "SUPER_ADMIN" && actor.actorId === targetUserId) {
+      throw new ForbiddenException(SAFE_SELF_LOCKOUT_MESSAGE);
     }
 
     if (options.preview) {
+      if (roleName === "SUPER_ADMIN") {
+        await this.assertSuperAdminRemovalIsSafe(this.prisma, targetUserId, role.id);
+      }
       return { applied: false };
     }
 
-    const result = await this.prisma.userRole.deleteMany({ where: { userId: targetUserId, roleId: role.id } });
-    if (result.count === 0) {
+    const removed = await this.removeRoleAtomically(actor.actorId, targetUserId, role.id, roleName, reason);
+    if (!removed) {
       return { applied: false, alreadyAbsent: true };
     }
 
-    await this.securityEventService.record({
-      type: "ROLE_REMOVED",
-      userId: actor.actorId,
-      metadata: { targetUserId, roleName, reason },
-    });
-
     return { applied: true };
+  }
+
+  /** Locks the shared SUPER_ADMIN role row before count+delete. Every
+   * concurrent removal of this invariant participates in the same lock,
+   * so two callers can no longer both observe count=2 and remove both
+   * assignments. */
+  private async removeRoleAtomically(
+    actorId: string,
+    targetUserId: string,
+    roleId: string,
+    roleName: string,
+    reason: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        if (roleName === "SUPER_ADMIN") {
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "roles" WHERE "id" = ${roleId}::uuid FOR UPDATE`);
+          await this.assertSuperAdminRemovalIsSafe(tx, targetUserId, roleId);
+        }
+        const result = await tx.userRole.deleteMany({ where: { userId: targetUserId, roleId } });
+        if (result.count !== 1) return false;
+        await this.securityEventService.recordRequired(tx, {
+          type: "ROLE_REMOVED",
+          userId: actorId,
+          actorUserId: actorId,
+          subjectUserId: targetUserId,
+          result: "SUCCESS",
+          reason,
+          metadata: { targetUserId, roleName, reason },
+        });
+        return true;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  private async assertSuperAdminRemovalIsSafe(
+    client: Pick<Prisma.TransactionClient, "userRole">,
+    targetUserId: string,
+    roleId: string,
+  ): Promise<void> {
+    const targetHasRole = await client.userRole.findUnique({
+      where: { userId_roleId: { userId: targetUserId, roleId } },
+    });
+    if (!targetHasRole) return;
+
+    const superAdminCount = await client.userRole.count({ where: { roleId } });
+    if (superAdminCount <= 1) {
+      throw new ConflictException(SAFE_LAST_SUPER_ADMIN_MESSAGE);
+    }
   }
 
   private async assertActorIsSuperAdmin(
@@ -153,6 +232,9 @@ export class RoleAssignmentService {
     await this.securityEventService.record({
       type: "GOVERNANCE_CHANGE_ATTEMPTED",
       userId: actor.actorId,
+      actorUserId: actor.actorId,
+      subjectUserId: targetUserId,
+      result: "DENIED",
       metadata: { action, targetUserId, roleName, result: "denied" },
     });
     throw new ForbiddenException(SAFE_FORBIDDEN_MESSAGE);
@@ -161,6 +243,17 @@ export class RoleAssignmentService {
   private assertValidReason(reason: string): void {
     if (!reason || reason.trim().length === 0) {
       throw new BadRequestException(SAFE_REASON_MESSAGE);
+    }
+  }
+
+  private assertAdminIdentityPolicy(assertion: () => void): void {
+    try {
+      assertion();
+    } catch (error) {
+      if (error instanceof AdminIdentityPolicyViolation) {
+        throw new ConflictException(SAFE_ADMIN_IDENTITY_MESSAGE);
+      }
+      throw error;
     }
   }
 

@@ -29,13 +29,15 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique
-  passwordHash String     @map("password_hash")
-  fullName     String     @map("full_name")
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String     @id @default(uuid()) @db.Uuid
+  email         String     @unique
+  recoveryEmail String?    @map("recovery_email")
+  passwordHash  String     @map("password_hash")
+  fullName      String     @map("full_name")
+  status        UserStatus @default(ACTIVE)
+  version       Int        @default(0)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   // US-006: account lifecycle / lockout state. Preferred over deriving
   // lockout state by counting LoginAttempt rows on every request - this is
@@ -56,8 +58,12 @@ model User {
   passwordResets                    PasswordReset[]
   passwordHistory                   PasswordHistoryEntry[]
   loginAttempts                     LoginAttempt[]
-  securityEvents                    SecurityEvent[]
+  securityEvents                    SecurityEvent[]             @relation("SecurityEventLegacyUser")
+  securityEventsActed               SecurityEvent[]             @relation("SecurityEventActor")
+  securityEventsSubjected           SecurityEvent[]             @relation("SecurityEventSubject")
   notificationJobs                  NotificationJob[]
+  adminMfaCredential                AdminMfaCredential?
+  adminMfaLoginChallenges           AdminMfaLoginChallenge[]
   approvedLegalDocumentVersions     LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
   auditLogActions                   AuditLog[]                 @relation("AuditLogActor")
   consentRecords                    ConsentRecord[]
@@ -76,6 +82,65 @@ model User {
   approvedApprovalGates             ApprovalGate[]
 
   @@map("users")
+}
+
+enum AdminMfaCredentialStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+
+  @@map("admin_mfa_credential_status")
+}
+
+model AdminMfaCredential {
+  id               String                   @id @default(uuid()) @db.Uuid
+  userId           String                   @unique @map("user_id") @db.Uuid
+  status           AdminMfaCredentialStatus @default(PENDING)
+  secretEncrypted  String                   @map("secret_encrypted")
+  lastUsedCounter  Int?                     @map("last_used_counter")
+  pendingExpiresAt DateTime?                @map("pending_expires_at") @db.Timestamptz(3)
+  confirmedAt      DateTime?                @map("confirmed_at") @db.Timestamptz(3)
+  revokedAt        DateTime?                @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recoveryCodes AdminMfaRecoveryCode[]
+
+  @@index([status])
+  @@map("admin_mfa_credentials")
+}
+
+model AdminMfaRecoveryCode {
+  id           String    @id @default(uuid()) @db.Uuid
+  credentialId String    @map("credential_id") @db.Uuid
+  codeHash     String    @map("code_hash")
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  credential AdminMfaCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@index([credentialId, usedAt])
+  @@map("admin_mfa_recovery_codes")
+}
+
+model AdminMfaLoginChallenge {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  requestId    String?   @map("request_id")
+  attemptCount Int       @default(0) @map("attempt_count")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("admin_mfa_login_challenges")
 }
 
 model Role {
@@ -152,16 +217,18 @@ enum SessionRevocationReason {
 // sharing that familyId. Only a hash of the refresh token is ever stored;
 // the raw token exists solely in the client's httpOnly cookie.
 model Session {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  familyId         String    @map("family_id") @db.Uuid
-  refreshTokenHash String    @unique @map("refresh_token_hash")
-  ipAddress        String?   @map("ip_address")
-  userAgent        String?   @map("user_agent")
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  lastUsedAt       DateTime? @map("last_used_at") @db.Timestamptz(3)
+  id                     String    @id @default(uuid()) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  familyId               String    @map("family_id") @db.Uuid
+  refreshTokenHash       String    @unique @map("refresh_token_hash")
+  ipAddress              String?   @map("ip_address")
+  userAgent              String?   @map("user_agent")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt             DateTime? @map("last_used_at") @db.Timestamptz(3)
+  mfaVerifiedAt          DateTime? @map("mfa_verified_at") @db.Timestamptz(3)
+  recentAuthenticationAt DateTime? @map("recent_authentication_at") @db.Timestamptz(3)
 
   // Rotation chain
   rotatedAt          DateTime? @map("rotated_at") @db.Timestamptz(3)
@@ -241,37 +308,50 @@ enum NotificationType {
 
 enum NotificationStatus {
   QUEUED
+  PROCESSING
   SENT
   FAILED
+  RETRY_PENDING
+  UNKNOWN_RESULT
+  DEAD_LETTER
 
   @@map("notification_status")
 }
 
 // Durable outbox row for every notification the platform attempts to send
 // (US-007). Created synchronously in the same request with status
-// QUEUED; a fire-and-forget dispatch immediately afterward (never awaited
-// by the HTTP response) updates it to SENT or FAILED+failureReason - this
-// row IS the queue, and its existence/terminal status is exactly what
-// tests and future operational tooling inspect. Never stores the raw
-// content of a password-reset link/token - only safe metadata.
+// QUEUED; a lease-based worker claims and delivers it independently from
+// the HTTP request. Sensitive message content is encrypted at rest and is
+// never written to logs. A nullable payload keeps the migration compatible
+// with historical rows; such rows fail closed into DEAD_LETTER if claimed.
 model NotificationJob {
-  id              String             @id @default(uuid()) @db.Uuid
-  type            NotificationType
-  status          NotificationStatus @default(QUEUED)
-  recipientEmail  String             @map("recipient_email")
-  userId          String?            @map("user_id") @db.Uuid
-  correlationId   String             @map("correlation_id")
-  templateVersion String             @map("template_version")
-  retryCount      Int                @default(0) @map("retry_count")
-  failureReason   String?            @map("failure_reason")
-  sentAt          DateTime?          @map("sent_at") @db.Timestamptz(3)
-  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String             @id @default(uuid()) @db.Uuid
+  type              NotificationType
+  status            NotificationStatus @default(QUEUED)
+  recipientEmail    String             @map("recipient_email")
+  userId            String?            @map("user_id") @db.Uuid
+  correlationId     String             @map("correlation_id")
+  templateVersion   String             @map("template_version")
+  retryCount        Int                @default(0) @map("retry_count")
+  maxAttempts       Int                @default(5) @map("max_attempts")
+  failureReason     String?            @map("failure_reason")
+  payloadEncrypted  String?            @map("payload_encrypted")
+  nextAttemptAt     DateTime           @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastAttemptAt     DateTime?          @map("last_attempt_at") @db.Timestamptz(3)
+  lockedAt          DateTime?          @map("locked_at") @db.Timestamptz(3)
+  lockExpiresAt     DateTime?          @map("lock_expires_at") @db.Timestamptz(3)
+  lockedBy          String?            @map("locked_by")
+  providerMessageId String?            @map("provider_message_id")
+  sentAt            DateTime?          @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([status, lockExpiresAt])
   @@index([correlationId])
   @@map("notification_jobs")
 }
@@ -350,6 +430,14 @@ enum SecurityEventType {
   USER_UPDATED
   USER_DEACTIVATED
   USER_REACTIVATED
+  MFA_ENROLLMENT_STARTED
+  MFA_ENABLED
+  MFA_CHALLENGE_ISSUED
+  MFA_VERIFIED
+  MFA_FAILED
+  MFA_RECOVERY_CODE_USED
+  MFA_RECOVERY_CODES_REGENERATED
+  MFA_REVOKED
 
   @@map("security_event_type")
 }
@@ -362,21 +450,34 @@ enum SecurityEventType {
 // must never contain passwords, tokens, token hashes, or cookies - only
 // safe contextual fields (e.g. a familyId for a reuse-detected event).
 model SecurityEvent {
-  id        String            @id @default(uuid()) @db.Uuid
-  type      SecurityEventType
-  userId    String?           @map("user_id") @db.Uuid
-  sessionId String?           @map("session_id") @db.Uuid
-  ipAddress String?           @map("ip_address")
-  userAgent String?           @map("user_agent")
-  requestId String?           @map("request_id")
-  metadata  Json?
-  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  id            String            @id @default(uuid()) @db.Uuid
+  type          SecurityEventType
+  // Legacy field retained without reinterpretation. Existing callers used
+  // it as actor in some flows and subject in others; new code uses the
+  // explicit actor/subject columns below.
+  userId        String?           @map("user_id") @db.Uuid
+  actorUserId   String?           @map("actor_user_id") @db.Uuid
+  subjectUserId String?           @map("subject_user_id") @db.Uuid
+  sessionId     String?           @map("session_id") @db.Uuid
+  result        AuditEventResult?
+  reason        String?
+  ipAddress     String?           @map("ip_address")
+  userAgent     String?           @map("user_agent")
+  requestId     String?           @map("request_id")
+  correlationId String?           @map("correlation_id")
+  metadata      Json?
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user        User?    @relation("SecurityEventLegacyUser", fields: [userId], references: [id], onDelete: SetNull)
+  actorUser   User?    @relation("SecurityEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  subjectUser User?    @relation("SecurityEventSubject", fields: [subjectUserId], references: [id], onDelete: SetNull)
   session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([subjectUserId, createdAt])
   @@index([type, createdAt])
+  @@index([correlationId])
   @@map("security_events")
 }
 
@@ -826,6 +927,16 @@ enum AuditSource {
   @@map("audit_source")
 }
 
+enum AuditEventResult {
+  SUCCESS
+  FAILURE
+  DENIED
+  NO_OP
+  UNKNOWN
+
+  @@map("audit_event_result")
+}
+
 // US-043: generalized beyond the payment domain, exactly as this
 // model's own original comment anticipated ("a cross-domain AuditLog,
 // if a later story needs one, is that story's own design decision to
@@ -860,6 +971,12 @@ model AuditLog {
   // are always a human admin acting through the API.
   actorUserId            String?     @map("actor_user_id") @db.Uuid
   action                 String
+  result                 AuditEventResult?
+  reason                 String?
+  requestId              String?     @map("request_id")
+  correlationId          String?     @map("correlation_id")
+  ipAddress              String?     @map("ip_address")
+  userAgent              String?     @map("user_agent")
   previousStatus         String?     @map("previous_status")
   newStatus              String?     @map("new_status")
   // False for the negative-case AC: an attempted transition that was
@@ -889,6 +1006,8 @@ model AuditLog {
   @@index([opportunityId, createdAt])
   @@index([refundId, createdAt])
   @@index([companyId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([correlationId])
   @@map("audit_logs")
 }
 

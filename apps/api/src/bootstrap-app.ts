@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { requestIdMiddleware } from "./common/logging/request-id.middleware";
+import { cookieCsrfMiddleware } from "./common/security/cookie-csrf.middleware";
 import { parseCorsOrigins } from "./config/cors";
 import type { EnvConfig } from "./config/env.validation";
 
@@ -26,8 +27,14 @@ export function configureApp(app: NestExpressApplication): void {
   // sessionStorage/URLs) - cookie-parser is what makes req.cookies exist.
   app.use(cookieParser());
 
+  const corsOrigins = parseCorsOrigins(configService.get("CORS_ORIGIN", { infer: true }));
+  app.use(cookieCsrfMiddleware(corsOrigins, [
+    configService.get("COOKIE_ACCESS_TOKEN_NAME", { infer: true }),
+    configService.get("COOKIE_REFRESH_TOKEN_NAME", { infer: true }),
+  ]));
+
   app.enableCors({
-    origin: parseCorsOrigins(configService.get("CORS_ORIGIN", { infer: true })),
+    origin: corsOrigins,
     credentials: true,
   });
 

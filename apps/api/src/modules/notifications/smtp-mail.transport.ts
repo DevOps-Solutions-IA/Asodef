@@ -23,6 +23,9 @@ export class SmtpMailTransport implements MailTransport {
       port: configService.get("SMTP_PORT", { infer: true }) ?? 587,
       secure: configService.get("SMTP_SECURE", { infer: true }),
       auth: this.buildAuth(configService),
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 30_000,
     });
     this.fromAddress =
       configService.get("SMTP_FROM", { infer: true }) || configService.get("CORPORATE_EMAIL", { infer: true });
@@ -41,14 +44,24 @@ export class SmtpMailTransport implements MailTransport {
         to: message.to,
         subject: message.subject,
         text: message.textBody,
+        // Stable across lease recovery/retry for this outbox row. This
+        // gives SMTP infrastructure a deterministic duplicate key where
+        // supported and makes repeated delivery attributable to one job.
+        messageId: message.idempotencyKey ? `<notification-${message.idempotencyKey}@asodef.invalid>` : undefined,
       });
       return { delivered: true, providerMessageId: info.messageId };
     } catch (error) {
-      const failureReason = error instanceof Error ? error.message : "UNKNOWN_SMTP_ERROR";
-      this.logger.error(
-        `SMTP delivery failed for correlationId=${message.correlationId}: ${failureReason}`,
-      );
-      return { delivered: false, failureReason };
+      const failureReason = this.classifyFailure(error);
+      this.logger.error(`SMTP delivery failed (correlationId=${message.correlationId}, category=${failureReason})`);
+      return { delivered: false, uncertain: failureReason === "SMTP_TIMEOUT", failureReason };
     }
+  }
+
+  private classifyFailure(error: unknown): string {
+    const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+    if (code === "ETIMEDOUT" || code === "ESOCKET") return "SMTP_TIMEOUT";
+    if (code === "EAUTH") return "SMTP_AUTHENTICATION_FAILED";
+    if (code === "EENVELOPE" || code === "EMESSAGE") return "SMTP_REJECTED";
+    return "SMTP_DELIVERY_FAILED";
   }
 }
