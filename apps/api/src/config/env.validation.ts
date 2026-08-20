@@ -105,7 +105,10 @@ export const envSchema = z.object({
   BOLD_WEBHOOK_SECRET: z.string().default(""),
   PRODUCTION_PAYMENTS_ENABLED: booleanFromString.default("false"),
 
-  SMTP_HOST: z.string().trim().default(""),
+  SMTP_HOST: z.string().trim().refine(
+    (value) => value === "" || /^(?=.{1,253}$)(?=.*[A-Za-z])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(value),
+    "SMTP_HOST must be a fully qualified DNS hostname without a scheme, path or port",
+  ).default(""),
   SMTP_PORT: z.preprocess(
     (value) => value === "" ? undefined : value,
     z.coerce.number().int().positive().max(65_535).optional(),
@@ -261,6 +264,26 @@ export const envSchema = z.object({
       path: [missingField],
       message: `${missingField} is required when SMTP authentication is configured`,
     });
+  }
+  const smtpDependentFields = ["SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"] as const;
+  const smtpPartiallyConfigured = smtpDependentFields.some((field) => Boolean(config[field]));
+  if (!config.SMTP_HOST && smtpPartiallyConfigured) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SMTP_HOST"],
+      message: "SMTP_HOST is required when any SMTP delivery setting is configured",
+    });
+  }
+  if (config.SMTP_HOST) {
+    for (const field of smtpDependentFields) {
+      if (!config[field]) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} is required when SMTP_HOST is configured`,
+        });
+      }
+    }
   }
   if (config.EXTERNAL_CORE_PROVIDER === "http") {
     const required: Array<keyof typeof config> = [

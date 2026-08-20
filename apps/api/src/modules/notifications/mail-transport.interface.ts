@@ -9,19 +9,21 @@ export interface OutboundEmailMessage {
   idempotencyKey?: string;
 }
 
-export interface MailSendResult {
-  delivered: boolean;
-  /** True when the transport cannot establish whether the provider accepted
-   * the message. Callers must not blindly retry this result. */
-  uncertain?: boolean;
-  providerMessageId?: string;
-  failureReason?: string;
-}
+export type MailSendResult =
+  | { delivered: true; providerMessageId?: string }
+  | {
+      delivered: false;
+      /** A permanent result is dead-lettered immediately; an uncertain
+       * result is quarantined and never retried blindly. */
+      disposition: "RETRYABLE" | "PERMANENT" | "UNCERTAIN";
+      providerMessageId?: string;
+      failureReason?: string;
+    };
 
 /**
  * Every concrete transport (SMTP, in-memory test double, no-op fallback)
  * implements this. send() must never throw - a delivery failure is a
- * normal, expected outcome represented by `{delivered: false,
+ * normal, expected outcome represented by `{delivered: false, disposition,
  * failureReason}`, not an exception, so NotificationService never needs a
  * try/catch around a transport call.
  */

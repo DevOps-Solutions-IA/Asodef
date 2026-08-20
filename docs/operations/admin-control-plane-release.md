@@ -46,16 +46,30 @@ The executable, value-free release artifacts live under `ops/admin-core/`:
 - `verify-runtime-env.sh` validates presence and shape without sourcing or
   printing values;
 - `docker-compose.admin-core.yml` maps only the required names into the API;
-- `backup-postgres-encrypted.sh` streams a custom dump directly into GPG and
-  writes checksum plus sanitized metadata;
+- `export-gpg-public-recipient.sh` and `import-gpg-public-recipient.sh` move
+  only a checksum- and fingerprint-verified public key into the VPS;
+- `backup-postgres-encrypted.sh` streams a custom dump directly into GPG on
+  the VPS and writes checksum plus sanitized metadata without requiring a
+  private key;
+- `verify-encrypted-backup-custody.sh` proves decryptability and archive
+  structure only on the custody host, after strict metadata binding of source
+  database, size, checksum, recipient and release SHA;
 - `rehearse-postgres-restore.sh` restores, migrates and starts the exact API
-  image on an isolated internal Docker network;
+  image, bound by exact release tag and Docker Image ID, on an isolated
+  internal Docker network on that custody host;
 - `rollback-public-admin-core.sh` validates rollback in dry-run mode and, only
   with `--apply`, recreates public `api` and `web`.
 
 Use the bounded commands documented in `ops/admin-core/README.md`. Do not run
 an unfiltered `docker compose config`, and never copy runtime values into the
 repository.
+
+The private GPG key must never be copied to the production VPS. VPS evidence
+ends at checksum and ciphertext-structure validation; `decryptability=PASS`
+is issued only by the custody-host verifier. The one-time residual privilege
+bootstrap constraint and its required operator decision are recorded in
+`ops/admin-core/residual-privilege-operator-gate.md`; do not weaken the startup
+identity invariant or use direct SQL to work around it.
 
 ## Pre-deploy inspection
 

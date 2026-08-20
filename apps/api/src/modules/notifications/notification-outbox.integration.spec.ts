@@ -10,7 +10,7 @@ import { PrismaService } from "../../database/prisma.service";
 import { validateEnv } from "../../config/env.validation";
 
 class ControllableMailTransport implements MailTransport {
-  mode: "success" | "failure" | "unknown" | "throw" = "success";
+  mode: "success" | "failure" | "temporary" | "permanent" | "unknown" | "throw" = "success";
   readonly messages: OutboundEmailMessage[] = [];
 
   checkHealth(): Promise<"AVAILABLE"> {
@@ -20,8 +20,10 @@ class ControllableMailTransport implements MailTransport {
   async send(message: OutboundEmailMessage): Promise<MailSendResult> {
     this.messages.push(message);
     if (this.mode === "throw") throw new Error("sensitive transport detail must not persist");
-    if (this.mode === "unknown") return { delivered: false, uncertain: true, failureReason: "SMTP_TIMEOUT" };
-    if (this.mode === "failure") return { delivered: false, failureReason: "raw provider secret-like detail" };
+    if (this.mode === "unknown") return { delivered: false, disposition: "UNCERTAIN", failureReason: "SMTP_TIMEOUT" };
+    if (this.mode === "temporary") return { delivered: false, disposition: "RETRYABLE", failureReason: "SMTP_TEMPORARY_REJECTED" };
+    if (this.mode === "permanent") return { delivered: false, disposition: "PERMANENT", failureReason: "SMTP_PERMANENT_REJECTED" };
+    if (this.mode === "failure") return { delivered: false, disposition: "RETRYABLE", failureReason: "raw provider secret-like detail" };
     return { delivered: true, providerMessageId: `provider-${message.idempotencyKey}` };
   }
 
@@ -198,6 +200,29 @@ describe("NotificationService durable outbox (integration, real Postgres)", () =
     expect(job.status).toBe("DEAD_LETTER");
     expect(job.retryCount).toBe(1);
     expect(job.lockedBy).toBeNull();
+  });
+
+  it("dead-letters a permanent SMTP rejection immediately", async () => {
+    transport.mode = "permanent";
+    const id = await queueReset();
+
+    await service.processAvailableJobs();
+
+    const job = await prisma.notificationJob.findUniqueOrThrow({ where: { id } });
+    expect(job.status).toBe("DEAD_LETTER");
+    expect(job.retryCount).toBe(1);
+    expect(job.failureReason).toBe("SMTP_PERMANENT_REJECTED");
+  });
+
+  it("schedules a temporary SMTP rejection for bounded retry", async () => {
+    transport.mode = "temporary";
+    const id = await queueReset();
+
+    await service.processAvailableJobs();
+
+    const job = await prisma.notificationJob.findUniqueOrThrow({ where: { id } });
+    expect(job.status).toBe("RETRY_PENDING");
+    expect(job.failureReason).toBe("SMTP_TEMPORARY_REJECTED");
   });
 
   it("does not blindly retry an unknown provider result", async () => {

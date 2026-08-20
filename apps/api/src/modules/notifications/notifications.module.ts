@@ -6,12 +6,14 @@ import { SmtpMailTransport } from "./smtp-mail.transport";
 import { NoopMailTransport } from "./noop-mail.transport";
 import { mailTransportProvider } from "./mail-transport.provider";
 import { NotificationPayloadCryptoService } from "./notification-payload-crypto.service";
+import { EmailTemplateRenderer } from "./email-template.renderer";
 
 @Module({
   imports: [SecurityEventsModule],
   providers: [
     NotificationService,
     NotificationPayloadCryptoService,
+    EmailTemplateRenderer,
     InMemoryMailTransport,
     SmtpMailTransport,
     NoopMailTransport,

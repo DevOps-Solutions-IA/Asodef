@@ -1,0 +1,12 @@
+# Managed ASODEF submission service. Port 587 is restricted by UFW to the exact API CIDR.
+@@MAIL_LISTEN_ADDRESS@@:submission inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_sender_restrictions=reject_non_fqdn_sender,reject_unknown_sender_domain,reject_authenticated_sender_login_mismatch
+  -o smtpd_client_connection_rate_limit=20
+  -o smtpd_client_message_rate_limit=60
+  -o milter_macro_daemon_name=ORIGINATING

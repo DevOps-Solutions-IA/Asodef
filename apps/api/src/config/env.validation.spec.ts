@@ -73,7 +73,7 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...VALID_ENV, ADMIN_STEP_UP_RATE_LIMIT_WINDOW_SECONDS: "7200" })).toThrow();
   });
 
-  it("accepts an empty optional SMTP port and fails closed on partial SMTP authentication", () => {
+  it("accepts a completely empty SMTP block and fails closed on partial SMTP configuration", () => {
     expect(validateEnv({ ...VALID_ENV, SMTP_PORT: "" }).SMTP_PORT).toBeUndefined();
     expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "smtp.example.invalid", SMTP_USER: "mailer" })).toThrow(
       /SMTP_PASSWORD/,
@@ -81,6 +81,35 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "smtp.example.invalid", SMTP_PASSWORD: "opaque" })).toThrow(
       /SMTP_USER/,
     );
+    expect(() => validateEnv({ ...VALID_ENV, SMTP_FROM: "no-reply@asodef.com.co" })).toThrow(/SMTP_HOST/);
+    expect(() => validateEnv({
+      ...VALID_ENV,
+      SMTP_HOST: "smtp.asodef.com.co",
+      SMTP_PORT: "587",
+      SMTP_USER: "mailer",
+      SMTP_PASSWORD: "opaque",
+    })).toThrow(/SMTP_FROM/);
+  });
+
+  it("accepts a complete authenticated SMTP submission configuration", () => {
+    const result = validateEnv({
+      ...VALID_ENV,
+      SMTP_HOST: "smtp.asodef.com.co",
+      SMTP_PORT: "587",
+      SMTP_SECURE: "false",
+      SMTP_USER: "asodef-app",
+      SMTP_PASSWORD: "opaque",
+      SMTP_FROM: "no-reply@asodef.com.co",
+    });
+    expect(result.SMTP_HOST).toBe("smtp.asodef.com.co");
+    expect(result.SMTP_PORT).toBe(587);
+    expect(result.SMTP_FROM).toBe("no-reply@asodef.com.co");
+  });
+
+  it("requires an SMTP FQDN suitable for certificate hostname verification", () => {
+    expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "smtp://smtp.asodef.com.co" })).toThrow(/SMTP_HOST/);
+    expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "localhost" })).toThrow(/SMTP_HOST/);
+    expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "127.0.0.1" })).toThrow(/SMTP_HOST/);
   });
 
   it("rejects an invalid SMTP sender address without echoing credentials", () => {

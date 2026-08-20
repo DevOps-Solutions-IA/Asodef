@@ -1,0 +1,95 @@
+# ASODEF transactional mail platform
+
+Reproducible host artifacts for a dedicated outbound Postfix relay signed by
+OpenDKIM. This is not a mailbox platform: IMAP, POP3, webmail and human SMTP
+accounts are deliberately out of scope.
+
+## Safety model
+
+- `smtp.asodef.com.co` is the SMTP identity and must have matching forward and
+  reverse DNS before activation.
+- Existing GoDaddy MX records remain authoritative during this phase.
+- Public inbound TCP/25 remains denied while those MX records remain in place.
+- `asodef_mail_submission` is a dedicated internal Docker network, independent
+  of Master and existing data/egress networks. Its proposed contract is
+  `172.25.52.0/29`, host gateway `172.25.52.1` and API `172.25.52.2`; creation
+  fails if Docker networks or host routes overlap.
+- Postfix SMTP and submission bind only to loopback and the dedicated gateway.
+  TCP/587 is allowed only from the fixed production API address on `asodef-mail0` and
+  still requires TLS plus a dedicated SASL application identity. Public 587 is
+  explicitly denied.
+- TCP/465 remains denied.
+- Relay policy ends in `reject_unauth_destination`; authenticated senders are
+  restricted to the configured From identity. Loopback and `mynetworks` do not
+  bypass SASL; local `sendmail` submission is restricted to root.
+- DKIM private keys and SMTP passwords are generated/stored only on the host.
+- Every mutating script requires root and `MAIL_OPERATOR_APPROVAL=YES`.
+
+## Ordered activation
+
+1. Confirm `172.25.52.0/29` does not overlap any Docker network, host route or
+   private connectivity. Copy `mail-platform.env.example` outside Git as a
+   root-owned regular file (not a symlink), set mode `0600`, and keep approval
+   `NO`.
+2. Operator creates the root-only SMTP password file (`0600`). Never pass the
+   password as an argument or environment variable.
+3. Run `create-mail-network.sh CONFIG --dry-run`; after operator approval use
+   `--apply`. Add `docker-compose.mail-platform.yml` only to the public ASODEF
+   API Compose invocation and recreate only that API when the release gate permits.
+4. Publish `smtp` A and request matching PTR from the VPS provider.
+5. Use the existing ACME webroot with `issue-certificate.sh CONFIG`; it never
+   stops or replaces the public web server.
+6. Set approval `YES` and execute `apply.sh CONFIG --prepare`. It generates the
+   DKIM key on-host, emits only the path to its public DNS record, and leaves
+   mail services stopped.
+7. Publish the DKIM TXT and additive SPF described in the runbook. Preserve MX
+   and the current DMARC policy.
+8. Run `verify-dns.sh CONFIG` and `preflight.sh CONFIG`; any A, PTR, SPF, DKIM,
+   DMARC, TLS or protected-file failure blocks.
+9. Review `configure-firewall.sh CONFIG --dry-run`; privileged operator then
+   runs `--apply`.
+10. Execute `apply.sh CONFIG --activate`, `verify.sh CONFIG`, then internal and external
+   negative relay tests.
+11. Configure ASODEF production SMTP variables through its protected env
+    mechanism, recreate only the public API when release gates authorize it.
+
+The API runtime value for `SMTP_USER` must be exactly
+`MAIL_SMTP_USER@MAIL_DOMAIN`; the sender ownership map and verification gate
+enforce that identity. `SMTP_HOST` remains `smtp.asodef.com.co`; the API-only
+Compose overlay resolves it privately to the dedicated gateway so certificate
+hostname validation is preserved.
+
+`test-relay-security.sh` never delivers its negative probes: it stops at RCPT,
+AUTH or MAIL SIZE. Authorized delivery and Gmail/Outlook header certification
+must use separate operator-owned test inboxes and must not expose message
+contents or credentials.
+
+## Rollback
+
+`rollback.sh CONFIG` stops Postfix/OpenDKIM, removes only the exact UFW rules
+owned by this run, archives generated DKIM/SASL material under the root-only
+immutable backup, and restores original files and service states. Installed
+packages remain inert for forensic review. `rollback-mail-network.sh` refuses
+to remove the network until the public API is detached. DNS rollback is a
+separate operator action: remove the VPS `ip4` SPF mechanism and DKIM selector
+only after the ASODEF API has stopped using this relay. Preserve existing MX and
+DMARC throughout rollback.
+
+## Rotation and renewal
+
+- `rotate-dkim.sh CONFIG NEW_SELECTOR` generates a new on-host key and stops
+  before switching. Publish and verify the new TXT first; retain the old public
+  selector for at least seven days after switching.
+- Install `cert-renew-hook.sh` as a Certbot deploy hook. It reloads Postfix only
+  after expiry and hostname checks pass.
+- Rotate the SMTP password by creating a new root-only file, updating SASL and
+  the production secret atomically, validating delivery, then revoking the old
+  credential. Never log either value.
+- Mail logs must contain queue IDs and outcomes only. Do not enable SASL debug,
+  message-body logging, raw SMTP transcripts, or DKIM `LogWhy` in production.
+- Outbound Postfix uses opportunistic TLS (`smtp_tls_security_level=may`) because
+  public recipient MX capabilities vary. Submission from ASODEF is separately
+  protected with mandatory STARTTLS, hostname verification and SASL.
+
+All production mutations and DNS/provider changes are
+`REQUIRES_OPERATOR_APPROVAL`.

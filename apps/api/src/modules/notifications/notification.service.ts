@@ -6,12 +6,12 @@ import { PrismaService } from "../../database/prisma.service";
 import { SecurityEventService } from "../../common/security-events/security-event.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { MAIL_TRANSPORT, type MailTransport, type OutboundEmailMessage } from "./mail-transport.interface";
+import { EmailTemplateRenderer } from "./email-template.renderer";
 import { NotificationPayloadCryptoService } from "./notification-payload-crypto.service";
 
 const OPTIONAL_MARKETING_PURPOSE_KEY = "optional_marketing";
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
 
-const TEMPLATE_VERSION = "v1";
 const MAX_ATTEMPTS = 5;
 const CLAIM_BATCH_SIZE = 10;
 const LEASE_MS = 60_000;
@@ -92,6 +92,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
     private readonly securityEventService: SecurityEventService,
     @Inject(MAIL_TRANSPORT) private readonly mailTransport: MailTransport,
     private readonly payloadCrypto: NotificationPayloadCryptoService,
+    private readonly templateRenderer: EmailTemplateRenderer,
     configService: ConfigService<EnvConfig, true>,
   ) {
     this.corporateEmail = configService.get("CORPORATE_EMAIL", { infer: true });
@@ -115,11 +116,13 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
 
   /** Returns once the job row is queued - never waits for delivery. */
   async queuePasswordResetEmail(input: QueuePasswordResetEmailInput): Promise<string> {
+    const rendered = this.templateRenderer.render("security_password_recovery", {
+      resetUrl: input.resetUrl,
+      corporateEmail: this.corporateEmail,
+    });
     return this.enqueue(this.prisma, true, "PASSWORD_RESET", input.recipientEmail, input.userId, {
       to: input.recipientEmail,
-      subject: "Restablece tu contraseña - ASODEF",
-      textBody: this.buildPasswordResetBody(input.resetUrl),
-      templateVersion: TEMPLATE_VERSION,
+      ...rendered,
       correlationId: input.correlationId,
     });
   }
@@ -140,11 +143,13 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
     client: NotificationWriteClient,
     input: QueuePasswordResetEmailInput,
   ): Promise<string> {
+    const rendered = this.templateRenderer.render("security_password_recovery", {
+      resetUrl: input.resetUrl,
+      corporateEmail: this.corporateEmail,
+    });
     return this.enqueue(client, false, "PASSWORD_RESET", input.recipientEmail, input.userId, {
       to: input.recipientEmail,
-      subject: "Restablece tu contraseña - ASODEF",
-      textBody: this.buildPasswordResetBody(input.resetUrl),
-      templateVersion: TEMPLATE_VERSION,
+      ...rendered,
       correlationId: input.correlationId,
     });
   }
@@ -161,11 +166,14 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
    * a flow that is otherwise indistinguishable from one already built.
    */
   async queueAccountInvitationEmail(input: QueueAccountInvitationEmailInput): Promise<string> {
+    const rendered = this.templateRenderer.render("security_account_invitation", {
+      fullName: input.fullName,
+      setupUrl: input.setupUrl,
+      corporateEmail: this.corporateEmail,
+    });
     return this.enqueue(this.prisma, true, "PASSWORD_RESET", input.recipientEmail, input.userId, {
       to: input.recipientEmail,
-      subject: "Bienvenido a ASODEF - configura tu contraseña",
-      textBody: this.buildAccountInvitationBody(input.fullName, input.setupUrl),
-      templateVersion: TEMPLATE_VERSION,
+      ...rendered,
       correlationId: input.correlationId,
     });
   }
@@ -177,21 +185,25 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
     client: NotificationWriteClient,
     input: QueueAccountInvitationEmailInput,
   ): Promise<string> {
+    const rendered = this.templateRenderer.render("security_account_invitation", {
+      fullName: input.fullName,
+      setupUrl: input.setupUrl,
+      corporateEmail: this.corporateEmail,
+    });
     return this.enqueue(client, false, "PASSWORD_RESET", input.recipientEmail, input.userId, {
       to: input.recipientEmail,
-      subject: "Bienvenido a ASODEF - configura tu contraseña",
-      textBody: this.buildAccountInvitationBody(input.fullName, input.setupUrl),
-      templateVersion: TEMPLATE_VERSION,
+      ...rendered,
       correlationId: input.correlationId,
     });
   }
 
   async queuePasswordChangedEmail(input: QueuePasswordChangedEmailInput): Promise<string> {
+    const rendered = this.templateRenderer.render("security_password_changed", {
+      corporateEmail: this.corporateEmail,
+    });
     return this.enqueue(this.prisma, true, "PASSWORD_CHANGED", input.recipientEmail, input.userId, {
       to: input.recipientEmail,
-      subject: "Tu contraseña fue modificada - ASODEF",
-      textBody: this.buildPasswordChangedBody(),
-      templateVersion: TEMPLATE_VERSION,
+      ...rendered,
       correlationId: input.correlationId,
     });
   }
@@ -209,7 +221,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
       to: input.recipientEmail,
       subject: input.subject,
       textBody: input.textBody,
-      templateVersion: TEMPLATE_VERSION,
+      templateVersion: "security_alert@v1",
       correlationId: input.correlationId,
     });
   }
@@ -522,11 +534,15 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
           });
           return;
         }
-        if (result.uncertain) {
+        if (result.disposition === "UNCERTAIN") {
           await this.finishUnknownResult(job, this.sanitizeFailureReason(result.failureReason), result.providerMessageId);
           return;
         }
-        await this.finishFailure(job, this.sanitizeFailureReason(result.failureReason), false);
+        await this.finishFailure(
+          job,
+          this.sanitizeFailureReason(result.failureReason),
+          result.disposition === "PERMANENT",
+        );
       } catch {
         // A transport is contractually non-throwing. Treat implementation
         // violations as retryable infrastructure failures without logging
@@ -604,35 +620,17 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
 
   private sanitizeFailureReason(reason: string | undefined): string {
     if (!reason) return "UNKNOWN_DELIVERY_FAILURE";
-    const safeCodes = new Set(["SMTP_NOT_CONFIGURED", "SMTP_TIMEOUT", "SMTP_AUTHENTICATION_FAILED", "SMTP_REJECTED"]);
+    const safeCodes = new Set([
+      "SMTP_NOT_CONFIGURED",
+      "SMTP_TIMEOUT",
+      "SMTP_AUTHENTICATION_FAILED",
+      "SMTP_TEMPORARY_REJECTED",
+      "SMTP_PERMANENT_REJECTED",
+      "SMTP_CONNECTION_FAILED",
+      "SMTP_UNKNOWN_RESULT",
+      "SMTP_REJECTED",
+    ]);
     return safeCodes.has(reason) ? reason : "SMTP_DELIVERY_FAILED";
   }
 
-  private buildPasswordResetBody(resetUrl: string): string {
-    return [
-      "Hemos recibido una solicitud para restablecer tu contraseña en ASODEF.",
-      `Si fuiste tú, haz clic en el siguiente enlace para continuar: ${resetUrl}`,
-      "Este enlace expira pronto y solo puede usarse una vez.",
-      "Si no solicitaste este cambio, puedes ignorar este mensaje con tranquilidad.",
-      `¿Dudas? Escríbenos a ${this.corporateEmail}.`,
-    ].join("\n\n");
-  }
-
-  private buildAccountInvitationBody(fullName: string, setupUrl: string): string {
-    return [
-      `Hola ${fullName},`,
-      "Se creó una cuenta para ti en la plataforma administrativa de ASODEF.",
-      `Para activarla, configura tu contraseña aquí: ${setupUrl}`,
-      "Este enlace expira pronto y solo puede usarse una vez.",
-      `¿Dudas? Escríbenos a ${this.corporateEmail}.`,
-    ].join("\n\n");
-  }
-
-  private buildPasswordChangedBody(): string {
-    return [
-      "Tu contraseña en ASODEF fue modificada correctamente.",
-      "Si no reconoces este cambio, contáctanos de inmediato.",
-      `¿Dudas? Escríbenos a ${this.corporateEmail}.`,
-    ].join("\n\n");
-  }
 }
