@@ -55,6 +55,9 @@ from the generated public key and provider control panel.
 4. Replace SPF atomically with an additive record equivalent to
    `v=spf1 ip4:<MAIL_PUBLIC_IPV4> include:secureserver.net -all`. Never publish
    a second SPF record.
+   The managed relay remains IPv4-only while this policy is active. Enabling
+   IPv6 delivery additionally requires an aligned IPv6 PTR and an explicit
+   `ip6:` SPF mechanism before changing `inet_protocols`.
 5. Publish `<SELECTOR>._domainkey.asodef.com.co` from the on-host `.txt` public
    key output. Never copy the `.private` file.
 6. Preserve the current DMARC record and `p=quarantine` during coexistence.
