@@ -145,21 +145,15 @@ tokens, hashes, MFA material, cookies or connection strings.
 
 `scripts/ci-security-check.sh` blocks high or critical production dependency
 advisories and always prints lower-severity findings for release review. At
-the 2026-08-20 baseline, six moderate advisories remain and require explicit
-reachability review on every release:
+the 2026-08-20 release baseline, `pnpm audit --prod` reports zero known
+vulnerabilities after upgrading Nest to the patched 11.1.18 line and React
+Router to 7.18.2. The redirect boundary retains adversarial coverage for
+backslash and single/double/triple encoded separator payloads.
 
-- React Router is used only as a client-side data router; ASODEF does not use
-  React Server Components, server hydration deserialization, route actions or
-  loader redirects. All caller-supplied return paths additionally pass through
-  `isSafeInternalPath`, which rejects protocol-relative, backslash, encoded
-  separator, malformed and overlong destinations.
-- The reported Nest SSE path is not used by the API.
-- The affected `file-type` ASF/ZIP parsing paths are not used to parse
-  administrator-controlled uploads in this phase.
-
-This is reachability evidence, not a permanent waiver. Any new use of those
-code paths or a high/critical advisory blocks release until remediated. The
-cookie-authenticated admin UI uses `SameSite=Strict`; the API also rejects an
-explicit cross-site Fetch Metadata signal or a foreign `Origin`. Raw/legacy
-clients without either browser signal remain a documented defense-in-depth
-residual and do not receive a browser victim's Strict cookie cross-site.
+This is release evidence, not a permanent waiver. Any future advisory must be
+reviewed for reachability and high/critical findings block release until
+remediated. The cookie-authenticated admin UI uses `SameSite=Strict`; the API
+also rejects an explicit cross-site Fetch Metadata signal or a foreign
+`Origin`. Raw/legacy clients without either browser signal remain a documented
+defense-in-depth residual and do not receive a browser victim's Strict cookie
+cross-site.
