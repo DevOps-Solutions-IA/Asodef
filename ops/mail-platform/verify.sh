@@ -19,8 +19,8 @@ postconf -h smtpd_relay_restrictions | grep -F 'reject_unauth_destination' >/dev
 postconf -h smtpd_relay_restrictions | grep -F 'permit_mynetworks' >/dev/null && die trusted_network_relay_not_allowed
 [ "$(postconf -h authorized_submit_users)" = root ] || die local_sendmail_users_not_restricted
 postconf -M "$MAIL_LISTEN_ADDRESS:submission/inet" >/dev/null || die submission_service_missing
-postconf -P "$MAIL_LISTEN_ADDRESS:submission/inet/smtpd_sasl_auth_enable" 2>/dev/null | grep -F '=yes' >/dev/null || die submission_auth_missing
-postconf -P "$MAIL_LISTEN_ADDRESS:submission/inet/milter_macro_daemon_name" 2>/dev/null | grep -F '=ORIGINATING' >/dev/null || die dkim_originating_macro_missing
+[ "$(postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/smtpd_sasl_auth_enable" 2>/dev/null)" = yes ] || die submission_auth_missing
+[ "$(postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/milter_macro_daemon_name" 2>/dev/null)" = ORIGINATING ] || die dkim_originating_macro_missing
 postmap -q "$MAIL_SMTP_FROM" hash:/etc/postfix/sender_login | grep -Fx "$MAIL_SMTP_USER@$MAIL_DOMAIN" >/dev/null || die sender_login_map_mismatch
 sasldblistusers2 2>/dev/null | grep -F "$MAIL_SMTP_USER@$MAIL_DOMAIN:" >/dev/null || die sasl_identity_missing
 grep -Eq '^[[:space:]]*MTA[[:space:]]+ORIGINATING[[:space:]]*$' /etc/opendkim.conf || die dkim_originating_mta_missing

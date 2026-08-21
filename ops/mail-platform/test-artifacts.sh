@@ -20,6 +20,15 @@ grep -F 'smtpd_tls_security_level=encrypt' "$SCRIPT_DIR/config/postfix-master.cf
 grep -F '@@MAIL_LISTEN_ADDRESS@@:submission' "$SCRIPT_DIR/config/postfix-master.cf.fragment.template" >/dev/null
 grep -Eq '^[[:space:]]*MTA[[:space:]]+ORIGINATING[[:space:]]*$' "$SCRIPT_DIR/config/opendkim.conf.template"
 grep -F 'milter_macro_daemon_name=ORIGINATING' "$SCRIPT_DIR/config/postfix-master.cf.fragment.template" >/dev/null
+# Postfix formats `postconf -P` assignments with whitespace around `=`. Query
+# only the value so production verification cannot false-fail on that display
+# formatting while still requiring exact SASL and milter values.
+grep -F 'postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/smtpd_sasl_auth_enable"' "$SCRIPT_DIR/verify.sh" >/dev/null
+grep -F 'postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/milter_macro_daemon_name"' "$SCRIPT_DIR/verify.sh" >/dev/null
+if grep -E "postconf -P .*grep -F '=(yes|ORIGINATING)'" "$SCRIPT_DIR/verify.sh" >/dev/null; then
+  echo 'postconf_assignment_format_regression=FAIL' >&2
+  exit 1
+fi
 grep -F '@@MAIL_API_ADDRESS@@' "$SCRIPT_DIR/config/trusted.hosts.template" >/dev/null
 grep -F '*@@@MAIL_DOMAIN@@' "$SCRIPT_DIR/config/signing.table.template" >/dev/null
 grep -F 'reject_authenticated_sender_login_mismatch' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
