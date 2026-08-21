@@ -17,6 +17,30 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface BusinessListFilters {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  stage?: string;
+  assignedUserId?: string;
+  companyId?: string;
+  prospectId?: string;
+  sector?: string;
+  city?: string;
+  publicationStatus?: string;
+  promotion?: "promoted" | "pending";
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
 export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
   NEW_PROSPECT: "Nuevo prospecto",
   CONTACTED: "Contactado",
@@ -106,6 +130,12 @@ export interface AdminOpportunityStatusHistoryEntry {
   createdAt: string;
 }
 
+export interface AdminOpportunityTimeline {
+  items: Array<{ id: string; kind: "STAGE_CHANGE" | "ACTIVITY" | "PROPOSAL" | "AGREEMENT" | "AUDIT"; occurredAt: string; title: string; detail: unknown; actorUserId: string | null }>;
+  total: number;
+  pageSize: number;
+}
+
 export interface AdminProposal {
   id: string;
   opportunityId: string;
@@ -141,6 +171,26 @@ export interface AdminCompanyDetail extends AdminCompany {
   opportunityCount: number;
   agreementCount: number;
   contractCount: number;
+}
+
+export interface AdminCompanyContact {
+  id: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  isPrimary: boolean;
+}
+
+export interface AdminCompanySite {
+  id: string;
+  companyId: string;
+  name: string;
+  address: string;
+  city: string;
+  phone: string | null;
+  isPrimary: boolean;
+  createdAt: string;
 }
 
 export interface AdminBusinessPartner {

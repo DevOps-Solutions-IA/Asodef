@@ -47,6 +47,8 @@ describe("Companies admin endpoints (integration, real HTTP)", () => {
   afterAll(async () => {
     if (createdCompanyIds.length > 0) {
       await prisma.auditLog.deleteMany({ where: { companyId: { in: createdCompanyIds } } });
+      await prisma.commercialContact.deleteMany({ where: { companyId: { in: createdCompanyIds } } });
+      await prisma.companySite.deleteMany({ where: { companyId: { in: createdCompanyIds } } });
       await prisma.company.deleteMany({ where: { id: { in: createdCompanyIds } } });
     }
     if (createdUserIds.length > 0) {
@@ -119,7 +121,20 @@ describe("Companies admin endpoints (integration, real HTTP)", () => {
 
     const response = await request(app.getHttpServer()).get("/api/v1/admin/companies").set("Cookie", commercial.cookies);
     expect(response.status).toBe(200);
-    expect(response.body.some((c: { id: string }) => c.id === company.id)).toBe(true);
+    expect(response.body.items.some((c: { id: string }) => c.id === company.id)).toBe(true);
+  });
+
+  it("uses validated bounded server-side search for company lists", async () => {
+    const company = await createCompany();
+    const filtered = await request(app.getHttpServer())
+      .get(`/api/v1/admin/companies?search=${encodeURIComponent(company.nit)}&pageSize=1&sortBy=name&sortOrder=asc`)
+      .set("Cookie", commercial.cookies);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body).toMatchObject({ total: 1, pageSize: 1 });
+    expect(filtered.body.items[0].id).toBe(company.id);
+
+    const unbounded = await request(app.getHttpServer()).get("/api/v1/admin/companies?pageSize=1000").set("Cookie", commercial.cookies);
+    expect(unbounded.status).toBe(400);
   });
 
   it("returns a company's detail with related-record counts", async () => {
@@ -131,6 +146,39 @@ describe("Companies admin endpoints (integration, real HTTP)", () => {
     expect(response.body.opportunityCount).toBe(0);
     expect(response.body.agreementCount).toBe(0);
     expect(response.body.contractCount).toBe(0);
+  });
+
+  it("creates and lists governed company contacts and sites using the existing company aggregate", async () => {
+    const company = await createCompany();
+    const contact = await request(app.getHttpServer()).post(`/api/v1/admin/companies/${company.id}/contacts`).set("Cookie", commercial.cookies).send({
+      fullName: "María Comercial", role: "Gerente", email: "maria@example.com", isPrimary: true,
+    });
+    expect(contact.status).toBe(201);
+    expect(contact.body).toMatchObject({ fullName: "María Comercial", isPrimary: true });
+
+    const site = await request(app.getHttpServer()).post(`/api/v1/admin/companies/${company.id}/sites`).set("Cookie", commercial.cookies).send({
+      name: "Sede principal", address: "Carrera 1 # 2-3", city: "Cali", isPrimary: true,
+    });
+    expect(site.status).toBe(201);
+    expect(site.body).toMatchObject({ companyId: company.id, city: "Cali", isPrimary: true });
+
+    const [contacts, sites] = await Promise.all([
+      request(app.getHttpServer()).get(`/api/v1/admin/companies/${company.id}/contacts`).set("Cookie", readOnlyActor.cookies),
+      request(app.getHttpServer()).get(`/api/v1/admin/companies/${company.id}/sites`).set("Cookie", readOnlyActor.cookies),
+    ]);
+    expect(contacts.status).toBe(200);
+    expect(contacts.body).toHaveLength(1);
+    expect(sites.status).toBe(200);
+    expect(sites.body).toHaveLength(1);
+    expect(await prisma.auditLog.count({ where: { companyId: company.id, action: { in: ["company.contact_created", "company.site_created"] } } })).toBe(2);
+  });
+
+  it("rejects incomplete contacts and company contact/site writes without companies.manage", async () => {
+    const company = await createCompany();
+    const incomplete = await request(app.getHttpServer()).post(`/api/v1/admin/companies/${company.id}/contacts`).set("Cookie", commercial.cookies).send({ fullName: "Sin canal" });
+    expect(incomplete.status).toBe(400);
+    const forbidden = await request(app.getHttpServer()).post(`/api/v1/admin/companies/${company.id}/sites`).set("Cookie", readOnlyActor.cookies).send({ name: "Sede", address: "Calle 1", city: "Cali" });
+    expect(forbidden.status).toBe(403);
   });
 
   it("returns 404 for a nonexistent company id", async () => {

@@ -1,4 +1,4 @@
-import type { BusinessPartner } from "@prisma/client";
+import type { BusinessPartner, CommercialContact } from "@prisma/client";
 
 export interface AdminBusinessPartnerResponse {
   id: string;
@@ -105,4 +105,16 @@ export function toPublicBusinessPartnerResponse(partner: BusinessPartner): Publi
     validFrom: partner.validFrom,
     validUntil: partner.validUntil,
   };
+}
+
+export interface AdminPartnerContactResponse {
+  id: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+export function toAdminPartnerContactResponse(contact: CommercialContact): AdminPartnerContactResponse {
+  return { id: contact.id, fullName: contact.fullName, role: contact.role, phone: contact.phone, email: contact.email };
 }

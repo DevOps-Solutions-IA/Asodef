@@ -424,8 +424,8 @@ describe("router", () => {
 
   it("Example (AC): a COMMERCIAL user with crm.read but not crm.manage can open the CRM section, read-only", async () => {
     renderAtPath("/admin/crm/prospectos", buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.read"] }), (url) => {
-      if (url.includes("/admin/prospects")) return jsonResponse(200, []);
-      if (url.includes("/admin/leads")) return jsonResponse(200, []);
+      if (url.includes("/admin/prospects")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+      if (url.includes("/admin/leads")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
       return undefined;
     });
 

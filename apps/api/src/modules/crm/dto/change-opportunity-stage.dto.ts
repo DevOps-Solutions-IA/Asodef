@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { IsIn, IsISO8601, IsOptional, IsString } from "class-validator";
 import { CommercialPipelineStage } from "@prisma/client";
 
 const STAGES = Object.values(CommercialPipelineStage);
@@ -19,4 +19,10 @@ export class ChangeOpportunityStageDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /** Governed clients send the representation timestamp so stale writes
+   * are rejected. Optional preserves compatibility with existing callers. */
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  expectedUpdatedAt?: string;
 }

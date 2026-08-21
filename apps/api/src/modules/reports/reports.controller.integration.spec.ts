@@ -149,20 +149,30 @@ describe("Admin reports endpoints (integration, real HTTP)", () => {
   it("Example (AC): >1000 matching rows runs as a background job with a downloadable-when-ready state", async () => {
     // Seed enough SecurityEvent rows (no FKs required) to cross the
     // 1000-row background-job threshold for real, rather than mocking it.
+    // Give this fixture an exact, test-owned timestamp and run the report
+    // through its real date filters. Without that isolation the export also
+    // processes every historical SecurityEvent left in a developer database,
+    // so runtime and assertions depend on unrelated local data volume.
+    const isolatedCreatedAt = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
     const events = Array.from({ length: 1001 }, () => ({
       id: randomUUID(),
       type: "LOGIN_SUCCEEDED" as const,
       userId: null,
       sessionId: null,
       ipAddress: "203.0.113.1",
+      createdAt: isolatedCreatedAt,
     }));
     await prisma.securityEvent.createMany({ data: events });
     createdSecurityEventIds.push(...events.map((e) => e.id));
 
-    const started = await request(app.getHttpServer()).get("/api/v1/admin/reports/user_activity").set("Cookie", finance.cookies);
+    const fixtureTimestamp = encodeURIComponent(isolatedCreatedAt.toISOString());
+    const started = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reports/user_activity?dateFrom=${fixtureTimestamp}&dateTo=${fixtureTimestamp}`)
+      .set("Cookie", finance.cookies);
     expect(started.status).toBe(202);
     expect(started.body.jobId).toBeTruthy();
     expect(started.body.status).toBe("PENDING");
+    expect(started.body.rowCount).toBe(events.length);
     createdJobIds.push(started.body.jobId);
 
     let status = "PENDING";

@@ -25,8 +25,8 @@ describe("CrmCompaniesPage", () => {
 
   it("hides the Nueva empresa action for an actor without companies.manage", async () => {
     renderPage(buildCurrentUser({ roles: ["COMPANY_PARTNER"], permissions: ["companies.read"] }), (url) => {
-      if (url.includes("/admin/companies")) return jsonResponse(200, []);
-      if (url.includes("/admin/partners")) return jsonResponse(200, []);
+      if (url.includes("/admin/companies")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
+      if (url.includes("/admin/partners")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
       return undefined;
     });
 
@@ -53,9 +53,10 @@ describe("CrmCompaniesPage", () => {
       }
       if (url.includes("/admin/companies")) {
         listCallCount += 1;
-        return jsonResponse(200, listCallCount > 1 ? [{ id: "company-1", name: "Nueva Empresa S.A.S.", nit: "9005551234", contactName: "Ana Pérez", contactEmail: "ana@example.com", sector: "Servicios", status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z" }] : []);
+        const items = listCallCount > 1 ? [{ id: "company-1", name: "Nueva Empresa S.A.S.", nit: "9005551234", contactName: "Ana Pérez", contactEmail: "ana@example.com", sector: "Servicios", status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z" }] : [];
+        return jsonResponse(200, { items, total: items.length, page: 1, pageSize: 100 });
       }
-      if (url.includes("/admin/partners")) return jsonResponse(200, []);
+      if (url.includes("/admin/partners")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
       return undefined;
     });
 
@@ -83,8 +84,8 @@ describe("CrmCompaniesPage", () => {
       if (url.includes("/admin/companies") && init?.method === "POST") {
         return jsonResponse(409, { statusCode: 409, error: "Conflict", message: "Ya existe una empresa registrada con el NIT 9005551234." });
       }
-      if (url.includes("/admin/companies")) return jsonResponse(200, []);
-      if (url.includes("/admin/partners")) return jsonResponse(200, []);
+      if (url.includes("/admin/companies")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
+      if (url.includes("/admin/partners")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 100 });
       return undefined;
     });
 
