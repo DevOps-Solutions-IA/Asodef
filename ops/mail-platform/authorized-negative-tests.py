@@ -64,6 +64,19 @@ def main() -> None:
     finally:
         plaintext.close()
 
+    unauthenticated = smtplib.SMTP(args.connect_host, args.port, timeout=10)
+    try:
+        unauthenticated.ehlo()
+        unauthenticated._host = args.tls_hostname
+        unauthenticated.starttls(context=ssl.create_default_context())
+        unauthenticated.ehlo()
+        unauthenticated.mail(args.allowed_from)
+        code, _ = unauthenticated.rcpt("open-relay-probe@example.net")
+        if code < 500:
+            fail("submission_without_auth_not_rejected")
+    finally:
+        unauthenticated.close()
+
     invalid = smtplib.SMTP(args.connect_host, args.port, timeout=10)
     try:
         invalid.ehlo()
@@ -96,7 +109,7 @@ def main() -> None:
         client.close()
 
     print(
-        "status=ok plaintext_auth=hidden invalid_auth=rejected "
+        "status=ok plaintext_auth=hidden submission_unauthenticated=rejected invalid_auth=rejected "
         "authenticated_spoof=rejected authenticated_oversize=rejected"
     )
 

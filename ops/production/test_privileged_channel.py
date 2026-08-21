@@ -55,7 +55,13 @@ class PrivilegedChannelTest(unittest.TestCase):
             shutil.copy2(HERE / name, self.source / "ops/production" / name)
         for name in ("verify-runtime-env.sh", "docker-compose.admin-core.yml", "docker-compose.rollback.yml"):
             shutil.copy2(REPO / "ops/admin-core" / name, self.source / "ops/admin-core" / name)
-        for name in ("verify-mail-network.sh", "docker-compose.mail-platform.yml"):
+        for name in (
+            "verify-mail-network.sh",
+            "verify.sh",
+            "test-relay-security.sh",
+            "authorized-negative-tests.py",
+            "docker-compose.mail-platform.yml",
+        ):
             shutil.copy2(REPO / "ops/mail-platform" / name, self.source / "ops/mail-platform" / name)
         (self.source / ".asodef-release-manifest.json").write_text(
             json.dumps(
@@ -136,7 +142,9 @@ class PrivilegedChannelTest(unittest.TestCase):
         release = self.privileged / self.sha
         sudoers = (self.sudoers / "asodef-phase1-production-closure").read_text(encoding="utf-8")
         self.assertIn("Defaults!ASODEF_PHASE1_PRODUCTION_CLOSURE fdexec=never", sudoers)
-        self.assertEqual(len(re.findall(r"sha256:[0-9a-f]{64} /", sudoers)), 7)
+        self.assertEqual(len(re.findall(r"sha256:[0-9a-f]{64} /", sudoers)), 9)
+        self.assertIn("ops/mail-platform/verify.sh /etc/asodef/mail-platform.env", sudoers)
+        self.assertIn("ops/mail-platform/test-relay-security.sh /etc/asodef/mail-platform.env", sudoers)
         self.assertNotIn("\n+", sudoers)
         self.assertIn(r"asodef-public-platform-api\:1111111111111111111111111111111111111111", sudoers)
         self.assertIn(r"--api-image-id sha256\:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sudoers)

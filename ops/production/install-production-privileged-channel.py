@@ -201,6 +201,8 @@ def main() -> None:
         "deploy": release / "ops/production/deploy-public-platform.sh",
         "rollback_compose": release / "ops/production/rollback-compose-contract.sh",
         "verify_network": release / "ops/mail-platform/verify-mail-network.sh",
+        "verify_mail": release / "ops/mail-platform/verify.sh",
+        "test_relay": release / "ops/mail-platform/test-relay-security.sh",
     }
     if args.apply:
         for executable in executables.values():
@@ -221,6 +223,8 @@ def main() -> None:
         command(digest(executables["rollback_compose"]), executables["rollback_compose"], f"--shared-dir {shared} --api-image {args.previous_api_image} --api-image-id {args.previous_api_image_id} --web-image {args.previous_web_image} --web-image-id {args.previous_web_image_id} --apply"),
         command(digest(executables["verify_network"]), executables["verify_network"], f"{args.mail_config} --attachment-only"),
         command(digest(executables["verify_network"]), executables["verify_network"], args.mail_config),
+        command(digest(executables["verify_mail"]), executables["verify_mail"], args.mail_config),
+        command(digest(executables["test_relay"]), executables["test_relay"], args.mail_config),
     ]
     alias = "ASODEF_PHASE1_PRODUCTION_CLOSURE"
     continuation = ", \\\n    "

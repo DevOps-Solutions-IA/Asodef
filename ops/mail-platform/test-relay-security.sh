@@ -22,10 +22,6 @@ for mail_probe_host in "$MAIL_LISTEN_ADDRESS" 127.0.0.1; do
   printf '%s\n' "$mail_output" | grep -Eqi '(^|[[:space:]])(454|550|553|554)[ -]|connection refused|timed? out|no route' || die "unauthenticated_relay_not_rejected_$mail_probe_host"
 done
 
-mail_output=$(swaks --server "$MAIL_LISTEN_ADDRESS" --port 587 --tls --quit-after AUTH \
-  --from "$MAIL_SMTP_FROM" --to "$TEST_EXTERNAL_RECIPIENT" --timeout 10s 2>&1 || true)
-printf '%s\n' "$mail_output" | grep -Eqi '(Authentication required|530[ -]|5[0-9][0-9][ -]|connection refused|timed? out|no route)' || die submission_without_auth_not_rejected
-
 openssl s_client -starttls smtp -connect "$MAIL_LISTEN_ADDRESS:587" -servername "$MAIL_HOSTNAME" \
   -verify_hostname "$MAIL_HOSTNAME" </dev/null 2>/dev/null | grep -F 'Verify return code: 0 (ok)' >/dev/null || die tls_verification_failed
 
