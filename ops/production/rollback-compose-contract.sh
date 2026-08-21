@@ -2,21 +2,24 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 --shared-dir DIR --api-image IMAGE --web-image IMAGE [--apply]" >&2
+  echo "Usage: $0 --shared-dir DIR --api-image IMAGE --api-image-id ID --web-image IMAGE --web-image-id ID [--apply]" >&2
   exit 64
 }
 
-shared_dir='' api_image='' web_image='' apply=false
+shared_dir='' api_image='' api_image_id='' web_image='' web_image_id='' apply=false
 while (($#)); do
   case "$1" in
     --shared-dir) shared_dir=${2:-}; shift 2 ;;
     --api-image) api_image=${2:-}; shift 2 ;;
+    --api-image-id) api_image_id=${2:-}; shift 2 ;;
     --web-image) web_image=${2:-}; shift 2 ;;
+    --web-image-id) web_image_id=${2:-}; shift 2 ;;
     --apply) apply=true; shift ;;
     *) usage ;;
   esac
 done
 [[ -n "$shared_dir" && -n "$api_image" && -n "$web_image" ]] || usage
+[[ "$api_image_id" =~ ^sha256:[0-9a-f]{64}$ && "$web_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
 [[ -d "$shared_dir" && ! -L "$shared_dir" ]] || {
   echo 'status=error code=SHARED_DIR_UNAVAILABLE' >&2; exit 1;
 }
@@ -44,9 +47,10 @@ for path in "$stack_env" "$base" "$master" "$rollback_overlay"; do
     echo 'status=error code=ROLLBACK_CONTRACT_FILE_UNAVAILABLE' >&2; exit 1;
   }
 done
-docker image inspect "$api_image" "$web_image" >/dev/null 2>&1 || {
-  echo 'status=error code=ROLLBACK_IMAGE_UNAVAILABLE' >&2; exit 1;
-}
+[[ "$(docker image inspect --format '{{.Id}}' "$api_image")" == "$api_image_id" ]] &&
+  [[ "$(docker image inspect --format '{{.Id}}' "$web_image")" == "$web_image_id" ]] || {
+    echo 'status=error code=ROLLBACK_IMAGE_PROVENANCE_MISMATCH' >&2; exit 1;
+  }
 
 managed=(docker-compose.mail-platform.yml docker-compose.admin-core.yml docker-compose.release.yml)
 compose_args=(

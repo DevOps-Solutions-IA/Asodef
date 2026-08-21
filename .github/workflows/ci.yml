@@ -286,3 +286,42 @@ jobs:
             --project-name "$COMPOSE_PROJECT_NAME" \
             --file .github/compose.ci.yml \
             down --volumes --remove-orphans
+
+  release-artifact:
+    name: release-artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact green main SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build deterministic source release artifact
+        run: |
+          set -Eeuo pipefail
+          output="$RUNNER_TEMP/asodef-production-$GITHUB_SHA"
+          ops/production/create-release-source-artifact.py \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --output-dir "$output" \
+            --source-sha "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID"
+
+      - name: Upload exact-SHA production source artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: asodef-production-${{ github.sha }}
+          path: ${{ runner.temp }}/asodef-production-${{ github.sha }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Record artifact provenance
+        run: |
+          printf 'sourceSha=%s\nrunId=%s\nartifactDigest=%s\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" '${{ steps.upload.outputs.artifact-digest }}'

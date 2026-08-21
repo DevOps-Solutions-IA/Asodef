@@ -2,21 +2,37 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 --shared-dir DIR --api-image IMAGE --web-image IMAGE [--apply]" >&2
+  echo "Usage: $0 --shared-dir DIR --source-sha SHA --api-image IMAGE --api-image-id ID --web-image IMAGE --web-image-id ID [--apply]" >&2
   exit 64
 }
 
-shared_dir='' api_image='' web_image='' apply=false
+shared_dir='' source_sha='' api_image='' api_image_id='' web_image='' web_image_id='' apply=false
 while (($#)); do
   case "$1" in
     --shared-dir) shared_dir=${2:-}; shift 2 ;;
+    --source-sha) source_sha=${2:-}; shift 2 ;;
     --api-image) api_image=${2:-}; shift 2 ;;
+    --api-image-id) api_image_id=${2:-}; shift 2 ;;
     --web-image) web_image=${2:-}; shift 2 ;;
+    --web-image-id) web_image_id=${2:-}; shift 2 ;;
     --apply) apply=true; shift ;;
     *) usage ;;
   esac
 done
-[[ -n "$shared_dir" && -n "$api_image" && -n "$web_image" ]] || usage
+[[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || usage
+[[ "$api_image" == "asodef-public-platform-api:$source_sha" && "$web_image" == "asodef-public-platform-web:$source_sha" ]] || usage
+[[ "$api_image_id" =~ ^sha256:[0-9a-f]{64}$ && "$web_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
+
+verify_image() {
+  local image=$1 expected_id=$2 actual
+  actual=$(docker image inspect --format '{{.Id}}|{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+  [[ "$actual" == "$expected_id|$source_sha" ]] || {
+    echo 'status=error code=DEPLOY_IMAGE_PROVENANCE_MISMATCH' >&2
+    exit 1
+  }
+}
+verify_image "$api_image" "$api_image_id"
+verify_image "$web_image" "$web_image_id"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 install_args=(--shared-dir "$shared_dir" --api-image "$api_image" --web-image "$web_image")

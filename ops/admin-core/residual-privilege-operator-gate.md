@@ -43,6 +43,11 @@ Therefore the release is:
 
 `RESIDUAL_PRIVILEGE_CLEANUP=REQUIRES_OPERATOR_DECISION`
 
+It is also reported as `SUPER_ADMIN_HUMAN_GATE_REQUIRED=YES`. Automation must
+stop here: it may show the route, preview contract and sanitized aggregate
+expectations, but must never request or capture a password, cookie, MFA secret
+or TOTP code.
+
 The bounded existing-path option is:
 
 1. create and custody-verify a pre-change encrypted backup;
