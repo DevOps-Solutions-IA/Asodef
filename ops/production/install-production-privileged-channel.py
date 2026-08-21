@@ -85,7 +85,8 @@ def validate_hardened(root: Path, expected_hash: str, *, test_mode: bool) -> Non
 
 
 def command(digest_value: str, executable: Path, arguments: str) -> str:
-    return f"sha256:{digest_value} {executable} {arguments}"
+    escaped_arguments = "".join(f"\\{character}" if character in "\\,:=" else character for character in arguments)
+    return f"sha256:{digest_value} {executable} {escaped_arguments}"
 
 
 def main() -> None:
@@ -222,7 +223,7 @@ def main() -> None:
         command(digest(executables["verify_network"]), executables["verify_network"], args.mail_config),
     ]
     alias = "ASODEF_PHASE1_PRODUCTION_CLOSURE"
-    continuation = ", \\\n+    "
+    continuation = ", \\\n    "
     sudoers = (
         f"Cmnd_Alias {alias} = {continuation.join(commands)}\n"
         f"Defaults!{alias} fdexec=never\n"

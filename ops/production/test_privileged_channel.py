@@ -90,7 +90,12 @@ class PrivilegedChannelTest(unittest.TestCase):
         )
         docker.chmod(0o755)
         visudo = fake_bin / "visudo"
-        visudo.write_text("#!/bin/sh\ntest \"$1\" = -cf && test -s \"$2\"\n", encoding="utf-8")
+        visudo.write_text(
+            "#!/bin/sh\n"
+            "test \"${FAKE_VISUDO_FAIL:-0}\" != 1 || exit 1\n"
+            "exec /usr/sbin/visudo \"$@\"\n",
+            encoding="utf-8",
+        )
         visudo.chmod(0o755)
         self.environment = os.environ.copy()
         self.environment["PATH"] = f"{fake_bin}:{self.environment['PATH']}"
@@ -132,6 +137,9 @@ class PrivilegedChannelTest(unittest.TestCase):
         sudoers = (self.sudoers / "asodef-phase1-production-closure").read_text(encoding="utf-8")
         self.assertIn("Defaults!ASODEF_PHASE1_PRODUCTION_CLOSURE fdexec=never", sudoers)
         self.assertEqual(len(re.findall(r"sha256:[0-9a-f]{64} /", sudoers)), 7)
+        self.assertNotIn("\n+", sudoers)
+        self.assertIn(r"asodef-public-platform-api\:1111111111111111111111111111111111111111", sudoers)
+        self.assertIn(r"--api-image-id sha256\:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sudoers)
         self.assertNotIn("NOPASSWD: ALL", sudoers)
         for forbidden in ("/bin/bash", "/bin/sh ", "/usr/bin/docker ", "/usr/bin/systemctl ", "/usr/sbin/ufw "):
             self.assertNotIn(forbidden, sudoers)
@@ -145,6 +153,29 @@ class PrivilegedChannelTest(unittest.TestCase):
         repeated = subprocess.run(self.command(), text=True, capture_output=True, env=self.environment, check=False)
         self.assertNotEqual(repeated.returncode, 0)
         self.assertIn("EXISTING_PRIVILEGED_RELEASE_TREE_MISMATCH", repeated.stderr)
+
+    def test_recovers_hardened_release_when_sudoers_install_previously_failed(self) -> None:
+        failing_environment = self.environment.copy()
+        failing_environment["FAKE_VISUDO_FAIL"] = "1"
+        failed = subprocess.run(
+            self.command(), text=True, capture_output=True, env=failing_environment, check=False
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        release = self.privileged / self.sha
+        self.assertTrue(release.is_dir())
+        self.assertEqual(stat.S_IMODE(release.stat().st_mode), 0o555)
+        self.assertFalse((self.sudoers / "asodef-phase1-production-closure").exists())
+
+        recovered = subprocess.run(
+            self.command(), text=True, capture_output=True, env=self.environment, check=False
+        )
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        sudoers = self.sudoers / "asodef-phase1-production-closure"
+        self.assertTrue(sudoers.is_file())
+        syntax = subprocess.run(
+            ["/usr/sbin/visudo", "-cf", str(sudoers)], text=True, capture_output=True, check=False
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_dry_run_never_installs_release_or_sudoers(self) -> None:
         result = subprocess.run(self.command(apply=False), text=True, capture_output=True, env=self.environment, check=False)
