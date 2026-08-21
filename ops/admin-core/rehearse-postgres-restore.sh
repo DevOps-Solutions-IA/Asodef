@@ -83,10 +83,13 @@ fi
 database_url="postgresql://postgres:${password}@${container}:5432/asodef_rehearsal?schema=public"
 # Migrations run from the exact immutable API image under rehearsal. The VPS
 # therefore needs neither a Node/pnpm toolchain nor a mutable source checkout.
-# The URL is passed only as a process environment value and is never printed.
+# The image-local Prisma binary is used directly: Corepack's pnpm shim may try
+# to download pnpm, which is both unnecessary and impossible on this isolated
+# network. The URL is passed only as a process environment value and is never
+# printed.
 docker run --rm --network "$network" --env DATABASE_URL="$database_url" \
   --entrypoint sh "$api_image" -c \
-  'pnpm --filter @asodef/api prisma:deploy >/dev/null 2>&1 && pnpm --filter @asodef/api exec prisma migrate status --schema prisma/schema.prisma >/dev/null 2>&1' || {
+  'test "$(pwd)" = /app/apps/api && test -f prisma/schema.prisma && test -x node_modules/.bin/prisma && node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma >/dev/null 2>&1 && node_modules/.bin/prisma migrate status --schema prisma/schema.prisma >/dev/null 2>&1' || {
     echo 'status=error code=ISOLATED_MIGRATION_FAILED' >&2; exit 1;
   }
 

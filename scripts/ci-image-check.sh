@@ -18,6 +18,11 @@ trap 'exit 143' TERM
 
 docker build --file apps/api/Dockerfile --tag "$api_image" .
 docker run --rm --entrypoint sh "$api_image" -ec '
+  test "$PWD" = /app/apps/api
+  test -f prisma/schema.prisma
+  test "$(node -p "require(\"./package.json\").scripts[\"prisma:deploy\"]")" = "prisma migrate deploy"
+  test -x node_modules/.bin/prisma
+  node_modules/.bin/prisma --version >/dev/null
   test ! -e /app/.env
   test ! -e /app/apps/web/.env.local
   node -e "const [major,minor]=process.versions.node.split(\".\").map(Number); process.exit(major>20 || (major===20 && minor>=19) ? 0 : 1)"

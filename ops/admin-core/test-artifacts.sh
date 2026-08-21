@@ -185,6 +185,23 @@ grep -Fq 'code=API_IMAGE_REVISION_LABEL_MISMATCH' <<<"$wrong_revision_output" ||
   echo 'status=error code=WRONG_IMAGE_REVISION_NOT_REJECTED' >&2; exit 1;
 }
 
+# The production API image starts in /app/apps/api. Rehearsal migrations must
+# therefore use that package's local scripts and schema path, not monorepo
+# --filter arguments or an apps/api-prefixed path that only works at repo root.
+grep -Fq 'test "$(pwd)" = /app/apps/api' "$script_dir/rehearse-postgres-restore.sh" || {
+  echo 'status=error code=REHEARSAL_IMAGE_WORKDIR_NOT_ENFORCED' >&2; exit 1;
+}
+grep -Fq 'test -f prisma/schema.prisma && test -x node_modules/.bin/prisma' "$script_dir/rehearse-postgres-restore.sh" || {
+  echo 'status=error code=REHEARSAL_IMAGE_MIGRATION_CONTRACT_INVALID' >&2; exit 1;
+}
+grep -Fq 'node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma' "$script_dir/rehearse-postgres-restore.sh" || {
+  echo 'status=error code=REHEARSAL_OFFLINE_MIGRATION_COMMAND_MISSING' >&2; exit 1;
+}
+if grep -Eq -- '--filter @asodef/api|pnpm (exec )?prisma' "$script_dir/rehearse-postgres-restore.sh"; then
+  echo 'status=error code=REHEARSAL_USES_REPO_ROOT_COMMAND' >&2
+  exit 1
+fi
+
 gpg --homedir "$custody_home" --batch --passphrase '' \
   --quick-generate-key 'ASODEF wrong recipient test <wrong-recipient@example.invalid>' ed25519 sign 1d >/dev/null 2>&1
 wrong_recipient_fingerprint=$(gpg --homedir "$custody_home" --batch --with-colons --list-keys 2>/dev/null \
