@@ -3,12 +3,23 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
+cd "$repo_root"
 for script in "$script_dir"/*.sh "$repo_root/ops/admin-core/rollback-public-admin-core.sh"; do bash -n "$script"; done
-python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' \
-  "$script_dir/test-compose-contract.py"
+for python_source in "$script_dir"/*.py; do
+  python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$python_source"
+done
+python3 -m unittest -v \
+  ops.production.test_provision_stack_env \
+  ops.production.test_release_publication \
+  ops.production.test_privileged_channel
 
 runtime=$(mktemp -d)
 trap 'rm -rf "$runtime"' EXIT
+source_sha=0000000000000000000000000000000000000000
+api_image_id=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+web_image_id=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+previous_api_image_id=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+previous_web_image_id=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 cp "$script_dir/tests/docker-compose.production.yml" "$runtime/docker-compose.production.yml"
 cp "$script_dir/tests/docker-compose.master-tunnel.yml" "$runtime/docker-compose.master-tunnel.yml"
 cp "$script_dir/tests/stack.env" "$runtime/.stack.env"
@@ -69,7 +80,15 @@ cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 if [[ "${1:-}" == image && "${2:-}" == inspect && "$*" == *'--format'* ]]; then
-  printf '<no value>\n'
+  image=${*: -1}
+  if [[ -z "${FAKE_SOURCE_SHA:-}" && "$*" == *'org.opencontainers.image.revision'* ]]; then
+    printf '<no value>\n'
+  elif [[ "$*" == *'.Id}}|{{index'* ]]; then
+    if [[ "$image" == *'-api:'* ]]; then printf '%s|%s\n' "$FAKE_API_IMAGE_ID" "$FAKE_SOURCE_SHA"; else printf '%s|%s\n' "$FAKE_WEB_IMAGE_ID" "$FAKE_SOURCE_SHA"; fi
+  elif [[ "$*" == *'org.opencontainers.image.revision'* ]]; then printf '%s\n' "$FAKE_SOURCE_SHA"
+  elif [[ "$image" == *'-api:'* ]]; then printf '%s\n' "$FAKE_PREVIOUS_API_IMAGE_ID"
+  else printf '%s\n' "$FAKE_PREVIOUS_WEB_IMAGE_ID"
+  fi
 elif [[ "${1:-}" == inspect && "$*" == *'com.docker.compose.project.config_files'* ]]; then
   printf '%s\n' "$FAKE_SHARED_DIR/docker-compose.production.yml,$FAKE_SHARED_DIR/docker-compose.master-tunnel.yml,$FAKE_SHARED_DIR/docker-compose.mail-platform.yml,$FAKE_SHARED_DIR/docker-compose.admin-core.yml,$FAKE_SHARED_DIR/docker-compose.release.yml"
 elif [[ "${1:-}" == inspect && "$*" == *'com.docker.compose.project.environment_file'* ]]; then
@@ -131,12 +150,28 @@ FAKE_DOCKER_LOG="$runtime/install-docker.log" PATH="$fake_bin:$PATH" \
 for managed in docker-compose.mail-platform.yml docker-compose.admin-core.yml docker-compose.release.yml; do
   [[ -f "$rollback_runtime/$managed" ]]
 done
-: >"$runtime/rollback-docker.log"
-FAKE_DOCKER_LOG="$runtime/rollback-docker.log" PATH="$fake_bin:$PATH" \
+if FAKE_DOCKER_LOG="$runtime/rollback-provenance-denied.log" FAKE_PREVIOUS_API_IMAGE_ID="$previous_api_image_id" FAKE_PREVIOUS_WEB_IMAGE_ID="$previous_web_image_id" PATH="$fake_bin:$PATH" \
   "$script_dir/rollback-compose-contract.sh" \
     --shared-dir "$rollback_runtime" \
     --api-image asodef-public-platform-api:previous \
+    --api-image-id sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --web-image asodef-public-platform-web:previous \
+    --web-image-id "$previous_web_image_id" \
+    --apply >/dev/null 2>&1; then
+  echo 'status=error code=ROLLBACK_ACCEPTED_WRONG_IMAGE_ID' >&2
+  exit 1
+fi
+for managed in docker-compose.mail-platform.yml docker-compose.admin-core.yml docker-compose.release.yml; do
+  [[ -f "$rollback_runtime/$managed" ]]
+done
+: >"$runtime/rollback-docker.log"
+FAKE_DOCKER_LOG="$runtime/rollback-docker.log" FAKE_PREVIOUS_API_IMAGE_ID="$previous_api_image_id" FAKE_PREVIOUS_WEB_IMAGE_ID="$previous_web_image_id" PATH="$fake_bin:$PATH" \
+  "$script_dir/rollback-compose-contract.sh" \
+    --shared-dir "$rollback_runtime" \
+    --api-image asodef-public-platform-api:previous \
+    --api-image-id "$previous_api_image_id" \
+    --web-image asodef-public-platform-web:previous \
+    --web-image-id "$previous_web_image_id" \
     --apply >/dev/null
 for managed in docker-compose.mail-platform.yml docker-compose.admin-core.yml docker-compose.release.yml; do
   [[ ! -e "$rollback_runtime/$managed" ]]
@@ -150,11 +185,30 @@ fi
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/rollback-docker.log"
 
 : >"$runtime/deploy-docker.log"
-FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime" PATH="$fake_bin:$PATH" \
+if FAKE_DOCKER_LOG="$runtime/deploy-provenance-denied.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
   "$script_dir/deploy-public-platform.sh" \
     --shared-dir "$rollback_runtime" \
+    --source-sha "$source_sha" \
     --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
+    --api-image-id sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
+    --web-image-id "$web_image_id" \
+    --apply >/dev/null 2>&1; then
+  echo 'status=error code=DEPLOY_ACCEPTED_WRONG_IMAGE_ID' >&2
+  exit 1
+fi
+if grep -Fq 'up -d' "$runtime/deploy-provenance-denied.log"; then
+  echo 'status=error code=DEPLOY_MUTATED_AFTER_PROVENANCE_FAILURE' >&2
+  exit 1
+fi
+FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_PREVIOUS_API_IMAGE_ID="$previous_api_image_id" FAKE_PREVIOUS_WEB_IMAGE_ID="$previous_web_image_id" FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
+  "$script_dir/deploy-public-platform.sh" \
+    --shared-dir "$rollback_runtime" \
+    --source-sha "$source_sha" \
+    --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
+    --api-image-id "$api_image_id" \
+    --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
+    --web-image-id "$web_image_id" \
     --apply >/dev/null
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log"
 grep -Fq -- 'com.docker.compose.project.config_files' "$runtime/deploy-docker.log"
@@ -169,10 +223,13 @@ if ASODEF_COMPOSE_CONTRACT_TEST_MODE=true "$script_dir/install-compose-contract.
   exit 1
 fi
 
-if find "$script_dir" -type f ! -path '*/tests/stack.env' ! -name 'test-artifacts.sh' -print0 \
+if find "$script_dir" -type f ! -path '*/tests/stack.env' ! -name 'test-artifacts.sh' \
+    ! -name 'create-release-source-artifact.py' ! -name 'test_release_publication.py' -print0 \
   | xargs -0 grep -IEq '(BEGIN (OPENSSH|RSA|EC|DSA) PRIVATE KEY|SMTP_PASSWORD=[^$[:space:]][^[:space:]]+|postgres(ql)?://[^$[:space:]]+:[^$[:space:]@]+@)'; then
   echo 'status=error code=STATIC_SECRET_PATTERN_FOUND' >&2
   exit 1
 fi
+
+grep -Fq 'fdexec=never' "$script_dir/install-production-privileged-channel.py"
 
 echo 'status=ok productionComposeArtifacts=PASS rollbackContract=PASS secretScan=PASS'
