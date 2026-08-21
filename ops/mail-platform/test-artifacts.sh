@@ -29,6 +29,8 @@ grep -F 'MAIL_NETWORK_NAME=asodef_mail_submission' "$SCRIPT_DIR/mail-platform.en
 grep -F 'MAIL_DKIM_SELECTOR=asodef2026' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_TLS_CERT_FILE=/etc/postfix/tls/fullchain.pem' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_TLS_KEY_FILE=/etc/postfix/tls/privkey.pem' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
+grep -F 'MAIL_ACME_WEBROOT=/opt/asodef/public-platform/shared/acme-webroot' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
+grep -F 'MAIL_SMTP_USER=asodef-api' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_CERTIFICATE_ISSUANCE_BREAK_GLASS=NO' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'certificate_issuance_disabled_existing_certificate_must_be_adopted' "$SCRIPT_DIR/issue-certificate.sh" >/dev/null
 grep -F 'certified_dkim_private_key_missing' "$SCRIPT_DIR/reconcile-runtime.sh" >/dev/null
@@ -100,6 +102,7 @@ printf '%s\n' "$mail_firewall" | grep -F 'deny in on eth0 to 192.0.2.10 port 25'
 printf '%s\n' "$mail_firewall" | grep -F 'deny in on eth0 to 192.0.2.10 port 465' >/dev/null
 printf '%s\n' "$mail_firewall" | grep -F 'deny in on eth0 to 192.0.2.10 port 587' >/dev/null
 grep -F 'asodef-mail-platform-ufw-state' "$SCRIPT_DIR/configure-firewall.sh" >/dev/null
+grep -Fq -- '--attachment-only' "$SCRIPT_DIR/verify-mail-network.sh"
 grep -F 'delete_owned_comment' "$SCRIPT_DIR/rollback.sh" >/dev/null
 if printf '%s\n' "$mail_firewall" | grep -E 'allow .*port (25|465)' >/dev/null; then
   echo 'firewall_policy_scan=FAIL' >&2

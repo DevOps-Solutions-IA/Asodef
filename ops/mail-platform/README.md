@@ -43,8 +43,12 @@ those assets; it must not request a certificate or generate/rotate a DKIM key.
    SPF, DKIM selector and DMARC.
 5. Confirm `172.25.52.0/29` still has no collision. Run
    `create-mail-network.sh CONFIG --dry-run`; after approval use `--apply`.
-   Add `docker-compose.mail-platform.yml` only to the public ASODEF API Compose
-   invocation and recreate only that API when its release gate permits.
+   Install the complete contract with `ops/production/install-compose-contract.sh`.
+   Every subsequent production Compose invocation must use the centralized
+   base + Master + mail + Admin + release list and the protected `.stack.env`;
+   never attach the API with `docker network connect`. Recreate only API/Web
+   when the release gate permits. This keeps API at `172.25.52.2` and preserves
+   Master at `172.25.51.2` across deploy and rollback.
 6. Operator creates the root-only SMTP password file (`0600`). Never pass the
    password as an argument, environment variable or log field.
 7. Set approval `YES` and execute `apply.sh CONFIG --prepare`. It backs up and
@@ -52,8 +56,13 @@ those assets; it must not request a certificate or generate/rotate a DKIM key.
    fails closed. It never invokes `opendkim-genkey`.
 8. Run `preflight.sh CONFIG`; review `configure-firewall.sh CONFIG --dry-run`;
    then apply only the owned mail rules.
-9. Execute `apply.sh CONFIG --activate`, `verify.sh CONFIG`, then the authorized
-   adversarial and external-network gates.
+9. After the Compose contract has recreated API, run
+   `verify-mail-network.sh CONFIG --attachment-only` to prove it is the sole
+   member at `172.25.52.2`. Then execute `apply.sh CONFIG --activate`, followed
+   by the full `verify-mail-network.sh CONFIG`, `verify.sh CONFIG`, and the
+   authorized adversarial/external-network gates. Never run attachment
+   verification before the API recreation or full verification before the
+   private listener exists.
 10. Configure ASODEF production SMTP variables through its protected env
     mechanism, recreate only the public API when release gates authorize it.
 

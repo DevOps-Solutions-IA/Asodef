@@ -58,7 +58,12 @@ The executable, value-free release artifacts live under `ops/admin-core/`:
   image, bound by exact release tag and Docker Image ID, on an isolated
   internal Docker network on that custody host;
 - `rollback-public-admin-core.sh` validates rollback in dry-run mode and, only
-  with `--apply`, recreates public `api` and `web`.
+  with `--apply`, recreates public `api` and `web` through the complete fixed
+  Compose contract, preserving Master and mail attachments;
+- `ops/production/install-compose-contract.sh` atomically installs the
+  value-free mail/Admin overlays plus immutable API/Web image references;
+- `ops/production/deploy-public-platform.sh` validates that same installed
+  contract and recreates only API/Web. It never invokes `down`.
 
 Use the bounded commands documented in `ops/admin-core/README.md`. Do not run
 an unfiltered `docker compose config`, and never copy runtime values into the

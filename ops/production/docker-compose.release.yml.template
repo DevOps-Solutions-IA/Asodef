@@ -1,0 +1,5 @@
+services:
+  api:
+    image: @@API_IMAGE@@
+  web:
+    image: @@WEB_IMAGE@@

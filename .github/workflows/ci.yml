@@ -171,6 +171,12 @@ jobs:
       - name: Verify lint, strict types, tests, and production build
         run: pnpm ci:check
 
+      - name: Verify production operational contracts
+        run: |
+          ops/mail-platform/test-artifacts.sh
+          ops/admin-core/test-artifacts.sh
+          ops/production/test-artifacts.sh
+
       - name: Build and inspect immutable runtime images
         run: scripts/ci-image-check.sh
 

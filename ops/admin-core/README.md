@@ -7,18 +7,22 @@ WhatsApp project.
 
 ## 1. Runtime preflight
 
-Use the production env file in its protected host location. The validator
+Use the canonical production env file
+`/opt/asodef/public-platform/shared/.stack.env`. The validator
 parses it as data (it never `source`s it), prints key names/status only and
 fails on missing, empty or malformed Admin/SMTP configuration.
 
 ```sh
-ops/admin-core/verify-runtime-env.sh --env-file /protected/path/.env.production --expected-mfa false
+ops/admin-core/verify-runtime-env.sh \
+  --env-file /opt/asodef/public-platform/shared/.stack.env \
+  --expected-mfa false
 ```
 
-Add `docker-compose.admin-core.yml` after the existing public-platform Compose
-files. It injects only named variables and contains no value. Validate the
-resolved model with the existing sanitized validator; never print unfiltered
-`docker compose config` output.
+The production Compose contract under `ops/production/` always merges base,
+Master, mail, Admin and immutable release-image overlays with that exact env
+file. Do not invoke a partial list manually. The Admin overlay injects only
+named variables and contains no value. Validate the resolved model with the
+sanitized contract gate; never print unfiltered production Compose output.
 
 ## 2. GPG trust boundary
 
@@ -137,14 +141,15 @@ cleanup.
 
 ## 6. Rollback
 
-First invoke without `--apply`; it validates the exact public project, Compose
-files and both prior images. With `--apply`, only services `api` and `web` are
-recreated. Additive migrations 35–40 remain in place; do not drop their data.
+First invoke without `--apply`; it validates the fixed production Compose
+contract and both prior images. With `--apply`, only services `api` and `web`
+are recreated. The mail and Master network attachments are preserved because
+rollback uses the same complete contract. Additive migrations 35–40 remain in
+place; do not drop their data.
 
 ```sh
 ops/admin-core/rollback-public-admin-core.sh \
-  --project asodef-public-platform-production \
-  --compose <production-compose> --compose <admin-core-overlay> \
+  --shared-dir /opt/asodef/public-platform/shared \
   --api-image <previous-api-image> --web-image <previous-web-image>
 ```
 
