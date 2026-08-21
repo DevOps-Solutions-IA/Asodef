@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks: [data]
+  redis:
+    image: redis:7-alpine
+    networks: [data]
+  api:
+    image: asodef-public-platform-api:old
+    networks: [data, egress]
+  web:
+    image: asodef-public-platform-web:old
+    networks: [data]
+networks:
+  data:
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+  egress:
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16

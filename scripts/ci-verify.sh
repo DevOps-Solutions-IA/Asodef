@@ -207,6 +207,7 @@ NODE_ENV=test pnpm ci:check
 printf 'CI verification: operational artifact gates\n'
 ops/mail-platform/test-artifacts.sh
 ops/admin-core/test-artifacts.sh
+ops/production/test-artifacts.sh
 
 printf 'CI verification: immutable runtime images\n'
 scripts/ci-image-check.sh
