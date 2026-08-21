@@ -23,6 +23,19 @@ def connect(args: argparse.Namespace, password: str) -> smtplib.SMTP:
     return client
 
 
+def require_forged_sender_rejected(client: smtplib.SMTP, sender: str) -> None:
+    """Require rejection at MAIL or RCPT without ever sending message DATA."""
+    code, _ = client.mail(sender)
+    if code >= 500:
+        return
+
+    # smtpd_delay_reject=yes deliberately defers sender restriction evaluation
+    # until RCPT. A 2xx MAIL response is therefore not evidence of a bypass.
+    code, _ = client.rcpt("open-relay-probe@example.net")
+    if code < 500:
+        fail("forged_sender_not_rejected")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--connect-host", required=True)
@@ -94,9 +107,7 @@ def main() -> None:
 
     client = connect(args, password)
     try:
-        code, _ = client.mail("unauthorized-sender@example.net")
-        if code < 500:
-            fail("forged_sender_not_rejected")
+        require_forged_sender_rejected(client, "unauthorized-sender@example.net")
     finally:
         client.close()
 
