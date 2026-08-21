@@ -60,6 +60,13 @@ for compose in ASODEF_BASE_COMPOSE ASODEF_MASTER_COMPOSE ASODEF_MAIL_COMPOSE ASO
   grep -Fq -- "--file \"\$$compose\"" "$script_dir/compose-contract.sh"
 done
 grep -Fq 'production_compose up -d --no-deps --force-recreate api web' "$script_dir/deploy-public-platform.sh"
+grep -Fq -- '--network asodef_public_platform_data' "$script_dir/deploy-public-platform.sh"
+grep -Fq 'node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma' "$script_dir/deploy-public-platform.sh"
+grep -Fq 'node_modules/.bin/prisma migrate status --schema prisma/schema.prisma' "$script_dir/deploy-public-platform.sh"
+if grep -Eq 'pnpm|corepack' "$script_dir/deploy-public-platform.sh"; then
+  echo 'status=error code=PRODUCTION_MIGRATION_REQUIRES_PACKAGE_MANAGER' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016
 grep -Fq 'load_production_compose_contract "$shared_dir"' "$repo_root/ops/admin-core/rollback-public-admin-core.sh"
 if find "$script_dir" -type f ! -name 'test-artifacts.sh' -print0 \
@@ -79,6 +86,9 @@ mkdir "$fake_bin"
 cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
+if [[ "${1:-}" == run && "${FAKE_MIGRATION_FAIL:-false}" == true ]]; then
+  exit 1
+fi
 if [[ "${1:-}" == image && "${2:-}" == inspect && "$*" == *'--format'* ]]; then
   image=${*: -1}
   if [[ -z "${FAKE_SOURCE_SHA:-}" && "$*" == *'org.opencontainers.image.revision'* ]]; then
@@ -140,6 +150,8 @@ cp "$script_dir/tests/docker-compose.production.yml" "$rollback_runtime/docker-c
 cp "$script_dir/tests/docker-compose.master-tunnel.yml" "$rollback_runtime/docker-compose.master-tunnel.yml"
 cp "$script_dir/tests/stack.env" "$rollback_runtime/.stack.env"
 chmod 0600 "$rollback_runtime/.stack.env"
+printf 'DATABASE_URL=synthetic-test-value\n' >"$rollback_runtime/.env.production"
+chmod 0600 "$rollback_runtime/.env.production"
 : >"$runtime/install-docker.log"
 FAKE_DOCKER_LOG="$runtime/install-docker.log" PATH="$fake_bin:$PATH" \
   "$script_dir/install-compose-contract.sh" \
@@ -185,6 +197,29 @@ fi
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/rollback-docker.log"
 
 : >"$runtime/deploy-docker.log"
+if FAKE_DOCKER_LOG="$runtime/deploy-migration-failure.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" FAKE_MIGRATION_FAIL=true PATH="$fake_bin:$PATH" \
+  "$script_dir/deploy-public-platform.sh" \
+    --shared-dir "$rollback_runtime" \
+    --source-sha "$source_sha" \
+    --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
+    --api-image-id "$api_image_id" \
+    --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
+    --web-image-id "$web_image_id" \
+    --apply >/dev/null 2>&1; then
+  echo 'status=error code=DEPLOY_ACCEPTED_MIGRATION_FAILURE' >&2
+  exit 1
+fi
+grep -Fq -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-migration-failure.log"
+if grep -Fq 'up -d' "$runtime/deploy-migration-failure.log"; then
+  echo 'status=error code=DEPLOY_RECREATED_SERVICES_AFTER_MIGRATION_FAILURE' >&2
+  exit 1
+fi
+for managed in docker-compose.mail-platform.yml docker-compose.admin-core.yml docker-compose.release.yml; do
+  [[ ! -e "$rollback_runtime/$managed" ]] || {
+    echo 'status=error code=DEPLOY_INSTALLED_CONTRACT_AFTER_MIGRATION_FAILURE' >&2; exit 1;
+  }
+done
+
 if FAKE_DOCKER_LOG="$runtime/deploy-provenance-denied.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
   "$script_dir/deploy-public-platform.sh" \
     --shared-dir "$rollback_runtime" \
@@ -211,6 +246,12 @@ FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime"
     --web-image-id "$web_image_id" \
     --apply >/dev/null
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log"
+grep -Fq -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log"
+migration_line=$(grep -n -m1 -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log" | cut -d: -f1)
+up_line=$(grep -n -m1 -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log" | cut -d: -f1)
+[[ "$migration_line" -lt "$up_line" ]] || {
+  echo 'status=error code=PRODUCTION_MIGRATION_ORDER_INVALID' >&2; exit 1;
+}
 grep -Fq -- 'com.docker.compose.project.config_files' "$runtime/deploy-docker.log"
 grep -Fq -- 'com.docker.compose.project.environment_file' "$runtime/deploy-docker.log"
 grep -Fq -- 'network inspect asodef_mail_submission' "$runtime/deploy-docker.log"
