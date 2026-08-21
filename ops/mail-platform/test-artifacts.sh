@@ -33,6 +33,12 @@ grep -F '@@MAIL_API_ADDRESS@@' "$SCRIPT_DIR/config/trusted.hosts.template" >/dev
 grep -F '*@@@MAIL_DOMAIN@@' "$SCRIPT_DIR/config/signing.table.template" >/dev/null
 grep -F 'reject_authenticated_sender_login_mismatch' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
 grep -F '127.0.0.1' "$SCRIPT_DIR/test-relay-security.sh" >/dev/null
+grep -F 'submission_without_auth_not_rejected' "$SCRIPT_DIR/authorized-negative-tests.py" >/dev/null
+grep -F 'submission_unauthenticated=rejected' "$SCRIPT_DIR/authorized-negative-tests.py" >/dev/null
+if grep -E 'swaks .*--tls' "$SCRIPT_DIR/test-relay-security.sh" >/dev/null; then
+  echo 'swaks_optional_tls_dependency_regression=FAIL' >&2
+  exit 1
+fi
 grep -F 'MAIL_OPERATOR_APPROVAL=NO' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_NETWORK_NAME=asodef_mail_submission' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_DKIM_SELECTOR=asodef2026' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
