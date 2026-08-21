@@ -15,12 +15,9 @@ import tempfile
 
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
-PRIVATE_KEY_MARKERS = (
-    b"-----BEGIN PRIVATE KEY-----",
-    b"-----BEGIN RSA PRIVATE KEY-----",
-    b"-----BEGIN EC PRIVATE KEY-----",
-    b"-----BEGIN DSA PRIVATE KEY-----",
-    b"-----BEGIN OPENSSH PRIVATE KEY-----",
+PRIVATE_KEY_MARKERS = tuple(
+    b"-----BEGIN " + key_type + b"PRIVATE KEY-----"
+    for key_type in (b"", b"RSA ", b"EC ", b"DSA ", b"OPENSSH ")
 )
 
 
