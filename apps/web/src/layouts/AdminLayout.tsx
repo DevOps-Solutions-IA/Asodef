@@ -8,6 +8,7 @@ import {
   Gauge,
   KeyRound,
   Landmark,
+  Layers3,
   MonitorSmartphone,
   Scale,
   ScrollText,
@@ -16,6 +17,11 @@ import {
   Users,
   UserRoundCheck,
 } from "lucide-react";
+import {
+  COMMUNICATION_SECTIONS,
+  getControlPlanePermission,
+  KORAL_SECTIONS,
+} from "../lib/control-plane/control-plane-catalog";
 import { useAuth } from "../lib/auth/auth-context";
 import {
   WorkspaceShell,
@@ -26,10 +32,11 @@ import {
 // US-060's literal nav list. `permission` is the key required to SHOW the
 // item (and matches the PermissionRoute guarding its route in router.tsx -
 // see that file for the "usuarios stays users.read, not the AC Example's
-// users.manage" note). Only destinations backed by a real page and API
-// belong here; legacy RoutePlaceholder routes remain addressable but are
-// deliberately not advertised as operational capabilities.
-const NAV_GROUPS: WorkspaceNavGroup[] = [
+// users.manage" note). New Control Plane destinations are real, explicit
+// dependency-state pages: until their owning backend contract exists they
+// expose no operational actions, data or inferred endpoint. Legacy generic
+// RoutePlaceholder routes remain deliberately unadvertised.
+const ADMIN_NAV_GROUPS: WorkspaceNavGroup[] = [
   {
     label: "Gestión",
     items: [
@@ -53,7 +60,31 @@ const NAV_GROUPS: WorkspaceNavGroup[] = [
         icon: Building2,
         permission: "crm.read",
       },
+      {
+        to: "/admin/planes",
+        label: "Planes",
+        icon: Layers3,
+        permission: "settings.manage",
+      },
     ],
+  },
+  {
+    label: "Koral",
+    items: KORAL_SECTIONS.map((section) => ({
+      to: `/admin/koral/${section.slug}`,
+      label: section.label,
+      icon: section.icon,
+      permission: getControlPlanePermission("koral", section.slug),
+    })),
+  },
+  {
+    label: "Comunicaciones",
+    items: COMMUNICATION_SECTIONS.map((section) => ({
+      to: `/admin/comunicaciones/${section.slug}`,
+      label: section.label,
+      icon: section.icon,
+      permission: getControlPlanePermission("comunicaciones", section.slug),
+    })),
   },
   {
     label: "Operación",
@@ -179,7 +210,7 @@ const ACCOUNT_ITEMS: WorkspaceNavItem[] = [
  */
 export function AdminLayout() {
   const { hasPermission } = useAuth();
-  const visibleNavGroups = NAV_GROUPS.map((group) => ({
+  const visibleNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter(
       (item) => item.permission == null || hasPermission(item.permission),

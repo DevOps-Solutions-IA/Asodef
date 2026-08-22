@@ -72,6 +72,45 @@ test.describe("admin information architecture", () => {
         await context.close();
       }
     });
+
+    test(`${viewport.name}: Control Plane foundations remain separated, accessible and responsive`, async ({ browser }) => {
+      const { context, page } = await openAuthenticatedPage(browser);
+      await page.setViewportSize(viewport);
+      try {
+        await page.goto("/admin/planes");
+        await expect(page.getByRole("heading", { name: "Planes" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Campos requeridos por el Control Plane" })).toBeVisible();
+        await expect(page.getByRole("alert")).toContainText("Contrato backend pendiente");
+
+        await page.goto("/admin/koral/herramientas");
+        await expect(page.getByRole("heading", { name: "Herramientas" })).toBeVisible();
+        await expect(page.getByText("Esquemas de entrada y salida")).toBeVisible();
+        await expect(page.getByText("OpenRouter", { exact: true })).toHaveCount(0);
+
+        await page.goto("/admin/comunicaciones/plantillas");
+        await expect(page.getByRole("heading", { name: "Plantillas" })).toBeVisible();
+        await expect(page.getByText("Vista previa", { exact: true })).toBeVisible();
+        await expect(page.getByText("Diferencias", { exact: true })).toBeVisible();
+
+        await page.goto("/admin/sistema?section=proveedores");
+        await expect(page.getByRole("heading", { name: "Salud de proveedores" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "OpenRouter" })).toBeVisible();
+        await expect(page.getByText("Conexión", { exact: true }).first()).toBeVisible();
+        await expect(page.locator("body")).not.toContainText("sk-or-v1-");
+
+        if (viewport.name === "desktop") {
+          const nav = page.getByRole("navigation", { name: "Administración" });
+          await expect(nav.getByRole("heading", { name: "Koral" })).toBeVisible();
+          await expect(nav.getByRole("heading", { name: "Comunicaciones" })).toBeVisible();
+        } else {
+          await page.getByRole("button", { name: "Abrir navegación" }).click();
+          await expect(page.getByRole("navigation", { name: "Administración" }).last()).toBeVisible();
+          await page.keyboard.press("Escape");
+        }
+      } finally {
+        await context.close();
+      }
+    });
   }
 
   test("legacy personal-security URLs redirect to the canonical Mi cuenta routes", async ({ browser }) => {
