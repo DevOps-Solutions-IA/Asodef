@@ -17,23 +17,29 @@ describe("Control Plane consumer catalog", () => {
     },
   );
 
-  it("keeps unmaterialized configuration APIs fail-closed", () => {
+  it("keeps contract-only configuration APIs fail-closed until runtime exists", () => {
     for (const section of KORAL_SECTIONS.filter(
-      ({ slug }) => slug !== "conversaciones" && slug !== "inbox",
+      ({ slug }) =>
+        slug !== "conversaciones" &&
+        slug !== "inbox" &&
+        slug !== "recomendaciones",
     )) {
       expect(getControlPlanePermission("koral", section.slug)).toBe(
         "settings.manage",
       );
       expect(getContractClassification("koral", section.slug)).toBe(
-        "BACKEND_MISSING",
+        "BACKEND_RUNTIME_MISSING",
       );
     }
+    expect(getContractClassification("koral", "recomendaciones")).toBe(
+      "BLOCKED_BY_PLANS",
+    );
     for (const section of COMMUNICATION_SECTIONS) {
       expect(getControlPlanePermission("comunicaciones", section.slug)).toBe(
         "settings.manage",
       );
       expect(getContractClassification("comunicaciones", section.slug)).toBe(
-        "BACKEND_MISSING",
+        "BACKEND_RUNTIME_MISSING",
       );
     }
   });

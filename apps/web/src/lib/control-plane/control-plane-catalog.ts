@@ -17,7 +17,10 @@ import {
 
 export type ControlPlaneArea = "koral" | "comunicaciones";
 export type ContractClassification =
-  "MATCHES_CANONICAL" | "ADAPTER_REQUIRED" | "BACKEND_MISSING" | "CONFLICT";
+  | "MATCHES_CANONICAL"
+  | "ADAPTER_REQUIRED"
+  | "BACKEND_RUNTIME_MISSING"
+  | "BLOCKED_BY_PLANS";
 
 export interface ControlPlaneSectionDefinition {
   slug: string;
@@ -187,7 +190,13 @@ export function getContractClassification(
   area: ControlPlaneArea,
   slug: string,
 ): ContractClassification {
-  return area === "koral" && (slug === "conversaciones" || slug === "inbox")
-    ? "ADAPTER_REQUIRED"
-    : "BACKEND_MISSING";
+  if (area === "koral") {
+    if (slug === "conversaciones" || slug === "inbox") {
+      return "ADAPTER_REQUIRED";
+    }
+    if (slug === "recomendaciones") {
+      return "BLOCKED_BY_PLANS";
+    }
+  }
+  return "BACKEND_RUNTIME_MISSING";
 }

@@ -31,7 +31,7 @@ const LIFECYCLE_LABELS: Record<PublishingState, string> = {
 
 export function BackendDependencyNotice({
   domain,
-  classification = "BACKEND_MISSING",
+  classification = "BACKEND_RUNTIME_MISSING",
 }: {
   domain: string;
   classification?: ContractClassification;
@@ -45,11 +45,20 @@ export function BackendDependencyNotice({
       </Alert>
     );
   }
+  if (classification === "BLOCKED_BY_PLANS") {
+    return (
+      <Alert variant="warning" title="Bloqueado por el contrato de Planes">
+        {domain} depende de la fuente única y publicada de Planes. La UI no
+        improvisa mappings ni habilita acciones hasta que exista el contrato
+        backend canónico aprobado.
+      </Alert>
+    );
+  }
   return (
-    <Alert variant="warning" title="Contrato backend pendiente">
-      {domain} permanece en estado desconocido y sin acciones porque el agente
-      propietario aún no publicó un API administrativo canónico. La UI no
-      inventa endpoints ni permisos.
+    <Alert variant="warning" title="Runtime administrativo pendiente">
+      {domain} tiene una referencia contractual canónica, pero permanece sin
+      acciones hasta que el propietario publique un runtime administrativo
+      estable. La UI no inventa endpoints ni permisos.
     </Alert>
   );
 }

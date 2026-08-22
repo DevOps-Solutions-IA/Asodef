@@ -21,7 +21,7 @@ The existing Admin shell, account controls, responsive drawer, focus management,
 
 ## Canonical contract consumption
 
-The frontend does not maintain copies of backend schemas. The first-wave Zod manifests were removed after reviewing Agent 1 PR #19 and Agent 2 PR #20. The exact canonical sources, adapter gaps and missing APIs are recorded in `docs/connect/control-plane-api-dependency-map.md`.
+The frontend does not maintain copies of backend schemas. The first-wave Zod manifests were removed after reviewing Agent 1 PR #19, Agent 2 PR #20 and Agent 3 PR #21. Agent 2 owns the canonical AI, Tool and Knowledge gateway contracts; Agent 1 consumes them through Koral adapters; Agent 3 owns the Domain Event, Automation, Communications and Template contracts. The exact canonical sources, adapter gaps and missing runtimes are recorded in `docs/connect/control-plane-api-dependency-map.md`.
 
 Inbox retains only an explicit UI projection for ownership rendering. Agent 1 remains authoritative for conversation status, assignment, optimistic versioning, idempotency, permissions and audit. The UI fails closed when ownership cannot be verified and blocks actions when another advisor owns the case.
 

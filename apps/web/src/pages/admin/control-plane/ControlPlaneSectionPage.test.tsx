@@ -46,4 +46,11 @@ describe("ControlPlaneSectionPage", () => {
     expect(screen.getByText("Diferencias")).toBeInTheDocument();
     expect(screen.getByText("Auditoría")).toBeInTheDocument();
   });
+
+  it("keeps plan-dependent recommendations blocked by Plans", () => {
+    renderSection("/admin/koral/recomendaciones", "koral");
+    expect(
+      screen.getByText("Bloqueado por el contrato de Planes"),
+    ).toBeInTheDocument();
+  });
 });
