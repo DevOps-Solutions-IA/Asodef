@@ -1,10 +1,10 @@
 export {
   TOOL_GATEWAY_CONTRACT,
   TOOL_STATUSES,
+  type ContractError,
   type GovernedToolContract,
   type MinimumIdentityLevel,
   type ToolAuditContract,
-  type ToolErrorContract,
   type ToolGateway,
   type ToolGatewayError,
   type ToolGatewayErrorCode,

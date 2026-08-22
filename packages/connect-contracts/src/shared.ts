@@ -2,6 +2,75 @@ export const CONNECT_CONTRACT_VERSION = "v1" as const;
 
 export type ConnectContractVersion = typeof CONNECT_CONTRACT_VERSION;
 export type JsonSchema = Readonly<Record<string, unknown>>;
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue =
+  | JsonPrimitive
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+export type JsonObject = { readonly [key: string]: JsonValue };
+
+export interface ContractError {
+  code: string;
+  retryable: boolean;
+  description: string;
+}
+
+/** Publication-time audit requirements. This is contract metadata, not the
+ * per-request GatewayAuditContext carried by an authenticated invocation. */
+export interface ContractAuditSemantics {
+  required: true;
+  records: readonly string[];
+  piiPolicy: "MINIMIZED_NO_CONTENT";
+  correlationRequired: true;
+}
+
+/** Descriptive replay requirements for a public operation. Enforcement
+ * remains in the owning application service or governed gateway. */
+export interface ContractIdempotencySemantics {
+  required: boolean;
+  scope: string;
+  duplicateBehavior: string;
+  retention: string;
+}
+
+/** Portable schema fragments. They are data contracts, never executable
+ * validators or arbitrary code. */
+export interface ContractSchema {
+  readonly [key: string]: unknown;
+  readonly $id: string;
+  readonly type: "object";
+  readonly required: readonly string[];
+  readonly properties: Readonly<Record<string, JsonObject>>;
+  readonly additionalProperties: boolean;
+}
+
+export interface PublicContract<Input, Output> {
+  readonly name: string;
+  readonly version: `${number}.${number}.${number}`;
+  readonly inputSchema: ContractSchema;
+  readonly outputSchema: ContractSchema;
+  readonly errors: readonly ContractError[];
+  readonly permissions: readonly string[];
+  readonly audit: ContractAuditSemantics;
+  readonly idempotency: ContractIdempotencySemantics;
+  /** Type witnesses give clients static types without serializing runtime
+   * implementation into the public descriptor. */
+  readonly _input?: Input;
+  readonly _output?: Output;
+}
+
+export const MINIMIZED_AUDIT: ContractAuditSemantics = {
+  required: true,
+  records: [
+    "actor/service identity",
+    "decision",
+    "result",
+    "reason code",
+    "correlationId",
+  ],
+  piiPolicy: "MINIMIZED_NO_CONTENT",
+  correlationRequired: true,
+};
 
 export const DATA_CLASSIFICATIONS = [
   "PUBLIC",
