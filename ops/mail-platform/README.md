@@ -75,9 +75,12 @@ validation or reload fails.
 
 The API runtime value for `SMTP_USER` must be exactly
 `MAIL_SMTP_USER@MAIL_DOMAIN`; the sender ownership map and verification gate
-enforce that identity. `SMTP_HOST` remains `smtp.asodef.com.co`; the API-only
-Compose overlay resolves it privately to the dedicated gateway so certificate
-hostname validation is preserved.
+enforce that identity. `SMTP_HOST` remains `smtp.asodef.com.co` and is always
+used as the TLS certificate identity. The API-only Compose overlay also sets
+`SMTP_CONNECT_HOST` to the dedicated gateway because Nodemailer performs DNS
+resolution before the operating-system hosts fallback. This keeps the socket
+on `172.25.52.1` without weakening hostname verification; `extra_hosts` remains
+as an independently verifiable runtime contract for other SMTP clients.
 
 `test-relay-security.sh` never delivers its negative probes: it stops at RCPT,
 AUTH or MAIL SIZE. Authorized delivery and Gmail/Outlook header certification

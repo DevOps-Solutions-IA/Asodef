@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { z } from "zod";
 
 /**
@@ -108,6 +109,10 @@ export const envSchema = z.object({
   SMTP_HOST: z.string().trim().refine(
     (value) => value === "" || /^(?=.{1,253}$)(?=.*[A-Za-z])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(value),
     "SMTP_HOST must be a fully qualified DNS hostname without a scheme, path or port",
+  ).default(""),
+  SMTP_CONNECT_HOST: z.string().trim().refine(
+    (value) => value === "" || isIP(value) === 4 || /^(?=.{1,253}$)(?=.*[A-Za-z])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(value),
+    "SMTP_CONNECT_HOST must be an IPv4 address or fully qualified DNS hostname",
   ).default(""),
   SMTP_PORT: z.preprocess(
     (value) => value === "" ? undefined : value,
@@ -266,7 +271,8 @@ export const envSchema = z.object({
     });
   }
   const smtpDependentFields = ["SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"] as const;
-  const smtpPartiallyConfigured = smtpDependentFields.some((field) => Boolean(config[field]));
+  const smtpPartiallyConfigured = Boolean(config.SMTP_CONNECT_HOST)
+    || smtpDependentFields.some((field) => Boolean(config[field]));
   if (!config.SMTP_HOST && smtpPartiallyConfigured) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
