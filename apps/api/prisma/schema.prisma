@@ -101,7 +101,6 @@ model AdminIdempotency {
 
   @@unique([actorUserId, operation, key])
   @@index([createdAt])
-  @@index([createdAt(sort: Desc), id])
   @@map("admin_idempotency")
 }
 
@@ -553,6 +552,7 @@ model LeadSubmission {
   prospect       Prospect?         @relation(fields: [prospectId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([createdAt(sort: Desc), id], map: "lead_submissions_created_at_id_idx")
   @@index([source, audience, need])
   @@map("lead_submissions")
 }
@@ -1699,7 +1699,7 @@ model BusinessPartner {
 
   @@index([publicationStatus])
   @@index([createdAt(sort: Desc), id])
-  @@index([publicationStatus, createdAt(sort: Desc), id])
+  @@index([publicationStatus, createdAt(sort: Desc), id], map: "business_partners_publication_created_at_id_idx")
   @@map("business_partners")
 }
 
