@@ -277,6 +277,27 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/connect-contracts:
+    devDependencies:
+      '@asodef/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@asodef/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      eslint:
+        specifier: ^9.15.0
+        version: 9.39.5(jiti@1.21.7)
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.25)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.1)(jiti@1.21.7)(jsdom@25.0.1)(terser@5.49.0)
+
   packages/eslint-config:
     dependencies:
       '@eslint/js':
