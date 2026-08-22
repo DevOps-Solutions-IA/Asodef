@@ -264,7 +264,7 @@ describe("router", () => {
     const user = userEvent.setup();
     renderAtPath("/admin", buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["crm.read", "payments.read", "payments.reconcile", "content.manage", "data.manage", "pqr.manage", "reports.read", "users.read", "audit.read", "settings.manage", "users.security.read", "users.sessions.read"] }));
     const nav = await screen.findByRole("navigation", { name: "Administración" });
-    for (const group of ["Gestión", "Operación", "Cumplimiento", "Inteligencia", "Administración"]) expect(within(nav).getByRole("heading", { name: group })).toBeInTheDocument();
+    for (const group of ["Gestión", "Koral", "Comunicaciones", "Operación", "Cumplimiento", "Inteligencia", "Administración"]) expect(within(nav).getByRole("heading", { name: group })).toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Seguridad" })).not.toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Sesiones" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Abrir menú de Mi cuenta" }));
@@ -388,6 +388,52 @@ describe("router", () => {
     expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Sistema" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sistema" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["/admin/planes", "Planes"],
+    ["/admin/koral/inbox", "Inbox"],
+    ["/admin/koral/conocimiento", "Conocimiento"],
+    ["/admin/comunicaciones/plantillas", "Plantillas"],
+  ])("renders the Control Plane foundation at %s with settings.manage", async (path, heading) => {
+    renderAtPath(path, buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["settings.manage", "koral.conversations.read"] }));
+    expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
+  });
+
+  it.each(["/admin/planes", "/admin/koral/inbox", "/admin/comunicaciones/plantillas"])(
+    "keeps %s and its navigation behind settings.manage",
+    async (path) => {
+      renderAtPath(path, buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
+      expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Koral" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Comunicaciones" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("uses Agent 1's canonical read permission for conversations and Inbox", async () => {
+    renderAtPath(
+      "/admin/koral/inbox",
+      buildCurrentUser({
+        roles: ["CUSTOMER_SERVICE"],
+        permissions: ["koral.conversations.read"],
+      }),
+    );
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Conversaciones" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Inbox" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Herramientas" })).not.toBeInTheDocument();
+  });
+
+  it("does not infer conversation access from settings.manage", async () => {
+    renderAtPath(
+      "/admin/koral/inbox",
+      buildCurrentUser({
+        roles: ["SUPER_ADMIN"],
+        permissions: ["settings.manage"],
+      }),
+    );
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
   });
 
   it("renders the real audit timeline for audit.read and hides it without permission", async () => {
