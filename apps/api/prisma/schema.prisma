@@ -58,9 +58,9 @@ model User {
   passwordResets                    PasswordReset[]
   passwordHistory                   PasswordHistoryEntry[]
   loginAttempts                     LoginAttempt[]
-  securityEvents                    SecurityEvent[]             @relation("SecurityEventLegacyUser")
-  securityEventsActed               SecurityEvent[]             @relation("SecurityEventActor")
-  securityEventsSubjected           SecurityEvent[]             @relation("SecurityEventSubject")
+  securityEvents                    SecurityEvent[]            @relation("SecurityEventLegacyUser")
+  securityEventsActed               SecurityEvent[]            @relation("SecurityEventActor")
+  securityEventsSubjected           SecurityEvent[]            @relation("SecurityEventSubject")
   notificationJobs                  NotificationJob[]
   adminMfaCredential                AdminMfaCredential?
   adminMfaLoginChallenges           AdminMfaLoginChallenge[]
@@ -81,6 +81,11 @@ model User {
   requestedExportJobs               ExportJob[]
   approvedApprovalGates             ApprovalGate[]
   adminIdempotencyRecords           AdminIdempotency[]
+  koralParticipants                 ConversationParticipant[]
+  koralAssignments                  ConversationAssignment[]   @relation("ConversationAssignmentAssignee")
+  koralAssignmentsMade              ConversationAssignment[]   @relation("ConversationAssignmentActor")
+  koralInternalNotes                ConversationInternalNote[]
+  koralConversationEvents           ConversationEvent[]
 
   @@map("users")
 }
@@ -102,6 +107,254 @@ model AdminIdempotency {
   @@unique([actorUserId, operation, key])
   @@index([createdAt])
   @@map("admin_idempotency")
+}
+
+// ---------------------------------------------------------------------------
+// ASODEF Connect / Koral conversation foundation
+//
+// Channel-neutral by design: a Conversation is never a WhatsApp record. The
+// adapter-facing external identifiers live on ChannelSession/Message and all
+// human operations are captured in the append-only ConversationEvent stream.
+// ---------------------------------------------------------------------------
+
+enum ConversationStatus {
+  AI_ACTIVE
+  WAITING_USER
+  HUMAN_REQUIRED
+  HUMAN_ACTIVE
+  WAITING_INTERNAL
+  RESOLVED
+  CLOSED
+
+  @@map("conversation_status")
+}
+
+enum ConversationChannel {
+  WEB
+  WHATSAPP
+  INSTAGRAM
+  MESSENGER
+  FUTURE
+
+  @@map("conversation_channel")
+}
+
+enum ConversationParticipantKind {
+  EXTERNAL
+  HUMAN_AGENT
+  KORAL
+  SYSTEM
+
+  @@map("conversation_participant_kind")
+}
+
+enum ConversationMessageDirection {
+  INBOUND
+  OUTBOUND
+  INTERNAL
+
+  @@map("conversation_message_direction")
+}
+
+enum ConversationMessageStatus {
+  RECEIVED
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+
+  @@map("conversation_message_status")
+}
+
+enum ConversationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@map("conversation_priority")
+}
+
+model Conversation {
+  id            String               @id @default(uuid()) @db.Uuid
+  status        ConversationStatus   @default(AI_ACTIVE)
+  priority      ConversationPriority @default(NORMAL)
+  version       Int                  @default(0)
+  subject       String?
+  lastMessageAt DateTime?            @map("last_message_at") @db.Timestamptz(3)
+  slaDueAt      DateTime?            @map("sla_due_at") @db.Timestamptz(3)
+  resolvedAt    DateTime?            @map("resolved_at") @db.Timestamptz(3)
+  closedAt      DateTime?            @map("closed_at") @db.Timestamptz(3)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  participants    ConversationParticipant[]
+  messages        ConversationMessage[]
+  channelSessions ConversationChannelSession[]
+  assignments     ConversationAssignment[]
+  internalNotes   ConversationInternalNote[]
+  tags            ConversationTag[]
+  events          ConversationEvent[]
+
+  @@index([status, priority, updatedAt])
+  @@index([slaDueAt])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  conversationId     String                      @map("conversation_id") @db.Uuid
+  kind               ConversationParticipantKind
+  channel            ConversationChannel?
+  externalIdentityId String?                     @map("external_identity_id")
+  displayName        String?                     @map("display_name")
+  userId             String?                     @map("user_id") @db.Uuid
+  createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages     ConversationMessage[]
+
+  @@unique([conversationId, channel, externalIdentityId])
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model ConversationChannelSession {
+  id                String              @id @default(uuid()) @db.Uuid
+  conversationId    String              @map("conversation_id") @db.Uuid
+  channel           ConversationChannel
+  externalSessionId String              @map("external_session_id")
+  adapterVersion    String              @map("adapter_version")
+  channelMetadata   Json?               @map("channel_metadata")
+  openedAt          DateTime            @default(now()) @map("opened_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime            @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  closedAt          DateTime?           @map("closed_at") @db.Timestamptz(3)
+
+  conversation Conversation          @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  messages     ConversationMessage[]
+
+  @@unique([channel, externalSessionId])
+  @@index([conversationId, lastSeenAt])
+  @@map("conversation_channel_sessions")
+}
+
+model ConversationMessage {
+  id                String                       @id @default(uuid()) @db.Uuid
+  conversationId    String                       @map("conversation_id") @db.Uuid
+  channelSessionId  String?                      @map("channel_session_id") @db.Uuid
+  participantId     String?                      @map("participant_id") @db.Uuid
+  direction         ConversationMessageDirection
+  status            ConversationMessageStatus
+  externalMessageId String?                      @map("external_message_id")
+  contentType       String                       @map("content_type")
+  body              String?
+  replyToMessageId  String?                      @map("reply_to_message_id") @db.Uuid
+  correlationId     String?                      @map("correlation_id")
+  occurredAt        DateTime                     @map("occurred_at") @db.Timestamptz(3)
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation   Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  channelSession ConversationChannelSession? @relation(fields: [channelSessionId], references: [id], onDelete: Restrict)
+  participant    ConversationParticipant?    @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  replyToMessage ConversationMessage?        @relation("ConversationMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies        ConversationMessage[]       @relation("ConversationMessageReply")
+  attachments    ConversationAttachment[]
+
+  @@unique([channelSessionId, externalMessageId])
+  @@index([conversationId, occurredAt])
+  @@index([correlationId])
+  @@map("conversation_messages")
+}
+
+model ConversationAttachment {
+  id                String   @id @default(uuid()) @db.Uuid
+  messageId         String   @map("message_id") @db.Uuid
+  mediaType         String   @map("media_type")
+  fileName          String?  @map("file_name")
+  byteSize          Int?     @map("byte_size")
+  checksumSha256    String?  @map("checksum_sha256")
+  storageKey        String?  @map("storage_key")
+  externalReference String?  @map("external_reference")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message ConversationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("conversation_attachments")
+}
+
+model ConversationAssignment {
+  id               String               @id @default(uuid()) @db.Uuid
+  conversationId   String               @map("conversation_id") @db.Uuid
+  assigneeUserId   String               @map("assignee_user_id") @db.Uuid
+  assignedByUserId String               @map("assigned_by_user_id") @db.Uuid
+  priority         ConversationPriority
+  reason           String?
+  assignedAt       DateTime             @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  releasedAt       DateTime?            @map("released_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  assignee     User         @relation("ConversationAssignmentAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  assignedBy   User         @relation("ConversationAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, releasedAt])
+  @@index([assigneeUserId, releasedAt])
+  @@map("conversation_assignments")
+}
+
+model ConversationInternalNote {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  authorUserId   String   @map("author_user_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key")
+  body           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  author       User         @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@map("conversation_internal_notes")
+}
+
+model ConversationTag {
+  conversationId String   @map("conversation_id") @db.Uuid
+  tag            String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tag])
+  @@index([tag])
+  @@map("conversation_tags")
+}
+
+model ConversationEvent {
+  id             String           @id @default(uuid()) @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  eventType      String           @map("event_type")
+  actorUserId    String?          @map("actor_user_id") @db.Uuid
+  requestId      String?          @map("request_id")
+  correlationId  String?          @map("correlation_id")
+  idempotencyKey String?          @map("idempotency_key")
+  previousStatus String?          @map("previous_status")
+  newStatus      String?          @map("new_status")
+  result         AuditEventResult @default(SUCCESS)
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  actor        User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([correlationId])
+  @@map("conversation_events")
 }
 
 enum AdminMfaCredentialStatus {
@@ -491,7 +744,7 @@ model SecurityEvent {
   user        User?    @relation("SecurityEventLegacyUser", fields: [userId], references: [id], onDelete: SetNull)
   actorUser   User?    @relation("SecurityEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
   subjectUser User?    @relation("SecurityEventSubject", fields: [subjectUserId], references: [id], onDelete: SetNull)
-  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([actorUserId, createdAt])
@@ -991,42 +1244,42 @@ enum AuditEventResult {
 // (payment_order_id always set, legal_document_version_id always
 // null), so this is a safe, non-destructive addition.
 model AuditLog {
-  id                     String      @id @default(uuid()) @db.Uuid
-  paymentOrderId         String?     @map("payment_order_id") @db.Uuid
-  legalDocumentVersionId String?     @map("legal_document_version_id") @db.Uuid
+  id                     String            @id @default(uuid()) @db.Uuid
+  paymentOrderId         String?           @map("payment_order_id") @db.Uuid
+  legalDocumentVersionId String?           @map("legal_document_version_id") @db.Uuid
   // US-048: generalized to a 3rd domain, same "real per-domain FK, not
   // a polymorphic pair" pattern as the other two.
-  dataSubjectRequestId   String?     @map("data_subject_request_id") @db.Uuid
+  dataSubjectRequestId   String?           @map("data_subject_request_id") @db.Uuid
   // US-050: generalized to a 4th domain, same pattern.
-  pqrCaseId              String?     @map("pqr_case_id") @db.Uuid
+  pqrCaseId              String?           @map("pqr_case_id") @db.Uuid
   // US-051: generalized to a 5th domain, same pattern.
-  opportunityId          String?     @map("opportunity_id") @db.Uuid
+  opportunityId          String?           @map("opportunity_id") @db.Uuid
   // US-056: generalized to a 6th domain, same pattern.
-  refundId               String?     @map("refund_id") @db.Uuid
+  refundId               String?           @map("refund_id") @db.Uuid
   // US-074: generalized to a 7th domain, same pattern.
-  companyId              String?     @map("company_id") @db.Uuid
+  companyId              String?           @map("company_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
   // are always a human admin acting through the API.
-  actorUserId            String?     @map("actor_user_id") @db.Uuid
+  actorUserId            String?           @map("actor_user_id") @db.Uuid
   action                 String
   result                 AuditEventResult?
   reason                 String?
-  requestId              String?     @map("request_id")
-  correlationId          String?     @map("correlation_id")
-  ipAddress              String?     @map("ip_address")
-  userAgent              String?     @map("user_agent")
-  previousStatus         String?     @map("previous_status")
-  newStatus              String?     @map("new_status")
+  requestId              String?           @map("request_id")
+  correlationId          String?           @map("correlation_id")
+  ipAddress              String?           @map("ip_address")
+  userAgent              String?           @map("user_agent")
+  previousStatus         String?           @map("previous_status")
+  newStatus              String?           @map("new_status")
   // False for the negative-case AC: an attempted transition that was
   // blocked (e.g. an invalid regression) still gets an audit row -
   // "indicating no-op, not silence" - distinguished from a real
   // transition by this flag rather than by parsing `action` text.
-  applied                Boolean     @default(true)
+  applied                Boolean           @default(true)
   source                 AuditSource
   metadata               Json?
-  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   paymentOrder         PaymentOrder?         @relation(fields: [paymentOrderId], references: [id], onDelete: Restrict)
   legalDocumentVersion LegalDocumentVersion? @relation(fields: [legalDocumentVersionId], references: [id], onDelete: Restrict)

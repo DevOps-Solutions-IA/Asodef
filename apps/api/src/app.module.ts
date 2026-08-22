@@ -35,6 +35,7 @@ import { ReportsModule } from "./modules/reports/reports.module";
 import { SelfServiceModule } from "./modules/self-service/self-service.module";
 import { MasterModule } from "./modules/master/master.module";
 import { AdminSystemModule } from "./modules/admin-system/admin-system.module";
+import { KoralConversationsModule } from "./modules/koral-conversations/koral-conversations.module";
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { AdminSystemModule } from "./modules/admin-system/admin-system.module";
     SelfServiceModule,
     MasterModule,
     AdminSystemModule,
+    KoralConversationsModule,
   ],
   controllers: [AppController],
   providers: [],
