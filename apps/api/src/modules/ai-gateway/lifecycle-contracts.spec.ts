@@ -1,5 +1,12 @@
-import { AiEvalPolicy, type AiEvalResult, type AiEvalSuite } from "./ai-eval-contracts";
-import { KnowledgePublicationPolicy, type KnowledgePublication } from "./knowledge-contracts";
+import {
+  AiEvalPolicy,
+  type AiEvalResult,
+  type AiEvalSuite,
+} from "./ai-eval-contracts";
+import {
+  KnowledgePublicationPolicy,
+  type KnowledgePublication,
+} from "./knowledge-contracts";
 
 describe("Knowledge and AI eval lifecycle contracts", () => {
   it("allows Koral to consume only non-empty published knowledge", () => {
@@ -16,8 +23,12 @@ describe("Knowledge and AI eval lifecycle contracts", () => {
       publishedKnowledgeVersionIds: ["version-1"],
     };
     expect(() => policy.assertKoralReadable(publication)).not.toThrow();
-    expect(() => policy.assertKoralReadable({ ...publication, status: "APPROVED" })).toThrow("KNOWLEDGE_NOT_PUBLISHED");
-    expect(() => policy.assertTransition("DRAFT", "PUBLISHED")).toThrow("INVALID_KNOWLEDGE_TRANSITION");
+    expect(() =>
+      policy.assertKoralReadable({ ...publication, status: "APPROVED" }),
+    ).toThrow("KNOWLEDGE_NOT_PUBLISHED");
+    expect(() => policy.assertTransition("DRAFT", "PUBLISHED")).toThrow(
+      "INVALID_KNOWLEDGE_TRANSITION",
+    );
   });
 
   it("blocks model publication evidence when a required safety dimension fails", () => {

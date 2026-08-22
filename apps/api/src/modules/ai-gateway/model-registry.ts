@@ -33,14 +33,19 @@ export class ModelRegistry {
     for (const profile of profiles) {
       const key = `${profile.id}@${profile.version}`;
       if (versions.has(key)) throw new Error(`DUPLICATE_MODEL_PROFILE:${key}`);
-      if (profile.version < 1 || profile.maxInputTokens < 1 || profile.maxOutputTokens < 1) {
+      if (
+        profile.version < 1 ||
+        profile.maxInputTokens < 1 ||
+        profile.maxOutputTokens < 1
+      ) {
         throw new Error(`INVALID_MODEL_PROFILE:${key}`);
       }
       if (
         !profile.primaryModel.trim() ||
         profile.allowedProviders.length === 0 ||
         profile.budgetPolicy.maxCostMicrosPerRequest < 0 ||
-        profile.budgetPolicy.maxCostMicrosPerDay < profile.budgetPolicy.maxCostMicrosPerRequest
+        profile.budgetPolicy.maxCostMicrosPerDay <
+          profile.budgetPolicy.maxCostMicrosPerRequest
       ) {
         throw new Error(`INVALID_MODEL_PROFILE:${key}`);
       }
@@ -57,12 +62,15 @@ export class ModelRegistry {
     const matches = this.profiles
       .filter((profile) => profile.id === id && profile.status === "PUBLISHED")
       .sort((left, right) => right.version - left.version);
-    if (matches.length === 0) throw new Error(`MODEL_PROFILE_NOT_PUBLISHED:${id}`);
+    if (matches.length === 0)
+      throw new Error(`MODEL_PROFILE_NOT_PUBLISHED:${id}`);
     return matches[0]!;
   }
 }
 
-const MODEL_PROFILE_TRANSITIONS: Readonly<Record<ConfigurationStatus, readonly ConfigurationStatus[]>> = {
+const MODEL_PROFILE_TRANSITIONS: Readonly<
+  Record<ConfigurationStatus, readonly ConfigurationStatus[]>
+> = {
   DRAFT: ["REVIEW"],
   REVIEW: ["DRAFT", "PUBLISHED"],
   PUBLISHED: ["RETIRED", "ROLLED_BACK"],
@@ -71,7 +79,10 @@ const MODEL_PROFILE_TRANSITIONS: Readonly<Record<ConfigurationStatus, readonly C
 };
 
 export class ModelProfileLifecyclePolicy {
-  assertTransition(current: ConfigurationStatus, next: ConfigurationStatus): void {
+  assertTransition(
+    current: ConfigurationStatus,
+    next: ConfigurationStatus,
+  ): void {
     if (!MODEL_PROFILE_TRANSITIONS[current].includes(next)) {
       throw new Error(`INVALID_MODEL_PROFILE_TRANSITION:${current}:${next}`);
     }

@@ -1,13 +1,39 @@
 import type { DataClassification } from "./data-classification";
-import type { GovernedToolContract, MinimumIdentityLevel } from "./tool-gateway.types";
-import type { ConfigurationStatus } from "./ai-contracts";
+import type {
+  GovernedToolContract,
+  MinimumIdentityLevel,
+  ToolStatus,
+} from "./tool-gateway.types";
 
 const STANDARD_ERRORS = [
-  { code: "INVALID_INPUT", description: "Input does not satisfy the published schema.", retryable: false },
-  { code: "FORBIDDEN", description: "The authenticated actor is not authorized for this operation.", retryable: false },
-  { code: "NOT_FOUND", description: "The requested business resource was not found or is outside scope.", retryable: false },
-  { code: "CONFLICT", description: "The requested mutation conflicts with current state or version.", retryable: false },
-  { code: "RATE_LIMITED", description: "The governed operation rate limit was reached.", retryable: true },
+  {
+    code: "INVALID_INPUT",
+    description: "Input does not satisfy the published schema.",
+    retryable: false,
+  },
+  {
+    code: "FORBIDDEN",
+    description:
+      "The authenticated actor is not authorized for this operation.",
+    retryable: false,
+  },
+  {
+    code: "NOT_FOUND",
+    description:
+      "The requested business resource was not found or is outside scope.",
+    retryable: false,
+  },
+  {
+    code: "CONFLICT",
+    description:
+      "The requested mutation conflicts with current state or version.",
+    retryable: false,
+  },
+  {
+    code: "RATE_LIMITED",
+    description: "The governed operation rate limit was reached.",
+    retryable: true,
+  },
 ] as const;
 
 interface GovernedToolDefinition {
@@ -22,10 +48,12 @@ interface GovernedToolDefinition {
   minimumIdentityLevel?: MinimumIdentityLevel;
   confirmationRequired?: boolean;
   redactFields?: readonly string[];
-  status?: ConfigurationStatus;
+  status?: ToolStatus;
 }
 
-export function defineGovernedTool(definition: GovernedToolDefinition): GovernedToolContract {
+export function defineGovernedTool(
+  definition: GovernedToolDefinition,
+): GovernedToolContract {
   const idempotency: GovernedToolContract["idempotency"] = definition.mutation
     ? {
         required: true,
@@ -43,11 +71,19 @@ export function defineGovernedTool(definition: GovernedToolDefinition): Governed
     errors: STANDARD_ERRORS,
     permission: definition.permission,
     minimumIdentityLevel:
-      definition.minimumIdentityLevel ?? (definition.mutation ? "MFA_VERIFIED" : "AUTHENTICATED"),
+      definition.minimumIdentityLevel ??
+      (definition.mutation ? "MFA_VERIFIED" : "AUTHENTICATED"),
     confirmationRequired: definition.confirmationRequired ?? false,
-    rateLimit: { policyKey: `ai:tool:${definition.name}`, scope: "ACTOR_TOOL", failClosed: true },
+    rateLimit: {
+      policyKey: `ai:tool:${definition.name}`,
+      scope: "ACTOR_TOOL",
+      failClosed: true,
+    },
     idempotency,
-    timeout: { milliseconds: definition.mutation ? 10_000 : 5_000, maxAttempts: 1 },
+    timeout: {
+      milliseconds: definition.mutation ? 10_000 : 5_000,
+      maxAttempts: 1,
+    },
     audit: {
       event: `ai.tool.${definition.name}`,
       recordActor: true,

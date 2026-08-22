@@ -1,6 +1,10 @@
 import { ModelRegistry } from "./model-registry";
 import { publishedProfile } from "./model-registry.spec";
-import { OpenRouterProvider, type OpenRouterTransport, type PricingEstimator } from "./openrouter-provider";
+import {
+  OpenRouterProvider,
+  type OpenRouterTransport,
+  type PricingEstimator,
+} from "./openrouter-provider";
 import type { UsageMeter, UsageRecord } from "./policies";
 
 describe("OpenRouterProvider", () => {
@@ -8,7 +12,12 @@ describe("OpenRouterProvider", () => {
     content: "ok",
     structuredOutput: { answer: "ok" },
     toolCalls: [],
-    usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12, costMicros: 100 },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 2,
+      totalTokens: 12,
+      costMicros: 100,
+    },
   };
   const request = {
     version: "v1" as const,
@@ -17,16 +26,28 @@ describe("OpenRouterProvider", () => {
     outputSchema: { type: "object", additionalProperties: false },
   };
   const context = {
-    actorId: "actor-1",
-    permissions: ["crm.read"],
-    identityLevel: "MFA_VERIFIED" as const,
-    correlationId: "correlation-1",
-    purpose: "crm-assistance",
-    dataClassification: "PERSONAL" as const,
-    consentVerified: true,
+    version: "v1" as const,
+    identity: {
+      principalType: "KORAL" as const,
+      principalId: "koral",
+      effectiveActorId: "actor-1",
+      permissions: ["crm.read"],
+      identityLevel: "MFA_VERIFIED" as const,
+    },
+    audit: { correlationId: "correlation-1", conversationId: "conversation-1" },
+    policy: {
+      purpose: "crm-assistance",
+      consentPurposeKeys: ["crm-assistance"],
+      piiPolicy: "MINIMIZE" as const,
+      dataClassification: "PERSONAL" as const,
+      consentVerified: true,
+    },
   };
 
-  function buildProvider(transport: OpenRouterTransport, pricing: PricingEstimator = { estimateCostMicros: () => 100 }) {
+  function buildProvider(
+    transport: OpenRouterTransport,
+    pricing: PricingEstimator = { estimateCostMicros: () => 100 },
+  ) {
     const records: UsageRecord[] = [];
     const meter: UsageMeter = {
       currentDailyCostMicros: async () => 0,
@@ -34,7 +55,15 @@ describe("OpenRouterProvider", () => {
         records.push(record);
       },
     };
-    return { provider: new OpenRouterProvider(transport, new ModelRegistry([publishedProfile]), meter, pricing), records };
+    return {
+      provider: new OpenRouterProvider(
+        transport,
+        new ModelRegistry([publishedProfile]),
+        meter,
+        pricing,
+      ),
+      records,
+    };
   }
 
   it("routes through the credential-free transport contract and records governed usage", async () => {
@@ -46,15 +75,22 @@ describe("OpenRouterProvider", () => {
       },
     });
     await expect(provider.infer(request, context)).resolves.toMatchObject({
-      provider: "openrouter",
-      model: publishedProfile.primaryModel,
-      correlationId: context.correlationId,
-      usage: response.usage,
+      ok: true,
+      response: {
+        provider: "openrouter",
+        model: publishedProfile.primaryModel,
+        correlationId: context.audit.correlationId,
+        usage: response.usage,
+      },
     });
     expect(calls).toHaveLength(1);
     expect(JSON.stringify(calls[0])).not.toMatch(/credential|api.?key|secret/i);
     expect(records).toEqual([
-      expect.objectContaining({ actorId: context.actorId, modelProfileId: publishedProfile.id, usage: response.usage }),
+      expect.objectContaining({
+        actorId: context.identity.effectiveActorId,
+        modelProfileId: publishedProfile.id,
+        usage: response.usage,
+      }),
     ]);
   });
 
@@ -67,19 +103,40 @@ describe("OpenRouterProvider", () => {
         return response;
       },
     });
-    await expect(provider.infer(request, context)).resolves.toMatchObject({ model: publishedProfile.fallbackModels[0] });
-    expect(models).toEqual([publishedProfile.primaryModel, publishedProfile.fallbackModels[0]]);
+    await expect(provider.infer(request, context)).resolves.toMatchObject({
+      ok: true,
+      response: { model: publishedProfile.fallbackModels[0] },
+    });
+    expect(models).toEqual([
+      publishedProfile.primaryModel,
+      publishedProfile.fallbackModels[0],
+    ]);
   });
 
   it("fails before provider invocation when classification or pricing policy denies the request", async () => {
     let invocations = 0;
     const transport = { complete: async () => (invocations++, response) };
     const { provider } = buildProvider(transport);
-    await expect(provider.infer(request, { ...context, consentVerified: false })).rejects.toThrow("CONSENT_REQUIRED");
+    await expect(
+      provider.infer(request, {
+        ...context,
+        policy: { ...context.policy, consentVerified: false },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "DATA_CLASSIFICATION_DENIED", retryable: false },
+    });
     expect(invocations).toBe(0);
 
-    const unknownPricing = buildProvider(transport, { estimateCostMicros: () => null }).provider;
-    await expect(unknownPricing.infer(request, context)).rejects.toThrow("PRICING_UNKNOWN");
+    const unknownPricing = buildProvider(transport, {
+      estimateCostMicros: () => null,
+    }).provider;
+    await expect(unknownPricing.infer(request, context)).resolves.toMatchObject(
+      {
+        ok: false,
+        error: { code: "BUDGET_EXCEEDED", retryable: false },
+      },
+    );
     expect(invocations).toBe(0);
   });
 
@@ -90,6 +147,9 @@ describe("OpenRouterProvider", () => {
         toolCalls: [{ id: "call-1", name: "undeclared_tool", arguments: {} }],
       }),
     });
-    await expect(provider.infer(request, context)).rejects.toThrow("TOOL_POLICY_DENIED:UNDECLARED_TOOL");
+    await expect(provider.infer(request, context)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "TOOL_POLICY_DENIED", retryable: false },
+    });
   });
 });

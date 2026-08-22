@@ -61,13 +61,20 @@ export interface AiEvalSuite {
 }
 
 export class AiEvalPolicy {
-  assertPublishable(suite: AiEvalSuite, results: readonly AiEvalResult[]): void {
-    if (suite.status !== "PUBLISHED") throw new Error("EVAL_SUITE_NOT_PUBLISHED");
+  assertPublishable(
+    suite: AiEvalSuite,
+    results: readonly AiEvalResult[],
+  ): void {
+    if (suite.status !== "PUBLISHED")
+      throw new Error("EVAL_SUITE_NOT_PUBLISHED");
     if (results.length === 0) throw new Error("EVAL_RESULTS_REQUIRED");
-    const passRate = results.filter((result) => result.passed).length / results.length;
-    if (passRate < suite.requiredPassRate) throw new Error("EVAL_PASS_RATE_NOT_MET");
+    const passRate =
+      results.filter((result) => result.passed).length / results.length;
+    if (passRate < suite.requiredPassRate)
+      throw new Error("EVAL_PASS_RATE_NOT_MET");
     const blockingFailure = results.some(
-      (result) => !result.passed && suite.blockingDimensions.includes(result.dimension),
+      (result) =>
+        !result.passed && suite.blockingDimensions.includes(result.dimension),
     );
     if (blockingFailure) throw new Error("EVAL_BLOCKING_DIMENSION_FAILED");
   }

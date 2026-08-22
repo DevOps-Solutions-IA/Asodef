@@ -44,6 +44,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@asodef/connect-contracts": "workspace:*",
     "@asodef/config": "workspace:*",
     "@asodef/payments": "workspace:*",
     "@nestjs/common": "^11.1.18",

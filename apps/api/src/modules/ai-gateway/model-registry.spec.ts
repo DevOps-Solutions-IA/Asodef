@@ -1,4 +1,8 @@
-import { ModelProfileLifecyclePolicy, ModelRegistry, type ModelProfile } from "./model-registry";
+import {
+  ModelProfileLifecyclePolicy,
+  ModelRegistry,
+  type ModelProfile,
+} from "./model-registry";
 
 export const publishedProfile: ModelProfile = {
   id: "koral-crm",
@@ -33,22 +37,38 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry([
       { ...publishedProfile, status: "RETIRED" },
       { ...publishedProfile, version: 2, primaryModel: "vendor/model-v2" },
-      { ...publishedProfile, version: 3, status: "REVIEW", primaryModel: "vendor/model-v3" },
+      {
+        ...publishedProfile,
+        version: 3,
+        status: "REVIEW",
+        primaryModel: "vendor/model-v3",
+      },
     ]);
-    expect(registry.getPublished("koral-crm")).toMatchObject({ version: 2, primaryModel: "vendor/model-v2" });
+    expect(registry.getPublished("koral-crm")).toMatchObject({
+      version: 2,
+      primaryModel: "vendor/model-v2",
+    });
   });
 
   it("rejects duplicate profile versions and unpublished lookups", () => {
-    expect(() => new ModelRegistry([publishedProfile, publishedProfile])).toThrow("DUPLICATE_MODEL_PROFILE");
-    expect(() => new ModelRegistry([{ ...publishedProfile, status: "DRAFT" }]).getPublished("koral-crm")).toThrow(
-      "MODEL_PROFILE_NOT_PUBLISHED",
-    );
+    expect(
+      () => new ModelRegistry([publishedProfile, publishedProfile]),
+    ).toThrow("DUPLICATE_MODEL_PROFILE");
+    expect(() =>
+      new ModelRegistry([
+        { ...publishedProfile, status: "DRAFT" },
+      ]).getPublished("koral-crm"),
+    ).toThrow("MODEL_PROFILE_NOT_PUBLISHED");
   });
 
   it("enforces the review and publication lifecycle", () => {
     const lifecycle = new ModelProfileLifecyclePolicy();
     expect(() => lifecycle.assertTransition("DRAFT", "REVIEW")).not.toThrow();
-    expect(() => lifecycle.assertTransition("REVIEW", "PUBLISHED")).not.toThrow();
-    expect(() => lifecycle.assertTransition("DRAFT", "PUBLISHED")).toThrow("INVALID_MODEL_PROFILE_TRANSITION");
+    expect(() =>
+      lifecycle.assertTransition("REVIEW", "PUBLISHED"),
+    ).not.toThrow();
+    expect(() => lifecycle.assertTransition("DRAFT", "PUBLISHED")).toThrow(
+      "INVALID_MODEL_PROFILE_TRANSITION",
+    );
   });
 });

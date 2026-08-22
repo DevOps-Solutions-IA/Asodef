@@ -49,7 +49,8 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "list_pqr_cases",
-    description: "List PQR cases through the existing bounded administrative query.",
+    description:
+      "List PQR cases through the existing bounded administrative query.",
     permission: "pqr.manage",
     applicationServiceMethod: "PqrCasesService.list",
     mutation: false,
@@ -59,7 +60,15 @@ const BUSINESS_READ_TOOLS = [
       additionalProperties: false,
       properties: {
         status: {
-          enum: ["RECEIVED", "ASSIGNED", "IN_REVIEW", "INFORMATION_REQUIRED", "RESOLVED", "CLOSED", "REOPENED"],
+          enum: [
+            "RECEIVED",
+            "ASSIGNED",
+            "IN_REVIEW",
+            "INFORMATION_REQUIRED",
+            "RESOLVED",
+            "CLOSED",
+            "REOPENED",
+          ],
         },
         page: { type: "integer", minimum: 1 },
         pageSize: { type: "integer", minimum: 1, maximum: 100 },
@@ -81,7 +90,8 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "search_payment_orders",
-    description: "Search payment orders read-only through the existing administrative service.",
+    description:
+      "Search payment orders read-only through the existing administrative service.",
     permission: "payments.read",
     applicationServiceMethod: "PaymentOrdersService.search",
     mutation: false,
@@ -111,7 +121,8 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "get_payment_order",
-    description: "Read one payment order through the existing administrative service.",
+    description:
+      "Read one payment order through the existing administrative service.",
     permission: "payments.read",
     applicationServiceMethod: "PaymentOrdersService.findByIdForAdmin",
     mutation: false,
@@ -122,7 +133,8 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "search_consent_records",
-    description: "Search consent evidence through the existing administrative service.",
+    description:
+      "Search consent evidence through the existing administrative service.",
     permission: "data.manage",
     applicationServiceMethod: "ConsentService.search",
     mutation: false,
@@ -144,7 +156,8 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "get_consent_record",
-    description: "Read one consent evidence record through the existing ConsentService.",
+    description:
+      "Read one consent evidence record through the existing ConsentService.",
     permission: "data.manage",
     applicationServiceMethod: "ConsentService.getDetail",
     mutation: false,
@@ -156,20 +169,23 @@ const BUSINESS_READ_TOOLS = [
   }),
   defineGovernedTool({
     name: "list_report_definitions",
-    description: "List available report definitions without running or exporting a report.",
+    description:
+      "List available report definitions without running or exporting a report.",
     permission: "reports.read",
     applicationServiceMethod: "ReportsService.listReports",
     mutation: false,
     dataClassification: "INTERNAL",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
     outputSchema: structuredOutput("Report definition list"),
   }),
 ] as const;
 
-export const TOOL_GATEWAY_CATALOG: readonly GovernedToolContract[] = Object.freeze([
-  ...Object.values(CRM_TOOL_CONTRACTS),
-  ...BUSINESS_READ_TOOLS,
-]);
+export const TOOL_GATEWAY_CATALOG: readonly GovernedToolContract[] =
+  Object.freeze([...Object.values(CRM_TOOL_CONTRACTS), ...BUSINESS_READ_TOOLS]);
 
 export interface ToolDomainDependency {
   domain: "PLANS" | "COMMUNICATIONS";
@@ -181,17 +197,22 @@ export interface ToolDomainDependency {
 /** These are deliberately not executable tools. The repository has no Plans
  * application service and Communications exposes only public unsubscribe;
  * inventing a callable implementation would bypass the approved boundaries. */
-export const TOOL_DOMAIN_DEPENDENCIES: readonly ToolDomainDependency[] = Object.freeze([
-  {
-    domain: "PLANS",
-    status: "BLOCKED",
-    reason: "No versioned Plans application-service contract exists in the current brownfield.",
-    requiredContract: "Plans read contract with RBAC, classification and published lifecycle semantics.",
-  },
-  {
-    domain: "COMMUNICATIONS",
-    status: "BLOCKED",
-    reason: "The current Communications controller only supports public unsubscribe; it is not a governed send API.",
-    requiredContract: "Authenticated Communications command contract with consent, suppression, idempotency and audit.",
-  },
-]);
+export const TOOL_DOMAIN_DEPENDENCIES: readonly ToolDomainDependency[] =
+  Object.freeze([
+    {
+      domain: "PLANS",
+      status: "BLOCKED",
+      reason:
+        "No versioned Plans application-service contract exists in the current brownfield.",
+      requiredContract:
+        "Plans read contract with RBAC, classification and published lifecycle semantics.",
+    },
+    {
+      domain: "COMMUNICATIONS",
+      status: "BLOCKED",
+      reason:
+        "The current Communications controller only supports public unsubscribe; it is not a governed send API.",
+      requiredContract:
+        "Authenticated Communications command contract with consent, suppression, idempotency and audit.",
+    },
+  ]);

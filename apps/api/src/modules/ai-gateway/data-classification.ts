@@ -1,12 +1,9 @@
-export const DATA_CLASSIFICATIONS = [
-  "PUBLIC",
-  "INTERNAL",
-  "PERSONAL",
-  "SENSITIVE",
-  "HIGHLY_SENSITIVE",
-] as const;
+import {
+  DATA_CLASSIFICATIONS,
+  type DataClassification,
+} from "@asodef/connect-contracts";
 
-export type DataClassification = (typeof DATA_CLASSIFICATIONS)[number];
+export { DATA_CLASSIFICATIONS, type DataClassification };
 
 const CLASSIFICATION_RANK: Readonly<Record<DataClassification, number>> = {
   PUBLIC: 0,
@@ -39,17 +36,28 @@ export class DataClassificationPolicy {
   evaluate(
     classification: DataClassification,
     policy: DataClassificationPolicyContract,
-    context: { purpose?: string; consentVerified: boolean; externalProvider: boolean },
+    context: {
+      purpose?: string;
+      consentVerified: boolean;
+      externalProvider: boolean;
+    },
   ): DataClassificationDecision {
-    if (policy.requirePurpose && !context.purpose?.trim()) return { allowed: false, reason: "PURPOSE_REQUIRED" };
-    if (policy.denied.includes(classification)) return { allowed: false, reason: "CLASSIFICATION_EXPLICITLY_DENIED" };
-    if (!policy.allowed.includes(classification)) return { allowed: false, reason: "CLASSIFICATION_NOT_ALLOWED" };
-    if (policy.requireConsentFor.includes(classification) && !context.consentVerified) {
+    if (policy.requirePurpose && !context.purpose?.trim())
+      return { allowed: false, reason: "PURPOSE_REQUIRED" };
+    if (policy.denied.includes(classification))
+      return { allowed: false, reason: "CLASSIFICATION_EXPLICITLY_DENIED" };
+    if (!policy.allowed.includes(classification))
+      return { allowed: false, reason: "CLASSIFICATION_NOT_ALLOWED" };
+    if (
+      policy.requireConsentFor.includes(classification) &&
+      !context.consentVerified
+    ) {
       return { allowed: false, reason: "CONSENT_REQUIRED" };
     }
     if (
       context.externalProvider &&
-      CLASSIFICATION_RANK[classification] > CLASSIFICATION_RANK[policy.maximumExternalClassification]
+      CLASSIFICATION_RANK[classification] >
+        CLASSIFICATION_RANK[policy.maximumExternalClassification]
     ) {
       return { allowed: false, reason: "EXTERNAL_PROVIDER_LIMIT_EXCEEDED" };
     }
@@ -59,9 +67,14 @@ export class DataClassificationPolicy {
   assertAllowed(
     classification: DataClassification,
     policy: DataClassificationPolicyContract,
-    context: { purpose?: string; consentVerified: boolean; externalProvider: boolean },
+    context: {
+      purpose?: string;
+      consentVerified: boolean;
+      externalProvider: boolean;
+    },
   ): void {
     const decision = this.evaluate(classification, policy, context);
-    if (!decision.allowed) throw new Error(`DATA_CLASSIFICATION_DENIED:${decision.reason}`);
+    if (!decision.allowed)
+      throw new Error(`DATA_CLASSIFICATION_DENIED:${decision.reason}`);
   }
 }

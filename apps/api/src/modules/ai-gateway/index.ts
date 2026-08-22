@@ -8,3 +8,4 @@ export * from "./policies";
 export * from "./tool-catalog";
 export * from "./tool-gateway.policy";
 export * from "./tool-gateway.types";
+export * from "./tool-registry";
