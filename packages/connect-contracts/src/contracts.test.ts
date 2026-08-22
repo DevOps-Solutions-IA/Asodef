@@ -5,6 +5,7 @@ import {
   KNOWLEDGE_STATUSES,
   TOOL_GATEWAY_CONTRACT,
   TOOL_STATUSES,
+  resolveGatewayIdentityLevel,
 } from "./index";
 
 describe("canonical ASODEF Connect contracts", () => {
@@ -40,5 +41,36 @@ describe("canonical ASODEF Connect contracts", () => {
         KNOWLEDGE_GATEWAY_CONTRACT,
       ]),
     ).not.toMatch(/OPENROUTER_API_KEY|credential|prisma|sql/i);
+  });
+
+  it("maps identity only from explicit authentication evidence", () => {
+    expect(
+      resolveGatewayIdentityLevel({
+        authenticated: false,
+        mfaVerified: true,
+        stepUpVerified: true,
+      }),
+    ).toBeNull();
+    expect(
+      resolveGatewayIdentityLevel({
+        authenticated: true,
+        mfaVerified: false,
+        stepUpVerified: false,
+      }),
+    ).toBe("AUTHENTICATED");
+    expect(
+      resolveGatewayIdentityLevel({
+        authenticated: true,
+        mfaVerified: true,
+        stepUpVerified: false,
+      }),
+    ).toBe("MFA_VERIFIED");
+    expect(
+      resolveGatewayIdentityLevel({
+        authenticated: true,
+        mfaVerified: true,
+        stepUpVerified: true,
+      }),
+    ).toBe("STEP_UP_VERIFIED");
   });
 });

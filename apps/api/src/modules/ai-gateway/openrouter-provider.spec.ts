@@ -42,6 +42,7 @@ describe("OpenRouterProvider", () => {
       dataClassification: "PERSONAL" as const,
       consentVerified: true,
     },
+    deadlineAt: "2026-08-22T20:00:00.000Z",
   };
 
   function buildProvider(

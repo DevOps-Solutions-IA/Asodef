@@ -14,6 +14,23 @@ export type DataClassification = (typeof DATA_CLASSIFICATIONS)[number];
 
 export type MinimumIdentityLevel =
   "AUTHENTICATED" | "MFA_VERIFIED" | "STEP_UP_VERIFIED";
+
+export interface GatewayIdentityEvidence {
+  authenticated: boolean;
+  mfaVerified: boolean;
+  stepUpVerified: boolean;
+}
+
+/** Maps explicit assurance evidence only. Channel-level VERIFIED, MATCHED or
+ * CLAIMED states must not be treated as authentication or MFA evidence. */
+export function resolveGatewayIdentityLevel(
+  evidence: GatewayIdentityEvidence,
+): MinimumIdentityLevel | null {
+  if (!evidence.authenticated) return null;
+  if (evidence.stepUpVerified) return "STEP_UP_VERIFIED";
+  if (evidence.mfaVerified) return "MFA_VERIFIED";
+  return "AUTHENTICATED";
+}
 export type GatewayPrincipalType = "KORAL" | "HUMAN_AGENT" | "SYSTEM";
 export type GatewayPiiPolicy = "DENY" | "MINIMIZE" | "ALLOW_SCOPED";
 
@@ -49,6 +66,8 @@ export interface GatewayRequestContext {
   identity: GatewayIdentityContext;
   audit: GatewayAuditContext;
   policy: GatewayPolicyContext;
+  /** Immutable orchestration deadline. Adapters may shorten, never extend it. */
+  deadlineAt: string;
 }
 
 export interface GatewayError<TCode extends string = string> {
@@ -67,7 +86,7 @@ export interface GatewayTimeout {
 export const GATEWAY_CONTEXT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["version", "identity", "audit", "policy"],
+  required: ["version", "identity", "audit", "policy", "deadlineAt"],
   properties: {
     version: { const: "v1" },
     identity: {
@@ -91,5 +110,6 @@ export const GATEWAY_CONTEXT_SCHEMA = Object.freeze({
         "dataClassification",
       ],
     },
+    deadlineAt: { type: "string", format: "date-time" },
   },
 });

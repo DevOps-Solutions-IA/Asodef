@@ -92,6 +92,7 @@ describe("Tool Gateway contracts", () => {
         dataClassification: "PERSONAL" as const,
         consentVerified: true,
       },
+      deadlineAt: "2026-08-22T20:00:00.000Z",
       confirmationGranted: true,
       rateLimitAllowed: true,
       idempotencyKey: "1234567890123456",

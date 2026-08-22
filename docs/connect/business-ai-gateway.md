@@ -9,29 +9,29 @@ registry; Koral owns conversation/orchestration state and imports the shared
 gateway interfaces. Neither side imports the other, preventing an
 `apps/api <-> Koral` cycle.
 
-PR #19's local `koral-conversations/contracts/gateway.contract.ts` is therefore
-an integration dependency to remove when PR #19 is resynchronized. Its flat
-actor context maps to the canonical `identity`, `audit` and `policy` sections;
-`agentProfileKey` maps to `modelProfileId`; and uppercase message roles are
-normalized to the canonical lowercase vocabulary by the Koral adapter. Koral's
-channel, handoff, conversation-state and orchestration contracts remain
-Koral-owned. No provider key crosses this boundary.
+PR #19 head `b756161` already replaced its duplicate gateways with Koral-named
+consumer adapters. Once this package is available on its branch, those adapters
+must import the canonical ports/results and map their context into canonical
+`identity`, `audit` and `policy` sections. `agentProfileKey` maps to
+`modelProfileId`. Koral's channel, handoff, conversation-state and orchestration
+contracts remain Koral-owned. No provider key crosses this boundary.
 
-| Concern            | PR #19 local contract                               | Canonical resolution                                                                       |
-| ------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `AiGateway`        | local request/result union                          | import canonical gateway; adapter maps `agentProfileKey` to `modelProfileId`               |
-| `ToolGateway`      | `toolKey`, flat context                             | import canonical versioned tool request and structured result                              |
-| `KnowledgeGateway` | collection keys and local result                    | import canonical published-publication retrieval boundary                                  |
-| identity           | actor type/id plus permissions                      | canonical principal plus mandatory effective actor and identity level                      |
-| audit/correlation  | correlation and conversation IDs mixed into context | canonical `audit` context with correlation, conversation, request and causation IDs        |
-| privacy            | consent keys and PII policy                         | canonical `policy` context also requires purpose, consent decision and data classification |
-| errors             | gateway-specific local unions                       | canonical discriminated results with normalized, retryable error codes                     |
-| timeouts           | absent                                              | canonical bounded timeout contract; runtime enforcement remains a next-wave gate           |
-| structured output  | AI-only response schema                             | canonical AI schema policy and published Tool input/output schemas                         |
+| Concern            | PR #19 head `b756161`                         | Canonical resolution                                                                                         |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `AiGateway`        | Koral consumer adapter                        | import canonical gateway/result; adapter maps `agentProfileKey` to `modelProfileId`                          |
+| `ToolGateway`      | Koral consumer adapter                        | import canonical versioned request/result; preserve confirmation and idempotency without mutation retries    |
+| `KnowledgeGateway` | temporary `KoralKnowledgeResolver`            | replace its structural port with the canonical published-publication gateway behind the Koral adapter        |
+| identity           | six-level resolved channel identity           | require effective authenticated actor evidence; `VERIFIED` never implies authentication or MFA               |
+| MFA / step-up      | no MFA-specific assurance state               | map only explicit auth evidence; fail closed for MFA tools unless a real authenticated session proves MFA    |
+| audit/correlation  | audit block plus resolved identity            | map correlation/conversation and effective actor; retain request/causation IDs when present                  |
+| privacy            | consent, purpose and classification           | map into canonical policy context; unknown consent/classification never becomes allowed                      |
+| errors             | Koral orchestration outcomes                  | adapt canonical discriminated errors; unknown canonical errors remain rejection                              |
+| timeouts           | immutable absolute `deadlineAt`               | propagate canonical absolute deadline; effective timeout is the shorter of deadline and gateway/tool timeout |
+| structured output  | Koral response schema and outbound validation | canonical gateway validates schemas; Koral independently validates the outbound response                     |
 
-PR #19 must not retain aliases with identical gateway names after adopting the
-package. Its orchestrator dependency interface may reference the imported
-types, while Koral-specific errors and state transitions remain local.
+PR #19 may retain Koral-named adapters and outcomes, but not generic structural
+aliases that redeclare canonical gateway shapes after adopting the package.
+Koral-specific errors and state transitions remain local.
 
 This contract layer is stacked on the resynchronized Phase 2 Business Core PR.
 It reuses the twelve CRM tool schemas and the existing CRM, Companies,
