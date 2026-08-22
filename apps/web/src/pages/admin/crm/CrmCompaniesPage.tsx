@@ -114,8 +114,9 @@ export function CrmCompaniesPage() {
   const canManageCompanies = hasPermission("companies.manage");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const companiesQuery = useQuery({ queryKey: queryKeys.admin.crm.companies(), queryFn: ({ signal }) => listCompanies(signal) });
-  const partnersQuery = useQuery({ queryKey: queryKeys.admin.crm.partners(), queryFn: ({ signal }) => listBusinessPartners(signal) });
+  const listFilters = { page: 1, pageSize: 100 };
+  const companiesQuery = useQuery({ queryKey: queryKeys.admin.crm.companies(listFilters), queryFn: ({ signal }) => listCompanies(listFilters, signal) });
+  const partnersQuery = useQuery({ queryKey: queryKeys.admin.crm.partners(listFilters), queryFn: ({ signal }) => listBusinessPartners(listFilters, signal) });
 
   return (
     <div className="flex flex-col gap-8">
@@ -137,11 +138,11 @@ export function CrmCompaniesPage() {
         {companiesQuery.isError && (
           <ErrorState description={getAdminErrorMessage(companiesQuery.error)} action={<Button onClick={() => companiesQuery.refetch()}>Reintentar</Button>} />
         )}
-        {companiesQuery.isSuccess && companiesQuery.data.length === 0 && (
+        {companiesQuery.isSuccess && companiesQuery.data.items.length === 0 && (
           <EmptyState title="No hay empresas registradas" description="Las empresas afiliadas aparecerán aquí una vez que se registren." />
         )}
 
-        {companiesQuery.isSuccess && companiesQuery.data.length > 0 && (
+        {companiesQuery.isSuccess && companiesQuery.data.items.length > 0 && (
           <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[640px] text-left text-sm">
               <caption className="sr-only">Lista de empresas</caption>
@@ -162,7 +163,7 @@ export function CrmCompaniesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {companiesQuery.data.map((company) => (
+                {companiesQuery.data.items.map((company) => (
                   <tr key={company.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <Link to={`/admin/crm/empresas/${company.id}`} className="font-medium text-brand-dark hover:underline">
@@ -192,11 +193,11 @@ export function CrmCompaniesPage() {
         {partnersQuery.isError && (
           <ErrorState description={getAdminErrorMessage(partnersQuery.error)} action={<Button onClick={() => partnersQuery.refetch()}>Reintentar</Button>} />
         )}
-        {partnersQuery.isSuccess && partnersQuery.data.length === 0 && (
+        {partnersQuery.isSuccess && partnersQuery.data.items.length === 0 && (
           <EmptyState title="No hay aliados registrados" description="Los aliados comerciales aparecerán aquí una vez que se registren." />
         )}
 
-        {partnersQuery.isSuccess && partnersQuery.data.length > 0 && (
+        {partnersQuery.isSuccess && partnersQuery.data.items.length > 0 && (
           <div className="overflow-x-auto rounded-2xl border border-border-soft bg-white shadow-e1">
             <table className="w-full min-w-[640px] text-left text-sm">
               <caption className="sr-only">Lista de aliados comerciales</caption>
@@ -217,7 +218,7 @@ export function CrmCompaniesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {partnersQuery.data.map((partner) => (
+                {partnersQuery.data.items.map((partner) => (
                   <tr key={partner.id} className="transition-colors duration-150 hover:bg-brand-dark-50/50">
                     <td className="px-4 py-3">
                       <Link to={`/admin/crm/aliados/${partner.id}`} className="font-medium text-brand-dark hover:underline">

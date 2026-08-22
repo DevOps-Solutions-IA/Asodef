@@ -18,11 +18,18 @@ export function ProspectsListPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("");
+  const [prospectPage, setProspectPage] = useState(1);
+  const [leadPage, setLeadPage] = useState(1);
   const [promotingLeadId, setPromotingLeadId] = useState<string | null>(null);
   const [documentOrNit, setDocumentOrNit] = useState("");
 
-  const prospectsQuery = useQuery({ queryKey: queryKeys.admin.crm.prospects(), queryFn: ({ signal }) => listProspects(signal) });
-  const leadsQuery = useQuery({ queryKey: queryKeys.admin.crm.leads(), queryFn: ({ signal }) => listLeads(signal) });
+  const prospectFilters = { page: prospectPage, pageSize: 20, search, stage: stageFilter || undefined };
+  const leadFilters = { page: leadPage, pageSize: 20, search };
+  const prospectsQuery = useQuery({
+    queryKey: queryKeys.admin.crm.prospects(prospectFilters),
+    queryFn: ({ signal }) => listProspects(prospectFilters, signal),
+  });
+  const leadsQuery = useQuery({ queryKey: queryKeys.admin.crm.leads(leadFilters), queryFn: ({ signal }) => listLeads(leadFilters, signal) });
 
   const promoteMutation = useMutation({
     mutationFn: (leadId: string) => promoteLead(leadId, { type: "COMPANY", documentOrNit }),
@@ -41,17 +48,8 @@ export function ProspectsListPage() {
     },
   });
 
-  const searchLower = search.trim().toLowerCase();
-  const filteredProspects = (prospectsQuery.data ?? []).filter((prospect) => {
-    if (stageFilter && prospect.stage !== stageFilter) return false;
-    if (!searchLower) return true;
-    return prospect.fullNameOrLegalName.toLowerCase().includes(searchLower) || prospect.documentOrNit.toLowerCase().includes(searchLower);
-  });
-
-  const filteredLeads = (leadsQuery.data ?? []).filter((lead) => {
-    if (!searchLower) return true;
-    return lead.fullName.toLowerCase().includes(searchLower) || lead.company.toLowerCase().includes(searchLower);
-  });
+  const filteredProspects = prospectsQuery.data?.items ?? [];
+  const filteredLeads = leadsQuery.data?.items ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -64,14 +62,14 @@ export function ProspectsListPage() {
           </label>
           <div className="relative">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-            <Input id="crm-search" type="search" placeholder="Nombre, empresa o documento" className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input id="crm-search" type="search" placeholder="Nombre, empresa o documento" className="pl-10" value={search} onChange={(event) => { setSearch(event.target.value); setProspectPage(1); setLeadPage(1); }} />
           </div>
         </div>
         <div>
           <label htmlFor="crm-stage-filter" className="mb-1.5 block text-sm font-medium text-text-main">
             Etapa (prospectos)
           </label>
-          <Select id="crm-stage-filter" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}>
+          <Select id="crm-stage-filter" value={stageFilter} onChange={(event) => { setStageFilter(event.target.value); setProspectPage(1); }}>
             <option value="">Todas</option>
             {(Object.keys(PIPELINE_STAGE_LABELS) as PipelineStage[]).map((stage) => (
               <option key={stage} value={stage}>
@@ -147,6 +145,13 @@ export function ProspectsListPage() {
           </div>
         )}
         {createOpportunityMutation.isError && <ErrorState description={getAdminErrorMessage(createOpportunityMutation.error)} />}
+        {prospectsQuery.data && prospectsQuery.data.total > prospectsQuery.data.pageSize && (
+          <div className="flex items-center justify-end gap-2" aria-label="Paginación de prospectos">
+            <Button size="sm" variant="outline" disabled={prospectPage === 1} onClick={() => setProspectPage((page) => page - 1)}>Anterior</Button>
+            <span className="text-sm text-text-muted">Página {prospectPage}</span>
+            <Button size="sm" variant="outline" disabled={prospectPage * prospectsQuery.data.pageSize >= prospectsQuery.data.total} onClick={() => setProspectPage((page) => page + 1)}>Siguiente</Button>
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="leads-heading" className="flex flex-col gap-3">
@@ -236,6 +241,13 @@ export function ProspectsListPage() {
           </div>
         )}
         {promoteMutation.isError && <ErrorState description={getAdminErrorMessage(promoteMutation.error)} />}
+        {leadsQuery.data && leadsQuery.data.total > leadsQuery.data.pageSize && (
+          <div className="flex items-center justify-end gap-2" aria-label="Paginación de leads">
+            <Button size="sm" variant="outline" disabled={leadPage === 1} onClick={() => setLeadPage((page) => page - 1)}>Anterior</Button>
+            <span className="text-sm text-text-muted">Página {leadPage}</span>
+            <Button size="sm" variant="outline" disabled={leadPage * leadsQuery.data.pageSize >= leadsQuery.data.total} onClick={() => setLeadPage((page) => page + 1)}>Siguiente</Button>
+          </div>
+        )}
       </section>
     </div>
   );

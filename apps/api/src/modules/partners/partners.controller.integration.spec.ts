@@ -17,6 +17,7 @@ describe("Business partner endpoints (integration, real HTTP)", () => {
   let passwordService: PasswordService;
   const createdUserIds: string[] = [];
   const createdPartnerIds: string[] = [];
+  const createdContactIds: string[] = [];
 
   let admin: { user: User; cookies: string[] };
   let noPermActor: { user: User; cookies: string[] };
@@ -41,6 +42,9 @@ describe("Business partner endpoints (integration, real HTTP)", () => {
   afterAll(async () => {
     if (createdPartnerIds.length > 0) {
       await prisma.businessPartner.deleteMany({ where: { id: { in: createdPartnerIds } } });
+    }
+    if (createdContactIds.length > 0) {
+      await prisma.commercialContact.deleteMany({ where: { id: { in: createdContactIds } } });
     }
     if (createdUserIds.length > 0) {
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -225,10 +229,57 @@ describe("Business partner endpoints (integration, real HTTP)", () => {
 
     const list = await request(app.getHttpServer()).get("/api/v1/admin/partners").set("Cookie", admin.cookies);
     expect(list.status).toBe(200);
-    expect(list.body.some((p: { id: string }) => p.id === partner.id)).toBe(true);
+    expect(list.body.items.some((p: { id: string }) => p.id === partner.id)).toBe(true);
 
     const found = await request(app.getHttpServer()).get(`/api/v1/admin/partners/${partner.id}`).set("Cookie", admin.cookies);
     expect(found.status).toBe(200);
     expect(found.body.id).toBe(partner.id);
+  });
+
+  it("filters and bounds the administrative partner list server-side", async () => {
+    const partner = await createPartner();
+    const filtered = await request(app.getHttpServer())
+      .get(`/api/v1/admin/partners?search=${encodeURIComponent(partner.nit)}&publicationStatus=UNPUBLISHED&pageSize=1`)
+      .set("Cookie", admin.cookies);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body).toMatchObject({ total: 1, pageSize: 1 });
+    expect(filtered.body.items[0].id).toBe(partner.id);
+    const invalid = await request(app.getHttpServer()).get("/api/v1/admin/partners?page=0").set("Cookie", admin.cookies);
+    expect(invalid.status).toBe(400);
+  });
+
+  it("rejects stale partner checklist updates with an explicit 409", async () => {
+    const partner = await createPartner();
+    const first = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/partners/${partner.id}/checks`)
+      .set("Cookie", admin.cookies)
+      .send({ contactConfirmed: true, expectedUpdatedAt: partner.updatedAt });
+    expect(first.status).toBe(200);
+    const stale = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/partners/${partner.id}/checks`)
+      .set("Cookie", admin.cookies)
+      .send({ coverageConfirmed: true, expectedUpdatedAt: partner.updatedAt });
+    expect(stale.status).toBe(409);
+    expect(stale.body.message).toContain("modificado por otra persona");
+  });
+
+  it("reuses CommercialContact for a partner contact and protects stale writes", async () => {
+    const partner = await createPartner();
+    const created = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/partners/${partner.id}/contact`)
+      .set("Cookie", admin.cookies)
+      .send({ fullName: "Contacto Aliado", role: "Comercial", email: "aliado-contacto@example.com", expectedUpdatedAt: partner.updatedAt });
+    expect(created.status).toBe(200);
+    createdContactIds.push(created.body.id);
+    const found = await request(app.getHttpServer()).get(`/api/v1/admin/partners/${partner.id}/contact`).set("Cookie", admin.cookies);
+    expect(found.status).toBe(200);
+    expect(found.body).toMatchObject({ id: created.body.id, fullName: "Contacto Aliado" });
+    expect((await prisma.businessPartner.findUniqueOrThrow({ where: { id: partner.id } })).contactConfirmed).toBe(true);
+
+    const stale = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/partners/${partner.id}/contact`)
+      .set("Cookie", admin.cookies)
+      .send({ fullName: "Cambio stale", phone: "3001234567", expectedUpdatedAt: partner.updatedAt });
+    expect(stale.status).toBe(409);
   });
 });

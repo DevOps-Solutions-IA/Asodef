@@ -60,8 +60,8 @@ describe("ProspectsListPage", () => {
 
   it("lists both Prospects and LeadSubmissions (AC1)", async () => {
     renderPage(buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.manage"] }), (url) => {
-      if (url.includes("/admin/prospects")) return jsonResponse(200, [buildProspect()]);
-      if (url.includes("/admin/leads")) return jsonResponse(200, [buildLead()]);
+      if (url.includes("/admin/prospects")) return jsonResponse(200, { items: [buildProspect()], total: 1, page: 1, pageSize: 20 });
+      if (url.includes("/admin/leads")) return jsonResponse(200, { items: [buildLead()], total: 1, page: 1, pageSize: 20 });
       return undefined;
     });
 
@@ -71,8 +71,8 @@ describe("ProspectsListPage", () => {
 
   it("shows a 'Promovido' badge instead of the promote action for an already-promoted lead", async () => {
     renderPage(buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.manage"] }), (url) => {
-      if (url.includes("/admin/prospects")) return jsonResponse(200, []);
-      if (url.includes("/admin/leads")) return jsonResponse(200, [buildLead({ prospectId: "prospect-1" })]);
+      if (url.includes("/admin/prospects")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+      if (url.includes("/admin/leads")) return jsonResponse(200, { items: [buildLead({ prospectId: "prospect-1" })], total: 1, page: 1, pageSize: 20 });
       return undefined;
     });
 
@@ -82,8 +82,8 @@ describe("ProspectsListPage", () => {
 
   it("Negative case (AC): an actor without crm.manage sees the promote action disabled", async () => {
     renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }), (url) => {
-      if (url.includes("/admin/prospects")) return jsonResponse(200, []);
-      if (url.includes("/admin/leads")) return jsonResponse(200, [buildLead()]);
+      if (url.includes("/admin/prospects")) return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
+      if (url.includes("/admin/leads")) return jsonResponse(200, { items: [buildLead()], total: 1, page: 1, pageSize: 20 });
       return undefined;
     });
 

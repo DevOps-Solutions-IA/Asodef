@@ -42,7 +42,7 @@ describe("OpportunitiesBoardPage", () => {
 
   it("renders a column per pipeline stage with the opportunity card in its current stage's column", async () => {
     renderBoard(buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.manage"] }), (url) => {
-      if (url.includes("/admin/opportunities")) return jsonResponse(200, [buildOpportunity({ stage: "NEGOTIATION" })]);
+      if (url.includes("/admin/opportunities")) return jsonResponse(200, { items: [buildOpportunity({ stage: "NEGOTIATION" })], total: 1, page: 1, pageSize: 100 });
       return undefined;
     });
 
@@ -54,7 +54,7 @@ describe("OpportunitiesBoardPage", () => {
   it("Example (AC): moving an opportunity from negotiation to legal_review calls the real API with the new stage", async () => {
     const opportunity = buildOpportunity({ stage: "NEGOTIATION" });
     const fetchMock = mockAuthFetch(buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["crm.manage"] }), (url, init) => {
-      if (url.includes("/admin/opportunities") && !url.includes("/stage")) return jsonResponse(200, [opportunity]);
+      if (url.includes("/admin/opportunities") && !url.includes("/stage")) return jsonResponse(200, { items: [opportunity], total: 1, page: 1, pageSize: 100 });
       if (url.includes("/stage") && init?.method === "POST") {
         return jsonResponse(200, { ...opportunity, stage: "LEGAL_REVIEW", warning: null });
       }
@@ -78,7 +78,7 @@ describe("OpportunitiesBoardPage", () => {
 
   it("Negative case (AC): an actor without crm.manage sees the board read-only, with the stage select disabled", async () => {
     renderBoard(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }), (url) => {
-      if (url.includes("/admin/opportunities")) return jsonResponse(200, [buildOpportunity()]);
+      if (url.includes("/admin/opportunities")) return jsonResponse(200, { items: [buildOpportunity()], total: 1, page: 1, pageSize: 100 });
       return undefined;
     });
 

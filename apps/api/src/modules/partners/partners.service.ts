@@ -1,13 +1,19 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { BusinessPartner } from "@prisma/client";
+import { Prisma, type BusinessPartner } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { CreateBusinessPartnerDto } from "./dto/create-business-partner.dto";
 import type { UpdateBusinessPartnerChecksDto } from "./dto/update-business-partner-checks.dto";
+import type { ListBusinessPartnersQueryDto } from "./dto/list-business-partners-query.dto";
+import type { PaginatedResponse } from "../../common/types/paginated-response.type";
+import type { PublishBusinessPartnerDto } from "./dto/publish-business-partner.dto";
+import type { UpsertPartnerContactDto } from "./dto/upsert-partner-contact.dto";
 import {
   toAdminBusinessPartnerResponse,
   toPublicBusinessPartnerResponse,
   type AdminBusinessPartnerResponse,
   type PublicBusinessPartnerResponse,
+  toAdminPartnerContactResponse,
+  type AdminPartnerContactResponse,
 } from "./partners.types";
 
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
@@ -65,9 +71,59 @@ export class PartnersService {
     return toAdminBusinessPartnerResponse(partner);
   }
 
-  async list(): Promise<AdminBusinessPartnerResponse[]> {
-    const partners = await this.prisma.businessPartner.findMany({ orderBy: { createdAt: "desc" } });
-    return partners.map(toAdminBusinessPartnerResponse);
+  async getContact(id: string): Promise<AdminPartnerContactResponse | null> {
+    const partner = await this.prisma.businessPartner.findUnique({ where: { id }, include: { commercialContact: true } });
+    if (!partner) throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    return partner.commercialContact ? toAdminPartnerContactResponse(partner.commercialContact) : null;
+  }
+
+  async upsertContact(id: string, dto: UpsertPartnerContactDto): Promise<AdminPartnerContactResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      const partner = await tx.businessPartner.findUnique({ where: { id } });
+      if (!partner) throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+      if (partner.updatedAt.getTime() !== new Date(dto.expectedUpdatedAt).getTime()) {
+        throw new ConflictException("El aliado fue modificado por otra persona. Recarga e intenta de nuevo.");
+      }
+      if (partner.commercialContactId) {
+        const updated = await tx.commercialContact.update({ where: { id: partner.commercialContactId }, data: { fullName: dto.fullName, role: dto.role, phone: dto.phone, email: dto.email } });
+        await tx.businessPartner.updateMany({ where: { id, updatedAt: partner.updatedAt }, data: { contactConfirmed: true } });
+        return toAdminPartnerContactResponse(updated);
+      }
+      const contact = await tx.commercialContact.create({ data: { fullName: dto.fullName, role: dto.role, phone: dto.phone, email: dto.email, isPrimary: true } });
+      const linked = await tx.businessPartner.updateMany({ where: { id, updatedAt: partner.updatedAt }, data: { commercialContactId: contact.id, contactConfirmed: true } });
+      if (linked.count === 0) throw new ConflictException("El aliado fue modificado por otra persona. Recarga e intenta de nuevo.");
+      return toAdminPartnerContactResponse(contact);
+    });
+  }
+
+  async list(query: ListBusinessPartnersQueryDto): Promise<PaginatedResponse<AdminBusinessPartnerResponse>> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const search = query.search?.trim();
+    const where: Prisma.BusinessPartnerWhereInput = {
+      status: query.status,
+      publicationStatus: query.publicationStatus,
+      ...(query.sector ? { sector: { equals: query.sector.trim(), mode: "insensitive" } } : {}),
+      ...(query.city ? { city: { equals: query.city.trim(), mode: "insensitive" } } : {}),
+      ...(search
+        ? {
+            OR: [
+              { tradeName: { contains: search, mode: "insensitive" } },
+              { legalName: { contains: search, mode: "insensitive" } },
+              { nit: { contains: search, mode: "insensitive" } },
+              { corporateEmail: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+    const sortBy = query.sortBy ?? "createdAt";
+    const sortOrder = query.sortOrder ?? "desc";
+    const orderBy = [{ [sortBy]: sortOrder }, { id: "asc" }] as Prisma.BusinessPartnerOrderByWithRelationInput[];
+    const [partners, total] = await Promise.all([
+      this.prisma.businessPartner.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.businessPartner.count({ where }),
+    ]);
+    return { items: partners.map(toAdminBusinessPartnerResponse), total, page, pageSize };
   }
 
   async updateChecks(id: string, dto: UpdateBusinessPartnerChecksDto): Promise<AdminBusinessPartnerResponse> {
@@ -76,8 +132,13 @@ export class PartnersService {
       throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
     }
 
-    const updated = await this.prisma.businessPartner.update({ where: { id }, data: { ...dto } });
-    return toAdminBusinessPartnerResponse(updated);
+    const { expectedUpdatedAt, ...checks } = dto;
+    if (expectedUpdatedAt) {
+      const changed = await this.prisma.businessPartner.updateMany({ where: { id, updatedAt: new Date(expectedUpdatedAt) }, data: checks });
+      if (changed.count === 0) throw new ConflictException("El aliado fue modificado por otra persona. Recarga e intenta de nuevo.");
+      return toAdminBusinessPartnerResponse(await this.prisma.businessPartner.findUniqueOrThrow({ where: { id } }));
+    }
+    return toAdminBusinessPartnerResponse(await this.prisma.businessPartner.update({ where: { id }, data: checks }));
   }
 
   /**
@@ -86,7 +147,7 @@ export class PartnersService {
    * Negative case (AC): any single missing check -> 409 naming exactly
    * that missing validation (not just a generic "incomplete" message).
    */
-  async publish(id: string): Promise<AdminBusinessPartnerResponse> {
+  async publish(id: string, dto: PublishBusinessPartnerDto): Promise<AdminBusinessPartnerResponse> {
     const partner = await this.prisma.businessPartner.findUnique({ where: { id } });
     if (!partner) {
       throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
@@ -97,8 +158,12 @@ export class PartnersService {
       throw new ConflictException(`No se puede publicar: faltan las siguientes validaciones: ${missing.join(", ")}.`);
     }
 
-    const updated = await this.prisma.businessPartner.update({ where: { id }, data: { publicationStatus: "PUBLISHED" } });
-    return toAdminBusinessPartnerResponse(updated);
+    if (dto.expectedUpdatedAt) {
+      const changed = await this.prisma.businessPartner.updateMany({ where: { id, updatedAt: new Date(dto.expectedUpdatedAt), ...Object.fromEntries(GATE_CHECKS.map(({ field }) => [field, true])) }, data: { publicationStatus: "PUBLISHED" } });
+      if (changed.count === 0) throw new ConflictException("El aliado fue modificado por otra persona. Recarga e intenta de nuevo.");
+      return toAdminBusinessPartnerResponse(await this.prisma.businessPartner.findUniqueOrThrow({ where: { id } }));
+    }
+    return toAdminBusinessPartnerResponse(await this.prisma.businessPartner.update({ where: { id }, data: { publicationStatus: "PUBLISHED" } }));
   }
 
   async listPublic(): Promise<PublicBusinessPartnerResponse[]> {
