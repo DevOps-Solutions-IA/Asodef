@@ -85,6 +85,7 @@ describe("validateEnv", () => {
     expect(() => validateEnv({
       ...VALID_ENV,
       SMTP_HOST: "smtp.asodef.com.co",
+      SMTP_CONNECT_HOST: "172.25.52.1",
       SMTP_PORT: "587",
       SMTP_USER: "mailer",
       SMTP_PASSWORD: "opaque",
@@ -95,6 +96,7 @@ describe("validateEnv", () => {
     const result = validateEnv({
       ...VALID_ENV,
       SMTP_HOST: "smtp.asodef.com.co",
+      SMTP_CONNECT_HOST: "172.25.52.1",
       SMTP_PORT: "587",
       SMTP_SECURE: "false",
       SMTP_USER: "asodef-app",
@@ -102,6 +104,7 @@ describe("validateEnv", () => {
       SMTP_FROM: "no-reply@asodef.com.co",
     });
     expect(result.SMTP_HOST).toBe("smtp.asodef.com.co");
+    expect(result.SMTP_CONNECT_HOST).toBe("172.25.52.1");
     expect(result.SMTP_PORT).toBe(587);
     expect(result.SMTP_FROM).toBe("no-reply@asodef.com.co");
   });
@@ -110,6 +113,7 @@ describe("validateEnv", () => {
     expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "smtp://smtp.asodef.com.co" })).toThrow(/SMTP_HOST/);
     expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "localhost" })).toThrow(/SMTP_HOST/);
     expect(() => validateEnv({ ...VALID_ENV, SMTP_HOST: "127.0.0.1" })).toThrow(/SMTP_HOST/);
+    expect(() => validateEnv({ ...VALID_ENV, SMTP_CONNECT_HOST: "smtp://172.25.52.1" })).toThrow(/SMTP_CONNECT_HOST/);
   });
 
   it("rejects an invalid SMTP sender address without echoing credentials", () => {

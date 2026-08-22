@@ -21,6 +21,8 @@ else:
     host_ok = extra_hosts.get("smtp.asodef.com.co") == "172.25.52.1"
 if not host_ok:
     raise SystemExit("private SMTP hostname mapping missing")
+if api.get("environment", {}).get("SMTP_CONNECT_HOST") != "172.25.52.1":
+    raise SystemExit("private SMTP connect host missing")
 
 mail = document["networks"]["mail_submission"]
 if not mail.get("external") or mail.get("name") != "asodef_mail_submission":

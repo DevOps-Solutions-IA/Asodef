@@ -15,7 +15,7 @@ export function LegalLayout() {
   useScrollToHash();
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface-canvas">
+    <div className="flex min-h-screen flex-col overflow-x-clip bg-surface-canvas">
       <SkipToContent targetId="main-content" />
       <PublicHeader />
 

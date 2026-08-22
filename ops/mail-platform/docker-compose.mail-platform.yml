@@ -1,5 +1,7 @@
 services:
   api:
+    environment:
+      SMTP_CONNECT_HOST: ${MAIL_GATEWAY:?MAIL_GATEWAY is required}
     extra_hosts:
       - "${MAIL_HOSTNAME:?MAIL_HOSTNAME is required}:${MAIL_GATEWAY:?MAIL_GATEWAY is required}"
     networks:

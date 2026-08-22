@@ -26,6 +26,7 @@ const MESSAGE: OutboundEmailMessage = {
 function config(overrides: Partial<EnvConfig> = {}): ConfigService<EnvConfig, true> {
   const values: Partial<EnvConfig> = {
     SMTP_HOST: "smtp.asodef.com.co",
+    SMTP_CONNECT_HOST: "172.25.52.1",
     SMTP_PORT: 587,
     SMTP_SECURE: false,
     SMTP_USER: "asodef-app",
@@ -47,12 +48,20 @@ describe("SmtpMailTransport", () => {
   it("requires certificate-verified STARTTLS and authenticated submission", () => {
     new SmtpMailTransport(config());
     expect(createTransport).toHaveBeenCalledWith(expect.objectContaining({
-      host: "smtp.asodef.com.co",
+      host: "172.25.52.1",
       port: 587,
       secure: false,
       requireTLS: true,
       tls: { rejectUnauthorized: true, servername: "smtp.asodef.com.co" },
       auth: { user: "asodef-app", pass: "synthetic-password" },
+    }));
+  });
+
+  it("falls back to the certificate hostname when no separate connect host is configured", () => {
+    new SmtpMailTransport(config({ SMTP_CONNECT_HOST: "" }));
+    expect(createTransport).toHaveBeenCalledWith(expect.objectContaining({
+      host: "smtp.asodef.com.co",
+      tls: { rejectUnauthorized: true, servername: "smtp.asodef.com.co" },
     }));
   });
 
