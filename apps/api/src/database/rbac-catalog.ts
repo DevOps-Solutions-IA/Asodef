@@ -89,6 +89,8 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "retention.manage", description: "Aprobar retención, anonimización o eliminación de datos" },
   { key: "pqr.manage", description: "Gestionar casos de PQR" },
   { key: "approvals.manage", description: "Administrar aprobaciones legales y comerciales de producción" },
+  { key: "koral.conversations.read", description: "Ver conversaciones y su historial operativo en Koral" },
+  { key: "koral.conversations.manage", description: "Asignar, intervenir y documentar conversaciones en Koral" },
 ];
 
 export const ROLE_CATALOG: RoleDefinition[] = [
@@ -185,6 +187,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "contracts.read",
     "reports.read",
     "content.read",
+    "koral.conversations.read",
   ],
   CUSTOMER_SERVICE: [
     "customers.read",
@@ -196,6 +199,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "contracts.read",
     "content.read",
     "crm.read",
+    "koral.conversations.read",
+    "koral.conversations.manage",
   ],
   COMPANY_PARTNER: ["companies.read", "contracts.read", "documents.read"],
   AFFILIATE: ["customers.read", "payments.read"],
@@ -209,5 +214,6 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "contracts.read",
     "documents.read",
     "crm.read",
+    "koral.conversations.read",
   ],
 };

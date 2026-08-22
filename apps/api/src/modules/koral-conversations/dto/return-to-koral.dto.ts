@@ -1,0 +1,17 @@
+import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from "class-validator";
+
+export class ReturnToKoralDto {
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  expectedVersion!: number;
+
+  @IsUUID()
+  idempotencyKey!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason?: string;
+}
