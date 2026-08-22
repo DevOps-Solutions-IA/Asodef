@@ -31,6 +31,7 @@ const SECTIONS = [
   "resumen",
   "servicios",
   "integraciones",
+  "proveedores",
   "notificaciones",
   "versiones",
   "seguridad",
@@ -41,6 +42,7 @@ const SECTION_LABELS: Record<SystemSection, string> = {
   resumen: "Resumen",
   servicios: "Servicios",
   integraciones: "Integraciones",
+  proveedores: "Proveedores",
   notificaciones: "Notificaciones",
   versiones: "Versiones",
   seguridad: "Seguridad técnica",
@@ -141,6 +143,7 @@ function SystemSectionView({
   if (section === "resumen") return <Overview data={data} />;
   if (section === "servicios") return <Services data={data} />;
   if (section === "integraciones") return <Integrations data={data} />;
+  if (section === "proveedores") return <ProviderHealth />;
   if (section === "notificaciones") return <Notifications data={data} />;
   if (section === "versiones") return <Versions data={data} />;
   if (section === "seguridad") return <TechnicalSecurity data={data} />;
@@ -265,6 +268,50 @@ function Integrations({ data }: { data: AdminSystemStatus }) {
           component={data.integrations.smtp}
           icon={<BellRing />}
         />
+      </div>
+    </SectionSurface>
+  );
+}
+
+function ProviderHealth() {
+  const providers = ["OpenRouter", "WhatsApp", "Meta", "Otros proveedores"];
+  return (
+    <SectionSurface
+      id="provider-health-heading"
+      title="Salud de proveedores"
+      description="Diagnóstico técnico separado de la operación de Koral y Comunicaciones. No se renderizan API keys, tokens ni endpoints internos."
+    >
+      <Alert variant="warning" title="Contrato de health pendiente">
+        El backend actual no expone estas señales. Conexión, health y uso
+        permanecen como desconocidos; la interfaz no infiere disponibilidad
+        desde configuración local.
+      </Alert>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {providers.map((provider) => (
+          <article
+            key={provider}
+            className="rounded-2xl border border-border-soft bg-white p-4 shadow-e1"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold text-text-main">{provider}</h3>
+              <StatusBadge tone="draft" label="Desconocido" />
+            </div>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-text-muted">Conexión</dt>
+                <dd className="font-medium text-warning">Desconocida</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-text-muted">Health</dt>
+                <dd className="font-medium text-warning">Desconocido</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-text-muted">Uso</dt>
+                <dd className="font-medium text-text-muted">No disponible</dd>
+              </div>
+            </dl>
+          </article>
+        ))}
       </div>
     </SectionSurface>
   );
