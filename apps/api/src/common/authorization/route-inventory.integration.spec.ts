@@ -127,6 +127,8 @@ describe("Route inventory: deny-by-default enforcement (US-008)", () => {
       "AdminUsersController.assignRole",
       "AdminUsersController.removeRole",
       "AdminUsersController.revokeSessions",
+      "KoralConversationsController.assign",
+      "KoralConversationsController.returnToKoral",
     ]);
     const protectedRoutes = new Set<string>();
 
