@@ -23,6 +23,19 @@ def connect(args: argparse.Namespace, password: str) -> smtplib.SMTP:
     return client
 
 
+def require_forged_sender_rejected(client: smtplib.SMTP, sender: str) -> None:
+    """Require rejection at MAIL or RCPT without ever sending message DATA."""
+    code, _ = client.mail(sender)
+    if code >= 500:
+        return
+
+    # smtpd_delay_reject=yes deliberately defers sender restriction evaluation
+    # until RCPT. A 2xx MAIL response is therefore not evidence of a bypass.
+    code, _ = client.rcpt("open-relay-probe@example.net")
+    if code < 500:
+        fail("forged_sender_not_rejected")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--connect-host", required=True)
@@ -64,6 +77,19 @@ def main() -> None:
     finally:
         plaintext.close()
 
+    unauthenticated = smtplib.SMTP(args.connect_host, args.port, timeout=10)
+    try:
+        unauthenticated.ehlo()
+        unauthenticated._host = args.tls_hostname
+        unauthenticated.starttls(context=ssl.create_default_context())
+        unauthenticated.ehlo()
+        unauthenticated.mail(args.allowed_from)
+        code, _ = unauthenticated.rcpt("open-relay-probe@example.net")
+        if code < 500:
+            fail("submission_without_auth_not_rejected")
+    finally:
+        unauthenticated.close()
+
     invalid = smtplib.SMTP(args.connect_host, args.port, timeout=10)
     try:
         invalid.ehlo()
@@ -81,9 +107,7 @@ def main() -> None:
 
     client = connect(args, password)
     try:
-        code, _ = client.mail("unauthorized-sender@example.net")
-        if code < 500:
-            fail("forged_sender_not_rejected")
+        require_forged_sender_rejected(client, "unauthorized-sender@example.net")
     finally:
         client.close()
 
@@ -96,7 +120,7 @@ def main() -> None:
         client.close()
 
     print(
-        "status=ok plaintext_auth=hidden invalid_auth=rejected "
+        "status=ok plaintext_auth=hidden submission_unauthenticated=rejected invalid_auth=rejected "
         "authenticated_spoof=rejected authenticated_oversize=rejected"
     )
 

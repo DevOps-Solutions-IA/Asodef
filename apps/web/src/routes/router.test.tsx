@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isValidElement } from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { routeConfig, routerFutureConfig } from "./router";
@@ -19,6 +19,21 @@ function renderAtPath(
 
 function jsonResponse(status: number, body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+function systemSnapshot(overrides: Record<string, unknown> = {}) {
+  const checked = "2026-08-20T12:00:00.000Z";
+  const component = (state: string, criticality = "CORE") => ({ state, criticality, operationalImpact: "Lectura técnica.", latencyMs: 1, lastCheckedAt: checked });
+  return {
+    generatedAt: checked,
+    core: { state: "HEALTHY", operationalImpact: "El núcleo administrativo está operativo." },
+    api: { ...component("HEALTHY"), uptimeSeconds: 60, releaseSha: "sha", version: "1", migrationVersion: "m40" },
+    services: { postgres: component("HEALTHY"), redis: component("HEALTHY") },
+    integrations: { master: component("DISABLED", "OPTIONAL"), bold: { ...component("UNKNOWN", "OPTIONAL"), mode: "sandbox" }, smtp: { ...component("HEALTHY", "IMPORTANT"), configured: true } },
+    security: { state: "HEALTHY", recoveryChannel: "CONFIGURED", mfaRequired: false },
+    notifications: { queueState: "HEALTHY", transportState: "HEALTHY", transport: "SMTP", transportConfigured: true, backlog: 0, queued: 0, processing: 0, retryPending: 0, failed: 0, unknownResult: 0, deadLetter: 0 },
+    ...overrides,
+  };
 }
 
 function isLazyRouteElement(element: unknown): boolean {
@@ -245,7 +260,19 @@ describe("router", () => {
     expect(screen.queryByRole("link", { name: "Empresas y aliados" })).not.toBeInTheDocument();
   });
 
+  it("groups administrative navigation and keeps Mi cuenta in the actor control", async () => {
+    const user = userEvent.setup();
+    renderAtPath("/admin", buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["crm.read", "payments.read", "payments.reconcile", "content.manage", "data.manage", "pqr.manage", "reports.read", "users.read", "audit.read", "settings.manage", "users.security.read", "users.sessions.read"] }));
+    const nav = await screen.findByRole("navigation", { name: "Administración" });
+    for (const group of ["Gestión", "Operación", "Cumplimiento", "Inteligencia", "Administración"]) expect(within(nav).getByRole("heading", { name: group })).toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Seguridad" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Sesiones" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Abrir menú de Mi cuenta" }));
+    for (const label of ["Mi cuenta", "Contraseña", "MFA", "Sesiones"]) expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+  });
+
   it("renders the current administrator session view through the existing user-scoped API", async () => {
+    const user = userEvent.setup();
     let userDetailRequested = false;
     const currentUser = buildCurrentUser({
       id: "current-admin",
@@ -264,11 +291,13 @@ describe("router", () => {
     expect(await screen.findByRole("heading", { name: "Sesiones de mi cuenta" })).toBeInTheDocument();
     expect(screen.getByText("Sin sesiones registradas")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revocar otras sesiones" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sesiones" })).toHaveAttribute("href", "/admin/sesiones");
+    await user.click(screen.getByRole("button", { name: "Abrir menú de Mi cuenta" }));
+    expect(screen.getByRole("link", { name: "Sesiones" })).toHaveAttribute("href", "/admin/mi-cuenta/sesiones");
     expect(userDetailRequested).toBe(false);
   });
 
   it("renders current-admin security events through the existing user-scoped API", async () => {
+    const user = userEvent.setup();
     let userDetailRequested = false;
     const currentUser = buildCurrentUser({
       id: "current-admin",
@@ -308,29 +337,7 @@ describe("router", () => {
       }
       if (url.endsWith("/admin/users/current-admin/sessions")) return jsonResponse(200, []);
       if (url.endsWith("/admin/sistema")) {
-        return jsonResponse(200, {
-          generatedAt: "2026-08-20T12:00:00.000Z",
-          overallStatus: "CORE_HEALTHY",
-          api: { status: "AVAILABLE", uptimeSeconds: 60, releaseSha: "sha", version: "1", migrationVersion: "m40" },
-          dependencies: {
-            postgres: { status: "AVAILABLE", latencyMs: 1 },
-            redis: { status: "AVAILABLE", latencyMs: 1 },
-            master: { status: "NOT_CONFIGURED", latencyMs: 0 },
-          },
-          security: { status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: false },
-          notifications: {
-            status: "AVAILABLE",
-            transport: "SMTP",
-            transportConfigured: true,
-            backlog: 0,
-            queued: 0,
-            processing: 0,
-            retryPending: 0,
-            failed: 0,
-            unknownResult: 0,
-            deadLetter: 0,
-          },
-        });
+        return jsonResponse(200, systemSnapshot());
       }
       if (url.includes("/admin/users/current-admin/security-events")) {
         return jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 20 });
@@ -340,7 +347,8 @@ describe("router", () => {
 
     expect(await screen.findByRole("heading", { name: "Seguridad de mi cuenta" })).toBeInTheDocument();
     expect(screen.getByText("Sin eventos de seguridad registrados")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Seguridad" })).toHaveAttribute("href", "/admin/seguridad");
+    await user.click(screen.getByRole("button", { name: "Abrir menú de Mi cuenta" }));
+    expect(screen.getByRole("link", { name: "Mi cuenta" })).toHaveAttribute("href", "/admin/mi-cuenta/seguridad");
     expect(userDetailRequested).toBe(true);
   });
 
@@ -356,51 +364,29 @@ describe("router", () => {
       buildCurrentUser({ roles: ["ADMIN"], permissions: ["settings.manage"] }),
       (url) => {
         if (url.endsWith("/admin/sistema")) {
-          return jsonResponse(200, {
+          const unavailable = { state: "UNAVAILABLE", criticality: "CORE", operationalImpact: "No disponible.", latencyMs: 3_000, lastCheckedAt: "2026-08-19T18:00:00.000Z" };
+          return jsonResponse(200, systemSnapshot({
             generatedAt: "2026-08-19T18:00:00.000Z",
-            overallStatus: "CORE_UNHEALTHY",
-            api: {
-              status: "AVAILABLE",
-              uptimeSeconds: 60,
-              releaseSha: "UNKNOWN",
-              version: "UNKNOWN",
-              migrationVersion: "UNKNOWN",
-            },
-            dependencies: {
-              postgres: { status: "AVAILABLE", latencyMs: 4 },
-              redis: { status: "UNAVAILABLE", latencyMs: 3_000 },
-              master: { status: "NOT_CONFIGURED", latencyMs: 0 },
-            },
-            security: { status: "NOT_VERIFIED", recoveryChannel: "NOT_CONFIGURED", mfaRequired: false },
-            notifications: {
-              status: "NOT_CONFIGURED",
-              transport: "NOOP",
-              transportConfigured: false,
-              backlog: null,
-              queued: null,
-              processing: null,
-              retryPending: null,
-              failed: null,
-              unknownResult: null,
-              deadLetter: null,
-            },
-          });
+            core: { state: "UNAVAILABLE", operationalImpact: "El núcleo administrativo no dispone de una dependencia esencial." },
+            services: { postgres: { ...unavailable, state: "HEALTHY", latencyMs: 4 }, redis: unavailable },
+            security: { state: "DEGRADED", recoveryChannel: "NOT_CONFIGURED", mfaRequired: false },
+          }));
         }
         return undefined;
       },
     );
 
-    expect(await screen.findByRole("heading", { name: "Estado del sistema" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sistema" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sistema" })).toHaveAttribute("href", "/admin/sistema");
-    expect(await screen.findByText("No disponible")).toBeInTheDocument();
-    expect(screen.getAllByText("No configurado").length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText("No disponible")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Deshabilitado").length).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps /admin/sistema and its navigation entry behind settings.manage", async () => {
     renderAtPath("/admin/sistema", buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
 
     expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Estado del sistema" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sistema" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sistema" })).not.toBeInTheDocument();
   });
 

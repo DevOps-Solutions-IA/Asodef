@@ -7,12 +7,15 @@
  */
 export interface AdminDashboardResponse {
   newProspects30d: number;
+  openOpportunities: number;
   opportunitiesByStage: Record<string, number>;
   conversionRate: number;
   activeCompanies: number;
   activeAgreements: number;
   contractsPendingSignature: number;
   contractsNearingExpiration: number;
+  activeContracts: number;
+  expiredContracts: number;
   commercialActivities30d: number;
   leadsWithoutFollowUp: number;
   opportunitiesWon: number;
@@ -26,4 +29,9 @@ export interface AdminDashboardResponse {
   obligacionesPendientes: number;
   obligacionesVencidas: number;
   reconciliationDifferencesOpen: number;
+  openPqrCases: number;
+  overduePqrCases: number;
+  openDataSubjectRequests: number;
+  overdueDataSubjectRequests: number;
+  pendingApprovalGates: number;
 }

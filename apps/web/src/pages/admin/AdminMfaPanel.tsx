@@ -132,7 +132,7 @@ export function AdminMfaPanel() {
 
   const status = statusQuery.data;
   return (
-    <Card aria-labelledby="mfa-panel-title">
+    <Card id="mfa" aria-labelledby="mfa-panel-title">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 id="mfa-panel-title" className="text-lg font-semibold text-brand-dark">Autenticación multifactor</h2>

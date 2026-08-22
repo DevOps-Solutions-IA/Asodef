@@ -21,9 +21,14 @@ export class SmtpMailTransport implements MailTransport {
 
   constructor(configService: ConfigService<EnvConfig, true>) {
     const host = configService.get("SMTP_HOST", { infer: true });
+    const connectHost = configService.get("SMTP_CONNECT_HOST", { infer: true }) || host;
     const secure = configService.get("SMTP_SECURE", { infer: true });
     this.transporter = nodemailer.createTransport({
-      host,
+      // Nodemailer resolves FQDNs through DNS directly before falling back to
+      // getaddrinfo, so Docker extra_hosts alone cannot guarantee the private
+      // submission path. Connect to the explicit private gateway while using
+      // the public SMTP identity for certificate verification.
+      host: connectHost,
       port: configService.get("SMTP_PORT", { infer: true }) ?? 587,
       secure,
       // Port 587 must fail closed if STARTTLS is unavailable. Port 465 is

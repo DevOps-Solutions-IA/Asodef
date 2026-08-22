@@ -5,7 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 for mail_script in "$SCRIPT_DIR"/*.sh; do sh -n "$mail_script"; done
 
-required='README.md mail-platform.env.example preflight.sh reconcile-runtime.sh inventory-mail-queue.sh recover-tls-transaction.sh verify-dns.sh apply.sh configure-firewall.sh verify.sh test-relay-security.sh authorized-negative-tests.py scan-mail-logs.py validate-network-contract.py check-network-overlap.py validate-dns-policy.py create-mail-network.sh verify-mail-network.sh rollback-mail-network.sh docker-compose.mail-platform.yml issue-certificate.sh rotate-dkim.sh cert-renew-hook.sh test-cert-renew-hook.py rollback.sh config/postfix-tls-recovery.conf'
+required='README.md mail-platform.env.example preflight.sh reconcile-runtime.sh inventory-mail-queue.sh recover-tls-transaction.sh verify-dns.sh apply.sh configure-firewall.sh verify.sh test-relay-security.sh authorized-negative-tests.py test-authorized-negative-tests.py scan-mail-logs.py validate-network-contract.py check-network-overlap.py validate-dns-policy.py create-mail-network.sh verify-mail-network.sh rollback-mail-network.sh docker-compose.mail-platform.yml issue-certificate.sh rotate-dkim.sh cert-renew-hook.sh test-cert-renew-hook.py rollback.sh config/postfix-tls-recovery.conf'
 for mail_file in $required; do [ -f "$SCRIPT_DIR/$mail_file" ] || { echo "missing=$mail_file" >&2; exit 1; }; done
 
 grep -F 'reject_unauth_destination' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
@@ -20,10 +20,26 @@ grep -F 'smtpd_tls_security_level=encrypt' "$SCRIPT_DIR/config/postfix-master.cf
 grep -F '@@MAIL_LISTEN_ADDRESS@@:submission' "$SCRIPT_DIR/config/postfix-master.cf.fragment.template" >/dev/null
 grep -Eq '^[[:space:]]*MTA[[:space:]]+ORIGINATING[[:space:]]*$' "$SCRIPT_DIR/config/opendkim.conf.template"
 grep -F 'milter_macro_daemon_name=ORIGINATING' "$SCRIPT_DIR/config/postfix-master.cf.fragment.template" >/dev/null
+# Postfix formats `postconf -P` assignments with whitespace around `=`. Query
+# only the value so production verification cannot false-fail on that display
+# formatting while still requiring exact SASL and milter values.
+grep -F 'postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/smtpd_sasl_auth_enable"' "$SCRIPT_DIR/verify.sh" >/dev/null
+grep -F 'postconf -Ph "$MAIL_LISTEN_ADDRESS:submission/inet/milter_macro_daemon_name"' "$SCRIPT_DIR/verify.sh" >/dev/null
+if grep -E "postconf -P .*grep -F '=(yes|ORIGINATING)'" "$SCRIPT_DIR/verify.sh" >/dev/null; then
+  echo 'postconf_assignment_format_regression=FAIL' >&2
+  exit 1
+fi
 grep -F '@@MAIL_API_ADDRESS@@' "$SCRIPT_DIR/config/trusted.hosts.template" >/dev/null
 grep -F '*@@@MAIL_DOMAIN@@' "$SCRIPT_DIR/config/signing.table.template" >/dev/null
 grep -F 'reject_authenticated_sender_login_mismatch' "$SCRIPT_DIR/config/postfix-main.cf.template" >/dev/null
 grep -F '127.0.0.1' "$SCRIPT_DIR/test-relay-security.sh" >/dev/null
+grep -F 'submission_without_auth_not_rejected' "$SCRIPT_DIR/authorized-negative-tests.py" >/dev/null
+grep -F 'submission_unauthenticated=rejected' "$SCRIPT_DIR/authorized-negative-tests.py" >/dev/null
+grep -F 'client.rcpt("open-relay-probe@example.net")' "$SCRIPT_DIR/authorized-negative-tests.py" >/dev/null
+if grep -E 'swaks .*--tls' "$SCRIPT_DIR/test-relay-security.sh" >/dev/null; then
+  echo 'swaks_optional_tls_dependency_regression=FAIL' >&2
+  exit 1
+fi
 grep -F 'MAIL_OPERATOR_APPROVAL=NO' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_NETWORK_NAME=asodef_mail_submission' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
 grep -F 'MAIL_DKIM_SELECTOR=asodef2026' "$SCRIPT_DIR/mail-platform.env.example" >/dev/null
@@ -77,6 +93,7 @@ for mail_python in "$SCRIPT_DIR"/*.py; do
   python3 -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_text(), sys.argv[1], "exec")' "$mail_python"
 done
 python3 "$SCRIPT_DIR/test-cert-renew-hook.py"
+python3 "$SCRIPT_DIR/test-authorized-negative-tests.py"
 python3 "$SCRIPT_DIR/validate-dns-policy.py" --public-ip 192.0.2.10 \
   --spf 'v=spf1 ip4:192.0.2.10 include:secureserver.net -all' \
   --dmarc 'v=DMARC1; p=quarantine; adkim=r; aspf=r;' >/dev/null

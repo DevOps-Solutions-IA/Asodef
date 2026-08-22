@@ -36,9 +36,47 @@ verify_image "$web_image" "$web_image_id"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 install_args=(--shared-dir "$shared_dir" --api-image "$api_image" --web-image "$web_image")
-[[ "$apply" == true ]] && install_args+=(--apply)
+if [[ "$apply" != true ]]; then
+  "$script_dir/install-compose-contract.sh" "${install_args[@]}"
+  echo 'status=ready deploy=false scope=api,web migrations=not-applied'
+  exit 0
+fi
+
+app_env="$shared_dir/.env.production"
+[[ -f "$app_env" && ! -L "$app_env" ]] || {
+  echo 'status=error code=APPLICATION_ENV_UNAVAILABLE' >&2; exit 1;
+}
+app_env_mode=$(stat -c '%a' "$app_env")
+(( (8#$app_env_mode & 0022) == 0 )) || {
+  echo 'status=error code=APPLICATION_ENV_PERMISSIONS_UNSAFE' >&2; exit 1;
+}
+
+# Apply the exact image's checked-in migrations before changing the installed
+# Compose contract or recreating API/Web. Prisma runs directly from the image,
+# without package-manager downloads, and only joins the private data network.
+# Runtime secrets remain in the protected env file and are never arguments or
+# command output.
+if ! docker run --rm \
+  --network asodef_public_platform_data \
+  --env-file "$app_env" \
+  --read-only \
+  --tmpfs /tmp:size=64m,mode=1777 \
+  "$api_image" \
+  /bin/sh -euc '
+    test "$(pwd)" = /app/apps/api
+    test -f prisma/schema.prisma
+    test -x node_modules/.bin/prisma
+    test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" = 40
+    node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma >/dev/null
+    node_modules/.bin/prisma migrate status --schema prisma/schema.prisma >/dev/null
+  '; then
+  echo 'status=error code=PRODUCTION_MIGRATION_FAILED' >&2
+  exit 1
+fi
+echo 'status=ok migrations=40 exactImage=PASS'
+
+install_args+=(--apply)
 "$script_dir/install-compose-contract.sh" "${install_args[@]}"
-[[ "$apply" == true ]] || { echo 'status=ready deploy=false scope=api,web'; exit 0; }
 
 # shellcheck source=ops/production/compose-contract.sh
 source "$script_dir/compose-contract.sh"
