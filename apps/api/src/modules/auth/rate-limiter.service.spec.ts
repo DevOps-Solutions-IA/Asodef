@@ -10,6 +10,19 @@ describe("RateLimiterService (real Redis)", () => {
   let service: RateLimiterService;
   let redisService: RedisService;
 
+  async function waitForRateLimitWindowToExpire(key: string, timeoutMs = 5_000): Promise<void> {
+    const redisKey = `ratelimit:${key}`;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const pttl = await redisService.getClient().pttl(redisKey);
+      if (pttl === -2) return;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(pttl, 1), 50)));
+    }
+
+    throw new Error("Timed out waiting for the real Redis rate-limit window to expire.");
+  }
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: validateEnv }), RedisModule],
@@ -56,7 +69,7 @@ describe("RateLimiterService (real Redis)", () => {
     const secondImmediately = await service.checkAndIncrement(key, 1, 1);
     expect(secondImmediately.limited).toBe(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await waitForRateLimitWindowToExpire(key);
 
     const afterWindow = await service.checkAndIncrement(key, 1, 1);
     expect(afterWindow.limited).toBe(false);

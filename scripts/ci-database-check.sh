@@ -133,8 +133,15 @@ run_quiet() {
   log_file="$(mktemp -t asodef-ci-db-check.XXXXXX)"
   work_files+=("$log_file")
   if ! "$@" >"$log_file" 2>&1; then
-    printf 'Sanitized command diagnostics (last 120 lines):\n' >&2
-    node - "$log_file" <<'NODE' >&2
+    print_sanitized_diagnostics "$log_file"
+    fail "$label"
+  fi
+}
+
+print_sanitized_diagnostics() {
+  local log_file="$1"
+  printf 'Sanitized command diagnostics (last 120 lines):\n' >&2
+  node - "$log_file" <<'NODE' >&2
 const fs = require('node:fs');
 
 const logPath = process.argv[2];
@@ -158,14 +165,41 @@ output = output.replace(/postgres(?:ql)?:\/\/[^\s]+/giu, '[REDACTED_DATABASE_URL
 const lines = output.trimEnd().split(/\r?\n/u).slice(-120);
 process.stderr.write(`${lines.join('\n')}\n`);
 NODE
-    fail "$label"
-  fi
+}
+
+check_schema_migration_drift() {
+  local log_file exit_code
+  log_file="$(mktemp -t asodef-ci-schema-drift.XXXXXX)"
+  work_files+=("$log_file")
+  exit_code=0
+  (
+    cd "$REPOSITORY_ROOT/apps/api"
+    pnpm exec prisma migrate diff \
+      --from-schema-datasource prisma/schema.prisma \
+      --to-schema-datamodel prisma/schema.prisma \
+      --exit-code
+  ) >"$log_file" 2>&1 || exit_code=$?
+
+  case "$exit_code" in
+    0)
+      printf 'Prisma schema/migration drift check passed.\n'
+      ;;
+    2)
+      print_sanitized_diagnostics "$log_file"
+      fail "Prisma schema and migration-built database have drift"
+      ;;
+    *)
+      print_sanitized_diagnostics "$log_file"
+      fail "Prisma schema/migration comparison failed with exit code $exit_code"
+      ;;
+  esac
 }
 
 run_quiet "Prisma client generation failed" pnpm --filter @asodef/api prisma:generate
 run_quiet "Prisma schema validation failed" pnpm --filter @asodef/api exec prisma validate --schema prisma/schema.prisma
 run_quiet "Prisma migration deployment failed" pnpm --filter @asodef/api prisma:deploy
 run_quiet "Prisma migration status failed" pnpm --filter @asodef/api exec prisma migrate status --schema prisma/schema.prisma
+check_schema_migration_drift
 
 finished_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;")"
 total_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations;")"
