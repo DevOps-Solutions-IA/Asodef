@@ -69,12 +69,15 @@ export function mockAuthFetch(
     if (url.includes("/admin/dashboard")) {
       return jsonResponse(200, {
         newProspects30d: 0,
+        openOpportunities: 0,
         opportunitiesByStage: {},
         conversionRate: 0,
         activeCompanies: 0,
         activeAgreements: 0,
         contractsPendingSignature: 0,
         contractsNearingExpiration: 0,
+        activeContracts: 0,
+        expiredContracts: 0,
         commercialActivities30d: 0,
         leadsWithoutFollowUp: 0,
         opportunitiesWon: 0,
@@ -88,6 +91,11 @@ export function mockAuthFetch(
         obligacionesPendientes: 0,
         obligacionesVencidas: 0,
         reconciliationDifferencesOpen: 0,
+        openPqrCases: 0,
+        overduePqrCases: 0,
+        openDataSubjectRequests: 0,
+        overdueDataSubjectRequests: 0,
+        pendingApprovalGates: 0,
       });
     }
 

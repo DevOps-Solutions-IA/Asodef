@@ -1,11 +1,14 @@
 export interface AdminDashboardMetrics {
   newProspects30d: number;
+  openOpportunities: number;
   opportunitiesByStage: Record<string, number>;
   conversionRate: number;
   activeCompanies: number;
   activeAgreements: number;
   contractsPendingSignature: number;
   contractsNearingExpiration: number;
+  activeContracts: number;
+  expiredContracts: number;
   commercialActivities30d: number;
   leadsWithoutFollowUp: number;
   opportunitiesWon: number;
@@ -19,4 +22,9 @@ export interface AdminDashboardMetrics {
   obligacionesPendientes: number;
   obligacionesVencidas: number;
   reconciliationDifferencesOpen: number;
+  openPqrCases: number;
+  overduePqrCases: number;
+  openDataSubjectRequests: number;
+  overdueDataSubjectRequests: number;
+  pendingApprovalGates: number;
 }

@@ -131,11 +131,14 @@ describe("Admin dashboard endpoint (integration, real HTTP)", () => {
 
     const numericFields = [
       "newProspects30d",
+      "openOpportunities",
       "conversionRate",
       "activeCompanies",
       "activeAgreements",
       "contractsPendingSignature",
       "contractsNearingExpiration",
+      "activeContracts",
+      "expiredContracts",
       "commercialActivities30d",
       "leadsWithoutFollowUp",
       "opportunitiesWon",
@@ -149,6 +152,11 @@ describe("Admin dashboard endpoint (integration, real HTTP)", () => {
       "obligacionesPendientes",
       "obligacionesVencidas",
       "reconciliationDifferencesOpen",
+      "openPqrCases",
+      "overduePqrCases",
+      "openDataSubjectRequests",
+      "overdueDataSubjectRequests",
+      "pendingApprovalGates",
     ];
     for (const field of numericFields) {
       expect(typeof response.body[field]).toBe("number");

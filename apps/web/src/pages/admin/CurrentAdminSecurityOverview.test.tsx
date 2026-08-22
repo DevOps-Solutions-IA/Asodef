@@ -29,11 +29,8 @@ function renderOverview(extra?: (url: string, init?: RequestInit) => Promise<Res
     if (url.endsWith("/admin/users/stats")) return response(200, { totalUsers: 1, activeUsers: 1, inactiveUsers: 0, suspendedUsers: 0, lockedUsers: 0, recentLoginFailures24h: 3, activeSessions: 2 });
     if (url.endsWith(`/admin/users/${USER_ID}/sessions`)) return response(200, SESSIONS);
     if (url.endsWith("/admin/sistema")) return response(200, {
-      overallStatus: "CORE_HEALTHY", generatedAt: "2026-08-20T12:00:00.000Z",
-      api: { status: "AVAILABLE", uptimeSeconds: 10, releaseSha: "sha", version: "1", migrationVersion: "m40" },
-      dependencies: { postgres: { status: "AVAILABLE", latencyMs: 1 }, redis: { status: "AVAILABLE", latencyMs: 1 }, master: { status: "NOT_CONFIGURED", latencyMs: 0 } },
-      security: { status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: true },
-      notifications: { status: "AVAILABLE", transport: "SMTP", transportConfigured: true, backlog: 0, queued: 0, processing: 0, retryPending: 0, failed: 0, unknownResult: 0, deadLetter: 0 },
+      generatedAt: "2026-08-20T12:00:00.000Z",
+      security: { state: "HEALTHY", recoveryChannel: "CONFIGURED", mfaRequired: true },
     });
     return undefined;
   });

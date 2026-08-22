@@ -18,6 +18,15 @@ describe("MfaSecretProtectorService", () => {
   it("rejects tampered ciphertext", () => {
     const service = new MfaSecretProtectorService(config);
     const encrypted = service.encrypt("JBSWY3DPEHPK3PXP");
-    expect(() => service.decrypt(`${encrypted.slice(0, -2)}xx`)).toThrow();
+    const [version, iv, tag, ciphertext] = encrypted.split(".");
+    if (!version || !iv || !tag || !ciphertext) throw new Error("Expected a complete encrypted MFA fixture");
+
+    const tamperedCiphertext = Buffer.from(ciphertext, "base64url");
+    const firstByte = tamperedCiphertext.at(0);
+    if (firstByte === undefined) throw new Error("Expected a non-empty encrypted MFA fixture");
+    tamperedCiphertext[0] = firstByte ^ 0x01;
+
+    const tampered = [version, iv, tag, tamperedCiphertext.toString("base64url")].join(".");
+    expect(() => service.decrypt(tampered)).toThrow();
   });
 });

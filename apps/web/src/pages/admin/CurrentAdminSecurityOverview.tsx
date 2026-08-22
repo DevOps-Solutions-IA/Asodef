@@ -102,7 +102,7 @@ export function CurrentAdminSecurityOverview({ userId }: { userId: string }) {
           <SecurityMetric label="Intentos fallidos globales (24 h)" value={statsQuery.data?.recentLoginFailures24h?.toLocaleString("es-CO")} loading={statsQuery.isLoading} />
           <SecurityMetric label="Sesiones activas" value={activeSessions?.toLocaleString("es-CO")} loading={sessionsQuery.isLoading} />
           <SecurityMetric label="Canal de recuperación" value={systemQuery.data?.security.recoveryChannel === "CONFIGURED" ? "Configurado" : systemQuery.data ? "No configurado" : undefined} loading={systemQuery.isLoading} />
-          <SecurityMetric label="Invariante administrativa" value={systemQuery.data?.security.status === "VERIFIED" ? "Verificada" : systemQuery.data ? "No verificada" : undefined} loading={systemQuery.isLoading} />
+          <SecurityMetric label="Invariante administrativa" value={systemQuery.data?.security.state === "HEALTHY" ? "Verificada" : systemQuery.data ? "No verificada" : undefined} loading={systemQuery.isLoading} />
         </dl>
         <div className="mt-5">
           <Button variant="danger" disabled={otherActiveSessions === 0 || sessionsQuery.isLoading} onClick={() => setRevokeOpen(true)}>
@@ -111,7 +111,7 @@ export function CurrentAdminSecurityOverview({ userId }: { userId: string }) {
         </div>
       </section>
 
-      <Card aria-labelledby="change-password-heading">
+      <Card id="contrasena" aria-labelledby="change-password-heading">
         <h2 id="change-password-heading" className="text-lg font-semibold text-brand-dark">Cambiar contraseña</h2>
         <p className="mt-1 text-sm text-text-muted">La operación conserva esta sesión y revoca las demás de forma atómica.</p>
         {success && <Alert className="mt-4" variant="success">{success}</Alert>}

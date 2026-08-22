@@ -7,11 +7,19 @@ import { MasterHealthService } from "../master/health/master-health.service";
 import { AdminIdentityInvariantService } from "../auth/admin-identity-invariant.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { NotificationService } from "../notifications/notification.service";
-import type { AdminSystemStatus, OperationalStatus } from "./admin-system.types";
+import type {
+  AdminSystemStatus,
+  HealthState,
+  TechnicalComponentStatus,
+} from "./admin-system.types";
 
 const PROBE_TIMEOUT_MS = 3_000;
 const UNKNOWN = "UNKNOWN" as const;
-const BACKLOG_STATUSES: NotificationStatus[] = ["QUEUED", "PROCESSING", "RETRY_PENDING"];
+const BACKLOG_STATUSES: NotificationStatus[] = [
+  "QUEUED",
+  "PROCESSING",
+  "RETRY_PENDING",
+];
 
 interface MigrationRow {
   migration_name: string;
@@ -29,81 +37,186 @@ export class AdminSystemService {
   ) {}
 
   async getStatus(): Promise<AdminSystemStatus> {
-    const [postgres, redis, master, notificationTransport, operationalData] = await Promise.all([
-      probe(() => this.prisma.isDatabaseHealthy()),
-      probe(() => this.redis.isHealthy()),
-      probe(() => this.masterHealth.check()),
-      probe(() => this.notifications.checkTransportHealth()),
-      withinTimeout(this.loadOperationalData(), PROBE_TIMEOUT_MS).catch(() => null),
-    ]);
+    const generatedAt = new Date().toISOString();
+    const [postgres, redis, master, notificationTransport, operationalData] =
+      await Promise.all([
+        probe(() => this.prisma.isDatabaseHealthy()),
+        probe(() => this.redis.isHealthy()),
+        probe(() => this.masterHealth.check()),
+        probe(() => this.notifications.checkTransportHealth()),
+        withinTimeout(this.loadOperationalData(), PROBE_TIMEOUT_MS).catch(
+          () => null,
+        ),
+      ]);
 
-    const masterStatus: OperationalStatus = master.value == null
-      ? "UNAVAILABLE"
-      : master.value.status === "disabled"
-        ? "NOT_CONFIGURED"
-        : master.value.status === "ok"
-          ? "AVAILABLE"
-          : "UNAVAILABLE";
+    const masterState: HealthState =
+      master.value == null
+        ? "UNKNOWN"
+        : master.value.status === "disabled"
+          ? "DISABLED"
+          : master.value.status === "ok"
+            ? "HEALTHY"
+            : "UNAVAILABLE";
     const postgresAvailable = postgres.value === true;
     const redisAvailable = redis.value === true;
     const trustedOperationalData = postgresAvailable ? operationalData : null;
     const identityStatus = this.adminIdentityInvariant.getStatus().status;
-    const smtpConfigured = this.config.get("SMTP_HOST", { infer: true }).trim().length > 0;
-    const notificationTransportStatus: OperationalStatus = notificationTransport.value ?? "UNAVAILABLE";
+    const smtpConfigured =
+      this.config.get("SMTP_HOST", { infer: true }).trim().length > 0;
+    const notificationTransportState: HealthState =
+      notificationTransport.value == null
+        ? "UNKNOWN"
+        : notificationTransport.value === "AVAILABLE"
+          ? "HEALTHY"
+          : notificationTransport.value;
     const notificationsAvailable = trustedOperationalData !== null;
-    const coreHealthy = postgresAvailable && redisAvailable && identityStatus === "VERIFIED"
-      && smtpConfigured && notificationTransportStatus === "AVAILABLE";
-    const overallStatus = !coreHealthy
-      ? "CORE_UNHEALTHY" as const
-      : masterStatus === "AVAILABLE"
-        ? "CORE_HEALTHY" as const
-        : "DEGRADED_OPTIONAL_DEPENDENCY" as const;
+    const coreState: HealthState =
+      !postgresAvailable || !redisAvailable
+        ? "UNAVAILABLE"
+        : identityStatus !== "VERIFIED"
+          ? "DEGRADED"
+          : "HEALTHY";
+    const boldMode = this.config.get("BOLD_MODE", { infer: true });
+    const boldConfigured =
+      this.config.get("BOLD_IDENTITY_KEY", { infer: true }).trim().length > 0 &&
+      this.config.get("BOLD_SECRET_KEY", { infer: true }).trim().length > 0;
+    const boldState: HealthState =
+      boldMode === "mock"
+        ? "DISABLED"
+        : boldConfigured
+          ? "UNKNOWN"
+          : "NOT_CONFIGURED";
+    const queueState: HealthState =
+      trustedOperationalData == null
+        ? "UNKNOWN"
+        : trustedOperationalData.failed > 0 ||
+            trustedOperationalData.unknownResult > 0 ||
+            trustedOperationalData.deadLetter > 0
+          ? "DEGRADED"
+          : "HEALTHY";
+
+    const component = (
+      state: HealthState,
+      criticality: TechnicalComponentStatus["criticality"],
+      operationalImpact: string,
+      latencyMs: number | null,
+    ): TechnicalComponentStatus => ({
+      state,
+      criticality,
+      operationalImpact,
+      latencyMs,
+      lastCheckedAt: generatedAt,
+    });
 
     return {
-      generatedAt: new Date().toISOString(),
-      overallStatus,
+      generatedAt,
+      core: {
+        state: coreState,
+        operationalImpact:
+          coreState === "HEALTHY"
+            ? "El núcleo administrativo está operativo."
+            : coreState === "DEGRADED"
+              ? "El núcleo administrativo opera con controles técnicos degradados."
+              : "El núcleo administrativo no dispone de una dependencia esencial.",
+      },
       api: {
-        status: "AVAILABLE",
+        ...component(
+          "HEALTHY",
+          "CORE",
+          "Atiende las funciones del panel administrativo.",
+          null,
+        ),
         uptimeSeconds: Math.max(0, Math.floor(process.uptime())),
-        releaseSha: safeRuntimeIdentifier(process.env.APP_RELEASE_SHA ?? process.env.RELEASE_SHA),
-        version: safeRuntimeIdentifier(process.env.APP_VERSION ?? process.env.npm_package_version),
+        releaseSha: safeRuntimeIdentifier(
+          process.env.APP_RELEASE_SHA ?? process.env.RELEASE_SHA,
+        ),
+        version: safeRuntimeIdentifier(
+          process.env.APP_VERSION ?? process.env.npm_package_version,
+        ),
         migrationVersion: trustedOperationalData?.migrationVersion ?? UNKNOWN,
       },
-      dependencies: {
-        postgres: { status: postgresAvailable ? "AVAILABLE" : "UNAVAILABLE", latencyMs: postgres.latencyMs },
-        redis: { status: redisAvailable ? "AVAILABLE" : "UNAVAILABLE", latencyMs: redis.latencyMs },
-        master: { status: masterStatus, latencyMs: master.latencyMs },
+      services: {
+        postgres: component(
+          postgresAvailable ? "HEALTHY" : "UNAVAILABLE",
+          "CORE",
+          postgresAvailable
+            ? "Persistencia administrativa disponible."
+            : "Las operaciones administrativas que requieren persistencia no están disponibles.",
+          postgres.latencyMs,
+        ),
+        redis: component(
+          redisAvailable ? "HEALTHY" : "UNAVAILABLE",
+          "CORE",
+          redisAvailable
+            ? "Sesiones y controles distribuidos disponibles."
+            : "Sesiones y controles distribuidos pueden no operar.",
+          redis.latencyMs,
+        ),
+      },
+      integrations: {
+        master: component(
+          masterState,
+          "OPTIONAL",
+          masterState === "HEALTHY"
+            ? "Integración externa disponible."
+            : "Integración externa no disponible; el núcleo administrativo continúa independiente.",
+          master.latencyMs,
+        ),
+        bold: {
+          ...component(
+            boldState,
+            "OPTIONAL",
+            boldState === "UNKNOWN"
+              ? "Configuración presente; no existe una lectura de salud concluyente."
+              : "La disponibilidad de pagos no determina la salud del núcleo administrativo.",
+            null,
+          ),
+          mode: boldMode,
+        },
+        smtp: {
+          ...component(
+            notificationTransportState,
+            "IMPORTANT",
+            "Afecta la entrega de notificaciones, no la disponibilidad del núcleo administrativo.",
+            notificationTransport.latencyMs,
+          ),
+          configured: smtpConfigured,
+        },
       },
       security: {
-        status: identityStatus,
-        recoveryChannel: identityStatus === "VERIFIED" ? "CONFIGURED" : "NOT_CONFIGURED",
+        state: identityStatus === "VERIFIED" ? "HEALTHY" : "DEGRADED",
+        recoveryChannel:
+          identityStatus === "VERIFIED" ? "CONFIGURED" : "NOT_CONFIGURED",
         mfaRequired: this.config.get("ADMIN_MFA_REQUIRED", { infer: true }),
       },
-      notifications: notificationsAvailable && trustedOperationalData
-        ? {
-            status: notificationTransportStatus,
-            transport: smtpConfigured ? "SMTP" : "NOOP",
-            transportConfigured: smtpConfigured,
-            backlog: trustedOperationalData.backlog,
-            queued: trustedOperationalData.queued,
-            processing: trustedOperationalData.processing,
-            retryPending: trustedOperationalData.retryPending,
-            failed: trustedOperationalData.failed,
-            unknownResult: trustedOperationalData.unknownResult,
-            deadLetter: trustedOperationalData.deadLetter,
-          }
-        : {
-            status: "UNAVAILABLE",
-            transport: smtpConfigured ? "SMTP" : "NOOP",
-            transportConfigured: smtpConfigured,
-            backlog: null,
-            queued: null,
-            processing: null,
-            retryPending: null,
-            failed: null,
-            unknownResult: null,
-            deadLetter: null,
-          },
+      notifications:
+        notificationsAvailable && trustedOperationalData
+          ? {
+              queueState,
+              transportState: notificationTransportState,
+              transport: smtpConfigured ? "SMTP" : "NOOP",
+              transportConfigured: smtpConfigured,
+              backlog: trustedOperationalData.backlog,
+              queued: trustedOperationalData.queued,
+              processing: trustedOperationalData.processing,
+              retryPending: trustedOperationalData.retryPending,
+              failed: trustedOperationalData.failed,
+              unknownResult: trustedOperationalData.unknownResult,
+              deadLetter: trustedOperationalData.deadLetter,
+            }
+          : {
+              queueState: "UNKNOWN",
+              transportState: notificationTransportState,
+              transport: smtpConfigured ? "SMTP" : "NOOP",
+              transportConfigured: smtpConfigured,
+              backlog: null,
+              queued: null,
+              processing: null,
+              retryPending: null,
+              failed: null,
+              unknownResult: null,
+              deadLetter: null,
+            },
     };
   }
 
@@ -125,14 +238,23 @@ export class AdminSystemService {
         ORDER BY finished_at DESC
         LIMIT 1
       `,
-      this.prisma.notificationJob.groupBy({ by: ["status"], _count: { _all: true } }),
+      this.prisma.notificationJob.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
     ]);
-    const counts = new Map(groupedJobs.map((row) => [row.status, row._count._all]));
-    const count = (status: NotificationStatus): number => counts.get(status) ?? 0;
+    const counts = new Map(
+      groupedJobs.map((row) => [row.status, row._count._all]),
+    );
+    const count = (status: NotificationStatus): number =>
+      counts.get(status) ?? 0;
     const deadLetter = count("DEAD_LETTER");
     return {
       migrationVersion: migrations[0]?.migration_name ?? UNKNOWN,
-      backlog: BACKLOG_STATUSES.reduce((total, status) => total + count(status), 0),
+      backlog: BACKLOG_STATUSES.reduce(
+        (total, status) => total + count(status),
+        0,
+      ),
       queued: count("QUEUED"),
       processing: count("PROCESSING"),
       retryPending: count("RETRY_PENDING"),
@@ -143,10 +265,15 @@ export class AdminSystemService {
   }
 }
 
-async function probe<T>(operation: () => Promise<T>): Promise<{ value: T | null; latencyMs: number }> {
+async function probe<T>(
+  operation: () => Promise<T>,
+): Promise<{ value: T | null; latencyMs: number }> {
   const started = Date.now();
   try {
-    return { value: await withinTimeout(operation(), PROBE_TIMEOUT_MS), latencyMs: Date.now() - started };
+    return {
+      value: await withinTimeout(operation(), PROBE_TIMEOUT_MS),
+      latencyMs: Date.now() - started,
+    };
   } catch {
     return { value: null, latencyMs: Date.now() - started };
   }
@@ -154,11 +281,20 @@ async function probe<T>(operation: () => Promise<T>): Promise<{ value: T | null;
 
 function withinTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("DEPENDENCY_TIMEOUT")), timeoutMs);
+    const timeout = setTimeout(
+      () => reject(new Error("DEPENDENCY_TIMEOUT")),
+      timeoutMs,
+    );
     timeout.unref?.();
     promise.then(
-      (value) => { clearTimeout(timeout); resolve(value); },
-      (error: unknown) => { clearTimeout(timeout); reject(error); },
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
     );
   });
 }

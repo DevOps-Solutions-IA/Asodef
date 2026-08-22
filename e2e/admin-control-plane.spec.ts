@@ -60,8 +60,8 @@ test.describe("single-admin control plane (real E2E)", () => {
     await expect(page.getByText(/eventos encontrados|Sin eventos/u)).toBeVisible();
 
     await page.goto("/admin/sistema");
-    await expect(page.getByRole("heading", { name: "Estado del sistema" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Dependencias" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sistema" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Servicios esenciales" })).toBeVisible();
 
     await page.goto("/admin/seguridad");
     await expect(page.getByRole("heading", { name: "Seguridad de mi cuenta" })).toBeVisible();

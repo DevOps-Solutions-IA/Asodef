@@ -62,12 +62,13 @@ describe("GET /api/v1/admin/sistema", () => {
     const cookies = await actor("SUPER_ADMIN");
     const response = await request(app.getHttpServer()).get("/api/v1/admin/sistema").set("Cookie", cookies);
     expect(response.status).toBe(200);
-    expect(response.body.api.status).toBe("AVAILABLE");
-    expect(["AVAILABLE", "UNAVAILABLE"]).toContain(response.body.dependencies.postgres.status);
-    expect(["AVAILABLE", "UNAVAILABLE"]).toContain(response.body.dependencies.redis.status);
-    expect(["AVAILABLE", "UNAVAILABLE", "NOT_CONFIGURED"]).toContain(response.body.dependencies.master.status);
+    expect(response.body.api.state).toBe("HEALTHY");
+    expect(["HEALTHY", "UNAVAILABLE"]).toContain(response.body.services.postgres.state);
+    expect(["HEALTHY", "UNAVAILABLE"]).toContain(response.body.services.redis.state);
+    expect(["HEALTHY", "UNAVAILABLE", "UNKNOWN", "DISABLED"]).toContain(response.body.integrations.master.state);
     expect(response.body.notifications).toEqual(expect.objectContaining({
-      status: expect.any(String),
+      queueState: expect.any(String),
+      transportState: expect.any(String),
       backlog: expect.any(Number),
       failed: expect.any(Number),
       deadLetter: expect.any(Number),
