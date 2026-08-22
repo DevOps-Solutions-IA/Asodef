@@ -254,11 +254,18 @@ export const routeConfig: RouteObject[] = [
               },
               {
                 element: <PermissionRoute permissions={["users.sessions.read"]} />,
-                children: [{ path: "sesiones", element: <CurrentAdminSessionsPage /> }],
+                children: [
+                  { path: "mi-cuenta/sesiones", element: <CurrentAdminSessionsPage /> },
+                  { path: "sesiones", element: <Navigate to="/admin/mi-cuenta/sesiones" replace /> },
+                ],
               },
               {
                 element: <PermissionRoute permissions={["users.security.read"]} />,
-                children: [{ path: "seguridad", element: <CurrentAdminSecurityPage /> }],
+                children: [
+                  { path: "mi-cuenta", element: <Navigate to="/admin/mi-cuenta/seguridad" replace /> },
+                  { path: "mi-cuenta/seguridad", element: <CurrentAdminSecurityPage /> },
+                  { path: "seguridad", element: <Navigate to="/admin/mi-cuenta/seguridad" replace /> },
+                ],
               },
               {
                 element: <PermissionRoute permissions={["settings.manage"]} />,

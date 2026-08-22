@@ -11,7 +11,11 @@ describe("AdminSystemService", () => {
   function harness() {
     const prisma = {
       isDatabaseHealthy: jest.fn().mockResolvedValue(true),
-      $queryRaw: jest.fn().mockResolvedValue([{ migration_name: "20260819132100_notification_unknown_result" }]),
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValue([
+          { migration_name: "20260819132100_notification_unknown_result" },
+        ]),
       notificationJob: {
         groupBy: jest.fn().mockResolvedValue([
           { status: "QUEUED", _count: { _all: 2 } },
@@ -25,10 +29,25 @@ describe("AdminSystemService", () => {
     };
     const redis = { isHealthy: jest.fn().mockResolvedValue(true) };
     const master = { check: jest.fn().mockResolvedValue({ status: "ok" }) };
-    const identity = { getStatus: jest.fn().mockReturnValue({ status: "VERIFIED", verifiedAt: new Date().toISOString() }) };
-    const env = { SMTP_HOST: "smtp.example.test", ADMIN_MFA_REQUIRED: false };
+    const identity = {
+      getStatus: jest
+        .fn()
+        .mockReturnValue({
+          status: "VERIFIED",
+          verifiedAt: new Date().toISOString(),
+        }),
+    };
+    const env = {
+      SMTP_HOST: "smtp.example.test",
+      ADMIN_MFA_REQUIRED: false,
+      BOLD_MODE: "sandbox",
+      BOLD_IDENTITY_KEY: "identity",
+      BOLD_SECRET_KEY: "secret",
+    };
     const config = { get: jest.fn((key: keyof typeof env) => env[key]) };
-    const notifications = { checkTransportHealth: jest.fn().mockResolvedValue("AVAILABLE") };
+    const notifications = {
+      checkTransportHealth: jest.fn().mockResolvedValue("AVAILABLE"),
+    };
     const service = new AdminSystemService(
       prisma as unknown as PrismaService,
       redis as unknown as RedisService,
@@ -43,15 +62,25 @@ describe("AdminSystemService", () => {
   it("reports only live dependency and outbox values", async () => {
     const { service } = harness();
     const result = await service.getStatus();
-    expect(result.dependencies).toEqual({
-      postgres: expect.objectContaining({ status: "AVAILABLE" }),
-      redis: expect.objectContaining({ status: "AVAILABLE" }),
-      master: expect.objectContaining({ status: "AVAILABLE" }),
+    expect(result.services).toEqual({
+      postgres: expect.objectContaining({
+        state: "HEALTHY",
+        criticality: "CORE",
+      }),
+      redis: expect.objectContaining({ state: "HEALTHY", criticality: "CORE" }),
     });
-    expect(result.overallStatus).toBe("CORE_HEALTHY");
-    expect(result.security).toEqual({ status: "VERIFIED", recoveryChannel: "CONFIGURED", mfaRequired: false });
+    expect(result.integrations.master).toEqual(
+      expect.objectContaining({ state: "HEALTHY", criticality: "OPTIONAL" }),
+    );
+    expect(result.core.state).toBe("HEALTHY");
+    expect(result.security).toEqual({
+      state: "HEALTHY",
+      recoveryChannel: "CONFIGURED",
+      mfaRequired: false,
+    });
     expect(result.notifications).toEqual({
-      status: "AVAILABLE",
+      queueState: "DEGRADED",
+      transportState: "HEALTHY",
       transport: "SMTP",
       transportConfigured: true,
       backlog: 6,
@@ -62,70 +91,106 @@ describe("AdminSystemService", () => {
       unknownResult: 2,
       deadLetter: 4,
     });
-    expect(result.api.migrationVersion).toBe("20260819132100_notification_unknown_result");
+    expect(result.api.migrationVersion).toBe(
+      "20260819132100_notification_unknown_result",
+    );
     expect(result).not.toHaveProperty("errorRate");
   });
 
-  it("distinguishes disabled Master as NOT_CONFIGURED", async () => {
+  it("keeps disabled Master distinct and does not degrade the administrative core", async () => {
     const { service, master } = harness();
     master.check.mockResolvedValue({ status: "disabled" });
-    expect((await service.getStatus()).dependencies.master.status).toBe("NOT_CONFIGURED");
-    expect((await service.getStatus()).overallStatus).toBe("DEGRADED_OPTIONAL_DEPENDENCY");
+    const result = await service.getStatus();
+    expect(result.integrations.master.state).toBe("DISABLED");
+    expect(result.core.state).toBe("HEALTHY");
   });
 
-  it("reports missing SMTP configuration as a core recovery failure instead of false green", async () => {
+  it("reports missing SMTP configuration without declaring the administrative core down", async () => {
     const { service, env, notifications } = harness();
     env.SMTP_HOST = "";
     notifications.checkTransportHealth.mockResolvedValue("NOT_CONFIGURED");
     const result = await service.getStatus();
-    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
-    expect(result.notifications).toEqual(expect.objectContaining({
-      status: "NOT_CONFIGURED",
-      transport: "NOOP",
-      transportConfigured: false,
-    }));
+    expect(result.core.state).toBe("HEALTHY");
+    expect(result.integrations.smtp.state).toBe("NOT_CONFIGURED");
+    expect(result.notifications).toEqual(
+      expect.objectContaining({
+        transportState: "NOT_CONFIGURED",
+        transport: "NOOP",
+        transportConfigured: false,
+      }),
+    );
   });
 
-  it("reports configured but unreachable SMTP as unavailable instead of false green", async () => {
+  it("reports configured but unreachable SMTP as unavailable while the queue remains independently observable", async () => {
     const { service, notifications } = harness();
     notifications.checkTransportHealth.mockResolvedValue("UNAVAILABLE");
     const result = await service.getStatus();
-    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
-    expect(result.notifications).toEqual(expect.objectContaining({
-      status: "UNAVAILABLE",
-      transport: "SMTP",
-      transportConfigured: true,
-    }));
+    expect(result.core.state).toBe("HEALTHY");
+    expect(result.integrations.smtp.state).toBe("UNAVAILABLE");
+    expect(result.notifications).toEqual(
+      expect.objectContaining({
+        queueState: "DEGRADED",
+        transportState: "UNAVAILABLE",
+        transport: "SMTP",
+        transportConfigured: true,
+      }),
+    );
+  });
+
+  it("does not infer healthy transport from zero notification metrics", async () => {
+    const { service, prisma, notifications } = harness();
+    prisma.notificationJob.groupBy.mockResolvedValue([]);
+    notifications.checkTransportHealth.mockResolvedValue("UNAVAILABLE");
+    const result = await service.getStatus();
+    expect(result.notifications.queueState).toBe("HEALTHY");
+    expect(result.notifications.backlog).toBe(0);
+    expect(result.notifications.transportState).toBe("UNAVAILABLE");
+    expect(result.integrations.smtp.state).toBe("UNAVAILABLE");
+    expect(result.core.state).toBe("HEALTHY");
   });
 
   it("reports an unverified administrative identity as core unhealthy without exposing identity data", async () => {
     const { service, identity } = harness();
-    identity.getStatus.mockReturnValue({ status: "NOT_VERIFIED", verifiedAt: null });
+    identity.getStatus.mockReturnValue({
+      status: "NOT_VERIFIED",
+      verifiedAt: null,
+    });
     const result = await service.getStatus();
-    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
-    expect(result.security).toEqual(expect.objectContaining({ status: "NOT_VERIFIED", recoveryChannel: "NOT_CONFIGURED" }));
+    expect(result.core.state).toBe("DEGRADED");
+    expect(result.security).toEqual(
+      expect.objectContaining({
+        state: "DEGRADED",
+        recoveryChannel: "NOT_CONFIGURED",
+      }),
+    );
   });
 
   it("reports dependency failures honestly without throwing or leaking internals", async () => {
     const { service, prisma, redis, master } = harness();
-    prisma.isDatabaseHealthy.mockRejectedValue(new Error("postgresql://secret@internal"));
+    prisma.isDatabaseHealthy.mockRejectedValue(
+      new Error("postgresql://secret@internal"),
+    );
     prisma.$queryRaw.mockRejectedValue(new Error("database unavailable"));
     redis.isHealthy.mockRejectedValue(new Error("redis://secret@internal"));
     master.check.mockRejectedValue(new Error("private-master:33051"));
 
     const serialized = JSON.stringify(await service.getStatus());
-    const result = JSON.parse(serialized) as Awaited<ReturnType<AdminSystemService["getStatus"]>>;
-    expect(result.dependencies.postgres.status).toBe("UNAVAILABLE");
-    expect(result.dependencies.redis.status).toBe("UNAVAILABLE");
-    expect(result.dependencies.master.status).toBe("UNAVAILABLE");
-    expect(result.overallStatus).toBe("CORE_UNHEALTHY");
-    expect(result.notifications).toEqual(expect.objectContaining({
-      status: "UNAVAILABLE",
-      backlog: null,
-      failed: null,
-      unknownResult: null,
-      deadLetter: null,
-    }));
+    const result = JSON.parse(serialized) as Awaited<
+      ReturnType<AdminSystemService["getStatus"]>
+    >;
+    expect(result.services.postgres.state).toBe("UNAVAILABLE");
+    expect(result.services.redis.state).toBe("UNAVAILABLE");
+    expect(result.integrations.master.state).toBe("UNKNOWN");
+    expect(result.core.state).toBe("UNAVAILABLE");
+    expect(result.notifications).toEqual(
+      expect.objectContaining({
+        queueState: "UNKNOWN",
+        backlog: null,
+        failed: null,
+        unknownResult: null,
+        deadLetter: null,
+      }),
+    );
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("private-master");
   });
@@ -134,10 +199,12 @@ describe("AdminSystemService", () => {
     jest.useFakeTimers();
     try {
       const { service, prisma } = harness();
-      prisma.isDatabaseHealthy.mockReturnValue(new Promise<boolean>(() => undefined));
+      prisma.isDatabaseHealthy.mockReturnValue(
+        new Promise<boolean>(() => undefined),
+      );
       const pending = service.getStatus();
       await jest.advanceTimersByTimeAsync(3_001);
-      expect((await pending).dependencies.postgres.status).toBe("UNAVAILABLE");
+      expect((await pending).services.postgres.state).toBe("UNAVAILABLE");
     } finally {
       jest.useRealTimers();
     }

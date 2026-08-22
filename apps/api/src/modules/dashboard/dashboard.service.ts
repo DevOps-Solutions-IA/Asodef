@@ -28,6 +28,7 @@ export class DashboardService {
 
     const [
       newProspects30d,
+      openOpportunities,
       opportunitiesByStageRaw,
       opportunitiesWon,
       opportunitiesLost,
@@ -36,6 +37,8 @@ export class DashboardService {
       activeAgreements,
       contractsPendingSignature,
       contractsNearingExpiration,
+      activeContracts,
+      expiredContracts,
       commercialActivities30d,
       leadsWithoutFollowUp,
       recaudoDiario,
@@ -47,8 +50,14 @@ export class DashboardService {
       obligacionesPendientes,
       obligacionesVencidas,
       reconciliationDifferencesOpen,
+      openPqrCases,
+      overduePqrCases,
+      openDataSubjectRequests,
+      overdueDataSubjectRequests,
+      pendingApprovalGates,
     ] = await Promise.all([
       this.prisma.prospect.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      this.prisma.opportunity.count({ where: { stage: { notIn: ["ACTIVE_PARTNER", "INACTIVE", "LOST_OPPORTUNITY", "CONTRACT_EXPIRED"] } } }),
       this.prisma.opportunity.groupBy({ by: ["stage"], _count: { _all: true } }),
       this.prisma.opportunity.count({ where: { stage: "ACTIVE_PARTNER" } }),
       this.prisma.opportunity.count({ where: { stage: "LOST_OPPORTUNITY" } }),
@@ -57,6 +66,8 @@ export class DashboardService {
       this.prisma.agreement.count({ where: { signedDate: { not: null } } }),
       this.prisma.contract.count({ where: { status: "PENDING_ACCEPTANCE" } }),
       this.prisma.contract.count({ where: { status: "ACTIVE", expirationDate: { gte: new Date(), lte: in30Days } } }),
+      this.prisma.contract.count({ where: { status: "ACTIVE" } }),
+      this.prisma.contract.count({ where: { status: "EXPIRED" } }),
       this.prisma.commercialActivity.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
       // "Leads without follow-up": never promoted into a Prospect - no
       // separate follow-up/activity tracking exists on LeadSubmission
@@ -72,6 +83,11 @@ export class DashboardService {
       this.prisma.obligation.count({ where: { status: "PENDING" } }),
       this.prisma.obligation.count({ where: { status: "OVERDUE" } }),
       this.prisma.reconciliationDifference.count({ where: { resolutionStatus: "OPEN" } }),
+      this.prisma.pqrCase.count({ where: { status: { notIn: ["RESOLVED", "CLOSED"] } } }),
+      this.prisma.pqrCase.count({ where: { dueDate: { lt: new Date() }, status: { notIn: ["RESOLVED", "CLOSED"] } } }),
+      this.prisma.dataSubjectRequest.count({ where: { status: { notIn: ["RESOLVED", "REJECTED_WITH_REASON", "CLOSED"] } } }),
+      this.prisma.dataSubjectRequest.count({ where: { dueDate: { lt: new Date() }, status: { notIn: ["RESOLVED", "REJECTED_WITH_REASON", "CLOSED"] } } }),
+      this.prisma.approvalGate.count({ where: { status: { in: ["PENDING", "UNDER_REVIEW"] } } }),
     ]);
 
     const opportunitiesByStage: Record<string, number> = {};
@@ -83,12 +99,15 @@ export class DashboardService {
 
     return {
       newProspects30d,
+      openOpportunities,
       opportunitiesByStage,
       conversionRate: totalOpportunities > 0 ? opportunitiesWon / totalOpportunities : 0,
       activeCompanies,
       activeAgreements,
       contractsPendingSignature,
       contractsNearingExpiration,
+      activeContracts,
+      expiredContracts,
       commercialActivities30d,
       leadsWithoutFollowUp,
       opportunitiesWon,
@@ -102,6 +121,11 @@ export class DashboardService {
       obligacionesPendientes,
       obligacionesVencidas,
       reconciliationDifferencesOpen,
+      openPqrCases,
+      overduePqrCases,
+      openDataSubjectRequests,
+      overdueDataSubjectRequests,
+      pendingApprovalGates,
     };
   }
 }
