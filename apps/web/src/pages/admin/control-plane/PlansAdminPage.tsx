@@ -37,7 +37,10 @@ export function PlansAdminPage() {
         icon={<Layers3 aria-hidden="true" className="h-5 w-5" />}
         actions={<StatusBadge tone="inactive" label="Backend bloqueado" />}
       />
-      <BackendDependencyNotice domain="Planes" />
+      <BackendDependencyNotice
+        domain="Planes"
+        classification="BLOCKED_BY_PLANS"
+      />
       <EmptyState
         icon={<ServerOff className="h-6 w-6" />}
         title="Fuente administrativa aún no conectada"
