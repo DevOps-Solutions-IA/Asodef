@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="43"
+readonly EXPECTED_MIGRATIONS="44"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"
@@ -263,7 +263,7 @@ for seed_run in 1 2 3; do
 done
 
 [[ "$(db_scalar "SELECT count(*) FROM roles;")" == "9" ]] || fail "seeded role count is not 9"
-[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "45" ]] || fail "seeded permission count is not 45"
+[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "47" ]] || fail "seeded permission count is not 47"
 [[ "$(db_scalar "SELECT count(*) FROM content_entries;")" == "38" ]] || fail "seeded content count is not 38"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents;")" == "21" ]] || fail "legal seed must create exactly 21 documents"
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version=1 AND status='DRAFT';")" == "21" ]] || fail "legal seed must create 21 version-1 DRAFT records"
