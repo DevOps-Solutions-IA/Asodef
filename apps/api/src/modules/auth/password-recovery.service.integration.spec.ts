@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ConfigModule } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
@@ -27,11 +28,29 @@ import { AdminIdentityPolicy } from "./admin-identity.policy";
 const CURRENT_PASSWORD = "Current-Password-99!";
 const PRIVILEGED_TEST_EMAIL = `admin-${randomUUID()}@example.invalid`;
 const RECOVERY_TEST_EMAIL = `recovery-${randomUUID()}@example.invalid`;
+const OBSERVABLE_STATE_TIMEOUT_MS = 2_000;
+const OBSERVABLE_STATE_POLL_INTERVAL_MS = 10;
 
 function extractTokenFromResetUrl(body: string): string {
   const match = /token=([^&\s]+)/.exec(body);
   if (!match) throw new Error("no reset token found in captured email body");
   return decodeURIComponent(match[1]!);
+}
+
+async function waitForObservableState(
+  description: string,
+  observe: () => Promise<boolean>,
+): Promise<void> {
+  const deadline = performance.now() + OBSERVABLE_STATE_TIMEOUT_MS;
+  while (performance.now() < deadline) {
+    if (await observe()) return;
+    await new Promise((resolve) =>
+      setTimeout(resolve, OBSERVABLE_STATE_POLL_INTERVAL_MS),
+    );
+  }
+  throw new Error(
+    `Timed out after ${OBSERVABLE_STATE_TIMEOUT_MS}ms waiting for ${description}`,
+  );
 }
 
 describe("PasswordRecoveryService (integration, real Postgres + Redis, no mocking of business logic)", () => {
@@ -102,9 +121,7 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
   });
 
   afterAll(async () => {
-    if (createdUserIds.length > 0) {
-      await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
-    }
+    await cleanupCreatedFixtures();
     await moduleRef.close();
     if (originalAdminAccountEmail === undefined) delete process.env.ADMIN_ACCOUNT_EMAIL;
     else process.env.ADMIN_ACCOUNT_EMAIL = originalAdminAccountEmail;
@@ -114,11 +131,22 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
 
   afterEach(async () => {
     mailTransport.clear();
-    if (createdUserIds.length > 0) {
-      await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
-      createdUserIds.splice(0, createdUserIds.length);
-    }
+    await cleanupCreatedFixtures();
   });
+
+  async function cleanupCreatedFixtures(): Promise<void> {
+    const userIds = [...createdUserIds];
+    if (userIds.length === 0) return;
+    // NotificationJob intentionally survives a production user deletion via
+    // onDelete: SetNull. Tests must therefore remove only their own durable
+    // outbox fixtures before deleting the associated users, otherwise queued
+    // rows leak into later tests and consume the worker's bounded claim batch.
+    await prisma.notificationJob.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    createdUserIds.splice(0, createdUserIds.length);
+  }
 
   function uniqueContext() {
     ipCounter += 1;
@@ -143,9 +171,24 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
   async function waitForBackgroundWork(): Promise<void> {
     // Password recovery queues outside the public response path. The durable
     // outbox intentionally does not auto-run in NODE_ENV=test, so tests drive
-    // the real claim/delivery worker explicitly instead of relying on a timer.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await notificationService.processAvailableJobs();
+    // the real claim/delivery worker until this fixture's observable jobs have
+    // left the active queue. Repeated bounded batches remain necessary because
+    // the production worker deliberately claims at most ten global jobs.
+    const fixtureUserIds = [...createdUserIds];
+    await waitForObservableState(
+      "fixture notification jobs to leave QUEUED/PROCESSING",
+      async () => {
+        await notificationService.processAvailableJobs();
+        if (fixtureUserIds.length === 0) return true;
+        const activeJobs = await prisma.notificationJob.count({
+          where: {
+            userId: { in: fixtureUserIds },
+            status: { in: ["QUEUED", "PROCESSING"] },
+          },
+        });
+        return activeJobs === 0;
+      },
+    );
   }
 
   describe("forgotPassword", () => {
@@ -244,12 +287,12 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
 
     it("applies the same bounded response floor to existing and unknown identities", async () => {
       const user = await createUser();
-      const existingStartedAt = Date.now();
+      const existingStartedAt = performance.now();
       await service.forgotPassword({ email: user.email }, uniqueContext());
-      const existingDuration = Date.now() - existingStartedAt;
-      const unknownStartedAt = Date.now();
+      const existingDuration = performance.now() - existingStartedAt;
+      const unknownStartedAt = performance.now();
       await service.forgotPassword({ email: `nobody-${randomUUID()}@example.com` }, uniqueContext());
-      const unknownDuration = Date.now() - unknownStartedAt;
+      const unknownDuration = performance.now() - unknownStartedAt;
 
       // Leave scheduler tolerance while proving neither path returns at the
       // raw indexed-lookup speed that would reveal account existence.
@@ -1127,25 +1170,44 @@ describe("PasswordRecoveryService (integration, real Postgres + Redis, no mockin
         },
       });
 
-      await isolatedService.forgotPassword(
-        { email: user.email },
-        { ipAddress: "203.0.113.222", userAgent: "a", requestId: randomUUID() },
-      );
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      await notificationServiceLocal.processAvailableJobs();
+      const recoveryContext = {
+        ipAddress: "203.0.113.222",
+        userAgent: "a",
+        requestId: randomUUID(),
+      };
+      try {
+        await isolatedService.forgotPassword(
+          { email: user.email },
+          recoveryContext,
+        );
+        await waitForObservableState(
+          "failed transport job to become RETRY_PENDING",
+          async () => {
+            await notificationServiceLocal.processAvailableJobs();
+            const observed = await prismaLocal.notificationJob.findFirst({
+              where: { correlationId: recoveryContext.requestId },
+              select: { status: true },
+            });
+            return observed?.status === "RETRY_PENDING";
+          },
+        );
 
-      const job = await prismaLocal.notificationJob.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
-      expect(job?.status).toBe("RETRY_PENDING");
-      expect(job?.retryCount).toBe(1);
-      expect(job?.failureReason).toBe("SMTP_DELIVERY_FAILED");
+        const job = await prismaLocal.notificationJob.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+        expect(job?.status).toBe("RETRY_PENDING");
+        expect(job?.retryCount).toBe(1);
+        expect(job?.failureReason).toBe("SMTP_DELIVERY_FAILED");
 
-      const event = await prismaLocal.securityEvent.findFirst({
-        where: { userId: user.id, type: "PASSWORD_NOTIFICATION_FAILED" },
-      });
-      expect(event).not.toBeNull();
-
-      await prismaLocal.user.delete({ where: { id: user.id } });
-      await isolatedModule.close();
+        const event = await prismaLocal.securityEvent.findFirst({
+          where: { userId: user.id, type: "PASSWORD_NOTIFICATION_FAILED" },
+        });
+        expect(event).not.toBeNull();
+      } finally {
+        await prismaLocal.notificationJob.deleteMany({
+          where: { userId: user.id },
+        });
+        await prismaLocal.user.deleteMany({ where: { id: user.id } });
+        await isolatedModule.close();
+      }
     });
   });
 
