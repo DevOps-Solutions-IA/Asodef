@@ -92,6 +92,8 @@ const AdminPaymentsPage = lazy(() => import("../pages/admin/payments/AdminPaymen
 const PaymentOrderDetailPage = lazy(() => import("../pages/admin/payments/PaymentOrderDetailPage").then((m) => ({ default: m.PaymentOrderDetailPage })));
 const AdminReconciliationPage = lazy(() => import("../pages/admin/payments/AdminReconciliationPage").then((m) => ({ default: m.AdminReconciliationPage })));
 const AdminReportsPage = lazy(() => import("../pages/admin/reports/AdminReportsPage").then((m) => ({ default: m.AdminReportsPage })));
+const PlansAdminPage = lazy(() => import("../pages/admin/control-plane/PlansAdminPage").then((m) => ({ default: m.PlansAdminPage })));
+const ControlPlaneSectionPage = lazy(() => import("../pages/admin/control-plane/ControlPlaneSectionPage").then((m) => ({ default: m.ControlPlaneSectionPage })));
 
 /**
  * Exported separately (not just the built router) so tests can build a
@@ -206,7 +208,30 @@ export const routeConfig: RouteObject[] = [
                   },
                 ],
               },
-              { path: "planes", element: <RoutePlaceholder title="Planes" /> },
+              {
+                // Agent 1's canonical conversation contract owns these
+                // read permissions. Mutation permissions remain enforced by
+                // its API and are never inferred from this UI route.
+                element: <PermissionRoute permissions={["koral.conversations.read"]} />,
+                children: [
+                  { path: "koral/conversaciones", element: <ControlPlaneSectionPage area="koral" section="conversaciones" /> },
+                  { path: "koral/inbox", element: <ControlPlaneSectionPage area="koral" section="inbox" /> },
+                ],
+              },
+              {
+                // Foundation routes intentionally reuse the existing
+                // platform-governance permission. Fine-grained backend
+                // permissions remain a documented dependency and are not
+                // inferred by the frontend.
+                element: <PermissionRoute permissions={["settings.manage"]} />,
+                children: [
+                  { path: "planes", element: <PlansAdminPage /> },
+                  { path: "koral/:sectionSlug", element: <ControlPlaneSectionPage area="koral" /> },
+                  { path: "koral", element: <Navigate to="/admin/koral/resumen" replace /> },
+                  { path: "comunicaciones/:sectionSlug", element: <ControlPlaneSectionPage area="comunicaciones" /> },
+                  { path: "comunicaciones", element: <Navigate to="/admin/comunicaciones/plantillas" replace /> },
+                ],
+              },
               {
                 element: <PermissionRoute permissions={["payments.read"]} />,
                 children: [
@@ -222,7 +247,6 @@ export const routeConfig: RouteObject[] = [
                 element: <PermissionRoute permissions={["contracts.read"]} />,
                 children: [{ path: "contratos", element: <RoutePlaceholder title="Contratos" /> }],
               },
-              { path: "comunicaciones", element: <RoutePlaceholder title="Comunicaciones" /> },
               {
                 // content.manage gates visibility (edit/submit/reject);
                 // legal.approve additionally gates approve/publish inside

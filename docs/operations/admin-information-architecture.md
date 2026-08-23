@@ -7,9 +7,9 @@
 | Dashboard              | `/admin`                                        | `AdminDashboardPage`, `GET /admin/dashboard`         | internal staff role                               | Gestión / Dashboard                 | REFACTOR: retain live business metrics and remove technical/account telemetry |
 | CRM                    | `/admin/crm/*`                                  | Existing CRM layout, pages and controllers           | `crm.read`, mutations retain domain permissions   | Gestión / CRM                       | KEEP                                                                          |
 | Companies and partners | `/admin/crm/empresas`, `/admin/crm/aliados/:id` | Existing CRM company/partner pages and APIs          | `crm.read`, `companies.manage`, `partners.manage` | Gestión / Empresas y aliados        | KEEP                                                                          |
-| Plans                  | `/admin/planes`                                 | Route placeholder only                               | none                                              | Gestión / Planes                    | REMOVE_FROM_NAV until a real administrative page/API exists                   |
+| Plans                  | `/admin/planes`                                 | Control Plane UI contract; backend dependency pending | `settings.manage` UI gate                         | Gestión / Planes                    | FOUNDATION: fail-closed dependency state; no API or publication action        |
 | Contracts              | `/admin/contratos`                              | Route placeholder; real contract backend exists      | `contracts.read`                                  | Gestión / Contratos                 | REMOVE_FROM_NAV until a real administrative page exists                       |
-| Communications         | `/admin/comunicaciones`                         | Route placeholder; public unsubscribe/API exists     | none                                              | Operación / Comunicaciones          | REMOVE_FROM_NAV until an administrative workflow exists                       |
+| Communications         | `/admin/comunicaciones/*`                       | Functional Control Plane foundation                  | `settings.manage` UI gate                         | Comunicaciones                      | FOUNDATION: templates, automations, history and functional configuration      |
 | Payments               | `/admin/pagos/*`                                | Existing payment pages and APIs                      | `payments.read`                                   | Operación / Pagos                   | KEEP                                                                          |
 | Reconciliation         | `/admin/conciliacion`                           | Existing reconciliation page and APIs                | `payments.reconcile`                              | Operación / Conciliación            | KEEP                                                                          |
 | Legal                  | `/admin/legal`                                  | Existing Legal admin module                          | `content.manage`, `legal.approve` for approval    | Cumplimiento / Legal                | KEEP, no functional modification                                              |
@@ -26,7 +26,9 @@
 
 ## Resulting taxonomy
 
-- Gestión: Dashboard, CRM, Empresas y aliados.
+- Gestión: Dashboard, CRM, Empresas y aliados, Planes.
+- Koral: Resumen, Conversaciones, Inbox, Conocimiento, Agentes, Herramientas, Recomendaciones, Automatizaciones, Analítica.
+- Comunicaciones: Plantillas, Automatizaciones, Historial, Configuración funcional.
 - Operación: Pagos, Conciliación.
 - Cumplimiento: Legal, Consentimientos, Solicitudes de datos, PQR.
 - Inteligencia: Reportes.

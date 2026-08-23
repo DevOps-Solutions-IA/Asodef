@@ -177,6 +177,7 @@ describe("AdminSystemPage", () => {
     for (const label of [
       "Servicios",
       "Integraciones",
+      "Proveedores",
       "Notificaciones",
       "Versiones",
       "Seguridad técnica",
@@ -190,6 +191,22 @@ describe("AdminSystemPage", () => {
     expect(
       screen.queryByRole("button", { name: /deploy/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps provider health technical, unknown and secret-free until its contract exists", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Proveedores" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Salud de proveedores" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "OpenRouter" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("UNKNOWN").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("sk-or-v1-");
   });
 
   it("shows the safe request error state", async () => {
