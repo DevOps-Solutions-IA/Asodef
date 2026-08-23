@@ -3,7 +3,7 @@
 # stage rather than selectively copying package.json files, trading
 # some layer-cache efficiency for a Dockerfile that's simple and
 # unambiguously correct for a pnpm workspace with several internal
-# packages (@asodef/config, @asodef/payments).
+# packages (@asodef/config, @asodef/payments, @asodef/connect-contracts).
 FROM node:20.19-alpine AS base
 # Alpine 3.19+ ships OpenSSL 3.x with no libssl.so.1.1 - without the
 # openssl package present, Prisma's own runtime OpenSSL-version probe
@@ -26,6 +26,7 @@ RUN test ! -e /app/.env && test ! -e /app/apps/web/.env.local
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @asodef/config build
 RUN pnpm --filter @asodef/payments build
+RUN pnpm --filter @asodef/connect-contracts build
 RUN pnpm --filter api prisma:generate
 RUN pnpm --filter api build
 
