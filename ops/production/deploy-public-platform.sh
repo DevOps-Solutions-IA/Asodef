@@ -66,14 +66,14 @@ if ! docker run --rm \
     test "$(pwd)" = /app/apps/api
     test -f prisma/schema.prisma
     test -x node_modules/.bin/prisma
-    test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" = 44
+    test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" = 45
     node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma >/dev/null
     node_modules/.bin/prisma migrate status --schema prisma/schema.prisma >/dev/null
   '; then
   echo 'status=error code=PRODUCTION_MIGRATION_FAILED' >&2
   exit 1
 fi
-echo 'status=ok migrations=44 exactImage=PASS'
+echo 'status=ok migrations=45 exactImage=PASS'
 
 install_args+=(--apply)
 "$script_dir/install-compose-contract.sh" "${install_args[@]}"

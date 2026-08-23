@@ -13,6 +13,7 @@ export const IDENTITY_ASSURANCE_LEVELS = [
   "MATCHED",
   "VERIFIED",
   "AUTHENTICATED",
+  "MFA_VERIFIED",
   "STEP_UP_VERIFIED",
 ] as const;
 
@@ -52,7 +53,8 @@ const ASSURANCE_RANK: Readonly<Record<IdentityAssuranceLevel, number>> = {
   MATCHED: 2,
   VERIFIED: 3,
   AUTHENTICATED: 4,
-  STEP_UP_VERIFIED: 5,
+  MFA_VERIFIED: 5,
+  STEP_UP_VERIFIED: 6,
 };
 
 export function hasIdentityAssurance(
@@ -67,15 +69,17 @@ export function hasIdentityAssurance(
 export function resolveCanonicalIdentityLevel(
   identity: ResolvedIdentityContext,
 ): MinimumIdentityLevel | null {
-  if (!hasIdentityAssurance(identity.assuranceLevel, "AUTHENTICATED")) {
-    return null;
-  }
+  if (!hasIdentityAssurance(identity.assuranceLevel, "AUTHENTICATED")) return null;
   const resolved = resolveGatewayIdentityLevel(identity.authenticationEvidence);
   if (!resolved) return null;
-  if (identity.assuranceLevel === "STEP_UP_VERIFIED") {
-    return resolved === "STEP_UP_VERIFIED" ? resolved : null;
+
+  // The persisted/local level is an upper bound, never an invitation to
+  // infer a stronger canonical assurance from incidental evidence flags.
+  if (identity.assuranceLevel === "AUTHENTICATED") return "AUTHENTICATED";
+  if (identity.assuranceLevel === "MFA_VERIFIED") {
+    return identity.authenticationEvidence.mfaVerified ? "MFA_VERIFIED" : null;
   }
-  return resolved === "STEP_UP_VERIFIED" ? null : resolved;
+  return resolved === "STEP_UP_VERIFIED" ? "STEP_UP_VERIFIED" : null;
 }
 
 export const IDENTITY_RESOLUTION_CONTRACT_SEMANTICS = {

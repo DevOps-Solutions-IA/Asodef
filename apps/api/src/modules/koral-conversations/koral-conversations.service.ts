@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   AuditEventResult,
@@ -16,7 +17,7 @@ import type { AddInternalNoteDto } from "./dto/add-internal-note.dto";
 import type { AssignConversationDto } from "./dto/assign-conversation.dto";
 import type { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import type { ReturnToKoralDto } from "./dto/return-to-koral.dto";
-import type { ConversationSummaryResponse, InboundReceipt, MutationContext } from "./koral-conversations.types";
+import type { ConversationSummaryResponse, InboundReceipt, KoralOutboundCommitInput, MutationContext } from "./koral-conversations.types";
 
 const GENERIC_NOT_FOUND = "No se encontró la conversación solicitada.";
 const CONCURRENT_CHANGE = "La conversación cambió mientras se procesaba la acción. Actualiza e intenta nuevamente.";
@@ -185,11 +186,89 @@ export class KoralConversationsService {
         internalNotes: { orderBy: { createdAt: "asc" } },
         tags: true,
         events: { orderBy: { createdAt: "asc" } },
+        identityBindings: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
         channelSessions: true,
       },
     });
     if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
     return conversation;
+  }
+
+  async getRuntimeState(id: string) {
+    const conversation = await this.prisma.conversation.findUnique({ where: { id }, select: { id: true, status: true, version: true } });
+    if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+    return { ...conversation, mayAutoReply: mayKoralAutoReply(conversation.status) };
+  }
+
+  /** Commits an AI response only if the exact conversation version remains
+   * auto-replyable. A concurrent human takeover therefore wins and no AI
+   * message is persisted or delivered while HUMAN_ACTIVE. */
+  async commitKoralOutbound(input: KoralOutboundCommitInput) {
+    const idempotencyKey = requiredRuntimeText(input.idempotencyKey, "INVALID_IDEMPOTENCY_KEY", 180);
+    const correlationId = requiredRuntimeText(input.correlationId, "INVALID_CORRELATION_ID", 200);
+    const contentType = requiredRuntimeText(input.contentType, "INVALID_CONTENT_TYPE", 128).toLowerCase();
+    if (!input.body || input.body.length > 50_000) throw new BadRequestException("INVALID_OUTBOUND_BODY");
+    const payloadHash = createHash("sha256").update(`${input.channel}\0${input.externalSessionId}\0${contentType}\0${input.body}`).digest("hex");
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ acquired: boolean }>>(
+        Prisma.sql`SELECT true AS acquired FROM pg_advisory_xact_lock(hashtextextended(${`koral-outbound:${input.conversationId}`}, 0))`,
+      );
+      const replay = await tx.conversationEvent.findUnique({
+        where: { conversationId_idempotencyKey: { conversationId: input.conversationId, idempotencyKey: `outbound:${idempotencyKey}` } },
+      });
+      if (replay) {
+        const metadata = jsonObject(replay.metadata);
+        const messageId = typeof metadata.messageId === "string" ? metadata.messageId : null;
+        if (
+          !messageId
+          || metadata.payloadHash !== payloadHash
+          || metadata.channel !== input.channel
+          || metadata.contentType !== contentType
+        ) throw new ConflictException(IDEMPOTENCY_CONFLICT);
+        return { committed: true as const, replayed: true as const, messageId };
+      }
+      const conversation = await tx.conversation.findUnique({ where: { id: input.conversationId } });
+      if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+      if (conversation.version !== input.expectedVersion || !mayKoralAutoReply(conversation.status)) {
+        return { committed: false as const, replayed: false as const, reason: "CONVERSATION_NOT_AI_ACTIVE" as const };
+      }
+      const channelSession = await tx.conversationChannelSession.findUnique({
+        where: { channel_externalSessionId: { channel: input.channel, externalSessionId: input.externalSessionId } },
+      });
+      if (!channelSession || channelSession.conversationId !== input.conversationId) {
+        throw new ConflictException("CHANNEL_SESSION_MISMATCH");
+      }
+      const message = await tx.conversationMessage.create({
+        data: {
+          conversationId: input.conversationId,
+          channelSessionId: channelSession.id,
+          direction: ConversationMessageDirection.OUTBOUND,
+          status: ConversationMessageStatus.PENDING,
+          externalMessageId: `koral:${idempotencyKey}`,
+          contentType,
+          body: input.body,
+          correlationId,
+          occurredAt: new Date(),
+        },
+      });
+      await tx.conversation.update({
+        where: { id: input.conversationId },
+        data: { status: ConversationStatus.WAITING_USER, lastMessageAt: message.occurredAt, version: { increment: 1 } },
+      });
+      await tx.conversationEvent.create({
+        data: {
+          conversationId: input.conversationId,
+          eventType: "KORAL_RESPONSE_QUEUED",
+          correlationId,
+          idempotencyKey: `outbound:${idempotencyKey}`,
+          previousStatus: conversation.status,
+          newStatus: ConversationStatus.WAITING_USER,
+          result: AuditEventResult.SUCCESS,
+          metadata: { messageId: message.id, channel: input.channel, contentType, payloadHash },
+        },
+      });
+      return { committed: true as const, replayed: false as const, messageId: message.id };
+    });
   }
 
   async assign(id: string, dto: AssignConversationDto, context: MutationContext) {
@@ -345,4 +424,14 @@ export class KoralConversationsService {
 function jsonObject(value: Prisma.JsonValue | null): Prisma.JsonObject {
   if (value === null || Array.isArray(value) || typeof value !== "object") return {};
   return value;
+}
+
+function requiredRuntimeText(value: string, code: string, maxLength: number): string {
+  const normalized = value.trim();
+  const hasControlCharacter = [...normalized].some((character) => {
+    const codePoint = character.charCodeAt(0);
+    return codePoint < 32 || codePoint === 127;
+  });
+  if (!normalized || normalized.length > maxLength || hasControlCharacter) throw new BadRequestException(code);
+  return normalized;
 }

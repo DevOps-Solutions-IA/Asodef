@@ -175,6 +175,18 @@ enum ConversationPriority {
   @@map("conversation_priority")
 }
 
+enum ConversationIdentityAssurance {
+  ANONYMOUS
+  CLAIMED
+  MATCHED
+  VERIFIED
+  AUTHENTICATED
+  MFA_VERIFIED
+  STEP_UP_VERIFIED
+
+  @@map("conversation_identity_assurance")
+}
+
 model Conversation {
   id            String               @id @default(uuid()) @db.Uuid
   status        ConversationStatus   @default(AI_ACTIVE)
@@ -188,17 +200,45 @@ model Conversation {
   createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  participants    ConversationParticipant[]
-  messages        ConversationMessage[]
-  channelSessions ConversationChannelSession[]
-  assignments     ConversationAssignment[]
-  internalNotes   ConversationInternalNote[]
-  tags            ConversationTag[]
-  events          ConversationEvent[]
+  participants     ConversationParticipant[]
+  messages         ConversationMessage[]
+  channelSessions  ConversationChannelSession[]
+  assignments      ConversationAssignment[]
+  internalNotes    ConversationInternalNote[]
+  tags             ConversationTag[]
+  events           ConversationEvent[]
+  identityBindings ConversationIdentityBinding[]
 
   @@index([status, priority, updatedAt])
   @@index([slaDueAt])
   @@map("conversations")
+}
+
+// Append-only identity evidence ledger. It records what assurance was proven
+// for a conversation at a point in time; runtime authorization always
+// revalidates server-side session evidence and never trusts this history as a
+// current credential.
+model ConversationIdentityBinding {
+  id                String                         @id @default(uuid()) @db.Uuid
+  conversationId    String                         @map("conversation_id") @db.Uuid
+  identityId        String                         @map("identity_id")
+  contactId         String?                        @map("contact_id")
+  portalUserId      String?                        @map("portal_user_id")
+  previousAssurance ConversationIdentityAssurance? @map("previous_assurance")
+  newAssurance      ConversationIdentityAssurance  @map("new_assurance")
+  reason            String
+  evidenceReference String                         @map("evidence_reference")
+  correlationId     String                         @map("correlation_id")
+  idempotencyKey    String                         @map("idempotency_key")
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, idempotencyKey], map: "conversation_identity_bindings_idempotency_uq")
+  @@index([conversationId, createdAt, id], map: "conversation_identity_bindings_timeline_idx")
+  @@index([identityId, createdAt])
+  @@index([correlationId])
+  @@map("conversation_identity_bindings")
 }
 
 model ConversationParticipant {

@@ -23,6 +23,7 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
       await prisma.conversationAttachment.deleteMany({ where: { messageId: { in: messages.map((message) => message.id) } } });
       await prisma.conversationInternalNote.deleteMany({ where });
       await prisma.conversationEvent.deleteMany({ where });
+      await prisma.conversationIdentityBinding.deleteMany({ where });
       await prisma.conversationAssignment.deleteMany({ where });
       await prisma.conversationMessage.deleteMany({ where });
       await prisma.conversationParticipant.deleteMany({ where });
@@ -122,6 +123,59 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     expect(await prisma.conversationAssignment.count({ where: { conversationId: conversation.id, releasedAt: null } })).toBe(1);
     expect(await prisma.conversationEvent.count({ where: { conversationId: conversation.id, eventType: "ASSIGNMENT_CREATED" } })).toBe(1);
+  });
+
+  it("lets a concurrent human takeover suppress an AI outbound commit", async () => {
+    const actor = await createActiveUser("takeover-actor");
+    const externalSessionId = randomUUID();
+    const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID()));
+    conversationIds.push(receipt.conversationId);
+    const beforeTakeover = await service.getRuntimeState(receipt.conversationId);
+    await service.assign(receipt.conversationId, {
+      assigneeUserId: actor.id,
+      priority: ConversationPriority.HIGH,
+      expectedVersion: beforeTakeover.version,
+      idempotencyKey: randomUUID(),
+      reason: "Human takeover before inference completed",
+    }, { actorUserId: actor.id });
+
+    const result = await service.commitKoralOutbound({
+      conversationId: receipt.conversationId,
+      channel: ConversationChannel.WEB,
+      externalSessionId,
+      expectedVersion: beforeTakeover.version,
+      idempotencyKey: randomUUID(),
+      correlationId: randomUUID(),
+      contentType: "text/plain",
+      body: "This response must never be committed",
+    });
+    expect(result).toMatchObject({ committed: false, reason: "CONVERSATION_NOT_AI_ACTIVE" });
+    expect(await prisma.conversationMessage.count({ where: { conversationId: receipt.conversationId, direction: "OUTBOUND" } })).toBe(0);
+  });
+
+  it("queues an AI response once and rejects idempotency-key reuse with different content", async () => {
+    const externalSessionId = randomUUID();
+    const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID()));
+    conversationIds.push(receipt.conversationId);
+    const state = await service.getRuntimeState(receipt.conversationId);
+    const idempotencyKey = randomUUID();
+    const request = {
+      conversationId: receipt.conversationId,
+      channel: ConversationChannel.WEB,
+      externalSessionId,
+      expectedVersion: state.version,
+      idempotencyKey,
+      correlationId: randomUUID(),
+      contentType: "text/plain",
+      body: "Respuesta validada",
+    };
+    const first = await service.commitKoralOutbound(request);
+    const replay = await service.commitKoralOutbound(request);
+    expect(first).toMatchObject({ committed: true, replayed: false });
+    expect(replay).toMatchObject({ committed: true, replayed: true, messageId: first.messageId });
+    await expect(service.commitKoralOutbound({ ...request, body: "Contenido diferente" })).rejects.toThrow("idempotencia");
+    expect(await prisma.conversationMessage.count({ where: { conversationId: receipt.conversationId, direction: "OUTBOUND" } })).toBe(1);
+    expect(await prisma.conversationEvent.count({ where: { conversationId: receipt.conversationId, eventType: "KORAL_RESPONSE_QUEUED" } })).toBe(1);
   });
 
   it("replays only an identical idempotent mutation and rejects key reuse with a different payload", async () => {
