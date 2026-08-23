@@ -50,6 +50,7 @@ export const KORAL_SECTIONS: readonly ControlPlaneSectionDefinition[] = [
     icon: MessagesSquare,
     capabilities: [
       "Búsqueda",
+      "Canales normalizados",
       "Consentimiento y PII",
       "Trazas de herramientas",
     ],
@@ -61,6 +62,7 @@ export const KORAL_SECTIONS: readonly ControlPlaneSectionDefinition[] = [
       "Colas, asignación y transferencia segura entre Koral y asesores.",
     icon: Inbox,
     capabilities: [
+      "Estado de handoff",
       "Prioridad y SLA",
       "Takeover sin colisiones",
       "Notas y etiquetas",
@@ -114,7 +116,14 @@ export const KORAL_SECTIONS: readonly ControlPlaneSectionDefinition[] = [
     label: "Automatizaciones",
     description: "Flujos gobernados con aprobación, límites y recuperación.",
     icon: Network,
-    capabilities: ["Triggers y condiciones", "Vista previa", "Rollback"],
+    capabilities: [
+      "Trigger",
+      "Condiciones",
+      "Acciones",
+      "Versiones",
+      "Historial de ejecución",
+      "Dead-letter",
+    ],
   },
   {
     slug: "analitica",

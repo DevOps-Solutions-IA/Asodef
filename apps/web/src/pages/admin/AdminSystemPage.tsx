@@ -281,7 +281,7 @@ function ProviderHealth() {
       title="Salud de proveedores"
       description="Diagnóstico técnico separado de la operación de Koral y Comunicaciones. No se renderizan API keys, tokens ni endpoints internos."
     >
-      <Alert variant="warning" title="Contrato de health pendiente">
+      <Alert variant="warning" title="Provider health UNKNOWN">
         El backend actual no expone estas señales. Conexión, health y uso
         permanecen como desconocidos; la interfaz no infiere disponibilidad
         desde configuración local.
@@ -294,20 +294,20 @@ function ProviderHealth() {
           >
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-semibold text-text-main">{provider}</h3>
-              <StatusBadge tone="draft" label="Desconocido" />
+              <StatusBadge tone="draft" label="UNKNOWN" />
             </div>
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="text-text-muted">Conexión</dt>
-                <dd className="font-medium text-warning">Desconocida</dd>
+                <dd className="font-medium text-warning">UNKNOWN</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-text-muted">Health</dt>
-                <dd className="font-medium text-warning">Desconocido</dd>
+                <dd className="font-medium text-warning">UNKNOWN</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-text-muted">Uso</dt>
-                <dd className="font-medium text-text-muted">No disponible</dd>
+                <dd className="font-medium text-text-muted">UNAVAILABLE</dd>
               </div>
             </dl>
           </article>

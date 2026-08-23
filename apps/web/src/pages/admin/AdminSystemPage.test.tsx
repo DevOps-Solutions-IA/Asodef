@@ -205,7 +205,7 @@ describe("AdminSystemPage", () => {
     expect(
       screen.getByRole("heading", { name: "OpenRouter" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Desconocida").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("UNKNOWN").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("sk-or-v1-");
   });
 

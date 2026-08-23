@@ -8,7 +8,7 @@ import {
 
 describe("Control Plane consumer catalog", () => {
   it.each(["conversaciones", "inbox"])(
-    "uses Agent 1's canonical read permission for %s",
+    "uses Koral Core's canonical read permission for %s",
     (slug) => {
       expect(getControlPlanePermission("koral", slug)).toBe(
         "koral.conversations.read",

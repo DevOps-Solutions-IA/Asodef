@@ -25,6 +25,9 @@ describe("ControlPlaneSectionPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Asignación no verificable")).toBeInTheDocument();
     expect(
+      screen.getByText("Handoff UNAVAILABLE en esta UI"),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByRole("button", { name: /tomar caso/i }),
     ).not.toBeInTheDocument();
   });
@@ -45,6 +48,25 @@ describe("ControlPlaneSectionPage", () => {
     expect(screen.getByText("Vista previa")).toBeInTheDocument();
     expect(screen.getByText("Diferencias")).toBeInTheDocument();
     expect(screen.getByText("Auditoría")).toBeInTheDocument();
+    expect(
+      screen.getByText("Communications runtime NOT_CONFIGURED"),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes the canonical automation surfaces without enabling a runtime", () => {
+    renderSection("/admin/koral/automatizaciones", "koral");
+    for (const capability of [
+      "Trigger",
+      "Condiciones",
+      "Acciones",
+      "Versiones",
+      "Historial de ejecución",
+      "Dead-letter",
+    ])
+      expect(screen.getByText(capability)).toBeInTheDocument();
+    expect(
+      screen.getByText("Automation runtime NOT_CONFIGURED"),
+    ).toBeInTheDocument();
   });
 
   it("keeps plan-dependent recommendations blocked by Plans", () => {

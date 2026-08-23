@@ -1,10 +1,10 @@
 import { Alert, Button, StatusBadge } from "@asodef/ui";
 
-/** UI projection only. Agent 1 owns the conversation and assignment contract. */
+/** UI projection only. Koral Core owns the conversation and assignment contract. */
 export interface InboxOwnershipView {
-  assigneeId: string | null;
-  assigneeDisplayName: string | null;
-  ownershipVersion: number;
+  activeAssigneeUserId: string | null;
+  activeAssigneeDisplayName: string | null;
+  conversationVersion: number;
 }
 
 export interface InboxOwnershipGuardProps {
@@ -17,7 +17,7 @@ export interface InboxOwnershipGuardProps {
 
 /**
  * Visual concurrency boundary for the future inbox. The backend must still
- * enforce expectedOwnershipVersion atomically; this component never treats a
+ * enforce expectedVersion atomically; this component never treats a
  * disabled button as an authorization or locking mechanism.
  */
 export function InboxOwnershipGuard({
@@ -36,16 +36,16 @@ export function InboxOwnershipGuard({
     );
   }
 
-  const ownedByCurrentActor = ownership.assigneeId === currentActorId;
+  const ownedByCurrentActor = ownership.activeAssigneeUserId === currentActorId;
   const ownedByAnotherActor =
-    Boolean(ownership.assigneeId) && !ownedByCurrentActor;
+    Boolean(ownership.activeAssigneeUserId) && !ownedByCurrentActor;
 
   if (ownedByAnotherActor) {
     return (
       <Alert variant="danger" title="Caso tomado por otro asesor">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span>
-            {ownership.assigneeDisplayName ?? "Otro asesor"} conserva la
+            {ownership.activeAssigneeDisplayName ?? "Otro asesor"} conserva la
             asignación. Actualiza el caso antes de intentar una acción.
           </span>
           <StatusBadge tone="failed" label="Bloqueado por colisión" />
@@ -63,7 +63,7 @@ export function InboxOwnershipGuard({
             : "Caso gestionado por Koral"}
         </p>
         <p className="mt-1 text-xs text-text-muted">
-          Versión de propiedad {ownership.ownershipVersion}
+          Versión de conversación {ownership.conversationVersion}
         </p>
       </div>
       {ownedByCurrentActor ? (

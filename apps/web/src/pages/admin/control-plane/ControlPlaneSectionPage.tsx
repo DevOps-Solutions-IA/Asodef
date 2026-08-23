@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, StatusBadge } from "@asodef/ui";
+import { Alert, EmptyState, PageHeader, StatusBadge } from "@asodef/ui";
 import { Bot, Braces, LockKeyhole, ServerOff } from "lucide-react";
 import { useParams } from "react-router-dom";
 import {
@@ -37,6 +37,7 @@ export function ControlPlaneSectionPage({
 
   const Icon = section.icon;
   const isKoral = area === "koral";
+  const classification = getContractClassification(area, section.slug);
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,13 +50,26 @@ export function ControlPlaneSectionPage({
         title={section.label}
         description={section.description}
         icon={<Icon aria-hidden="true" className="h-5 w-5" />}
-        actions={<StatusBadge tone="draft" label="Dependencia pendiente" />}
+        actions={
+          <StatusBadge
+            tone={classification === "BLOCKED_BY_PLANS" ? "failed" : "inactive"}
+            label={dependencyStatusLabel(classification)}
+          />
+        }
       />
       <BackendDependencyNotice
         domain={section.label}
-        classification={getContractClassification(area, section.slug)}
+        classification={classification}
       />
       <CapabilityGrid capabilities={section.capabilities} />
+      {(section.slug === "conversaciones" || section.slug === "inbox") && (
+        <Alert variant="warning" title="Handoff UNAVAILABLE en esta UI">
+          El backend canónico conserva el estado y la versión de la
+          conversación, pero su respuesta aún no está conectada a esta vista.
+          Cuando el backend indique atención humana activa, la interfaz no
+          presentará a Koral como si estuviera atendiendo el caso.
+        </Alert>
+      )}
       {section.slug === "inbox" && (
         <section aria-labelledby="inbox-safety-heading" className="space-y-3">
           <h2
@@ -76,6 +90,20 @@ export function ControlPlaneSectionPage({
         </section>
       )}
       {section.slug === "agentes" && <ModelProfileFoundation />}
+      {area === "koral" && section.slug === "automatizaciones" && (
+        <Alert variant="warning" title="Automation runtime NOT_CONFIGURED">
+          Los contratos de trigger, condiciones, acciones, versiones, historial
+          y dead-letter están integrados. Ejecutar, activar, reintentar o
+          reprocesar permanece deshabilitado hasta contar con runtime canónico.
+        </Alert>
+      )}
+      {area === "comunicaciones" && (
+        <Alert variant="warning" title="Communications runtime NOT_CONFIGURED">
+          Los contratos canónicos están integrados, pero no existe runtime de
+          envío administrativo. Esta vista no envía mensajes ni interpreta una
+          configuración SMTP como entrega disponible.
+        </Alert>
+      )}
       {(section.slug === "conocimiento" ||
         section.slug === "automatizaciones" ||
         area === "comunicaciones") && (
@@ -106,7 +134,7 @@ function ModelProfileFoundation() {
             exponer credenciales ni permitir acceso directo a datos.
           </p>
         </div>
-        <StatusBadge tone="inactive" label="Sin conexión" />
+        <StatusBadge tone="inactive" label="NOT_CONFIGURED" />
       </div>
       <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ModelField
@@ -132,6 +160,15 @@ function ModelProfileFoundation() {
       </dl>
     </section>
   );
+}
+
+function dependencyStatusLabel(
+  classification: ReturnType<typeof getContractClassification>,
+): string {
+  if (classification === "ADAPTER_REQUIRED") return "UNAVAILABLE";
+  if (classification === "BLOCKED_BY_PLANS") return "BLOCKED";
+  if (classification === "MATCHES_CANONICAL") return "AVAILABLE";
+  return "NOT_CONFIGURED";
 }
 
 function ModelField({

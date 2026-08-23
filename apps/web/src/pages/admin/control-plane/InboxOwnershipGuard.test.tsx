@@ -6,9 +6,9 @@ import {
 } from "./InboxOwnershipGuard";
 
 const OWNERSHIP: InboxOwnershipView = {
-  assigneeId: "advisor-2",
-  assigneeDisplayName: "Asesor asignado",
-  ownershipVersion: 4,
+  activeAssigneeUserId: "advisor-2",
+  activeAssigneeDisplayName: "Asesor asignado",
+  conversationVersion: 4,
 };
 
 describe("InboxOwnershipGuard", () => {
@@ -41,7 +41,7 @@ describe("InboxOwnershipGuard", () => {
     const onReturnToKoral = vi.fn();
     render(
       <InboxOwnershipGuard
-        ownership={{ ...OWNERSHIP, assigneeId: "advisor-1" }}
+        ownership={{ ...OWNERSHIP, activeAssigneeUserId: "advisor-1" }}
         currentActorId="advisor-1"
         contractAvailable
         onReturnToKoral={onReturnToKoral}

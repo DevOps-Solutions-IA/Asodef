@@ -39,9 +39,9 @@ export function BackendDependencyNotice({
   if (classification === "ADAPTER_REQUIRED") {
     return (
       <Alert variant="warning" title="Adaptador al contrato canónico requerido">
-        {domain} depende del contrato de conversaciones del Agente 1. La UI
-        permanece sin acciones hasta consumir su respuesta canónica y cerrar las
-        capacidades faltantes documentadas.
+        {domain} depende del contrato de Koral Conversations ya integrado. La UI
+        permanece sin acciones hasta adaptar su respuesta canónica y cerrar las
+        capacidades runtime faltantes documentadas.
       </Alert>
     );
   }
