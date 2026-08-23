@@ -70,6 +70,7 @@ describe("CRM endpoints (integration, real HTTP)", () => {
       await prisma.company.deleteMany({ where: { id: { in: createdCompanyIds } } });
     }
     if (createdUserIds.length > 0) {
+      await prisma.adminIdempotency.deleteMany({ where: { actorUserId: { in: createdUserIds } } });
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     }
     await app.close();
@@ -247,8 +248,8 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     expect(historyRows[0]?.toStage).toBe("QUALIFIED");
 
     const auditEntries = await prisma.auditLog.findMany({ where: { opportunityId: opportunity.id } });
-    expect(auditEntries).toHaveLength(1);
-    expect(auditEntries[0]?.action).toBe("opportunity.stage_changed");
+    expect(auditEntries.map((entry) => entry.action)).toEqual(expect.arrayContaining(["opportunity.created", "opportunity.stage_changed"]));
+    expect(auditEntries.filter((entry) => entry.action === "opportunity.stage_changed")).toHaveLength(1);
   });
 
   it("Negative case (AC): jumping from NEW_PROSPECT to ACTIVE_PARTNER succeeds but returns a skip warning, and is still fully audited", async () => {
@@ -270,8 +271,9 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     expect(historyRows[0]?.toStage).toBe("ACTIVE_PARTNER");
 
     const auditEntries = await prisma.auditLog.findMany({ where: { opportunityId: opportunity.id } });
-    expect(auditEntries).toHaveLength(1);
-    expect(auditEntries[0]?.applied).toBe(true);
+    const stageAuditEntries = auditEntries.filter((entry) => entry.action === "opportunity.stage_changed");
+    expect(stageAuditEntries).toHaveLength(1);
+    expect(stageAuditEntries[0]?.applied).toBe(true);
   });
 
   it("a single forward step (e.g. NEW_PROSPECT -> CONTACTED) produces no warning", async () => {
@@ -329,11 +331,102 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
     const prospects = await request(app.getHttpServer()).get("/api/v1/admin/prospects").set("Cookie", admin.cookies);
     expect(prospects.status).toBe(200);
-    expect(prospects.body.some((p: { id: string }) => p.id === prospect.id)).toBe(true);
+    expect(prospects.body.items.some((p: { id: string }) => p.id === prospect.id)).toBe(true);
 
     const opportunities = await request(app.getHttpServer()).get("/api/v1/admin/opportunities").set("Cookie", admin.cookies);
     expect(opportunities.status).toBe(200);
-    expect(opportunities.body.some((o: { id: string }) => o.id === opportunity.id)).toBe(true);
+    expect(opportunities.body.items.some((o: { id: string }) => o.id === opportunity.id)).toBe(true);
+  });
+
+  it("validates bounded pagination and applies server-side prospect search", async () => {
+    const { prospect } = await promoteLeadAndCreateOpportunity();
+    const invalid = await request(app.getHttpServer()).get("/api/v1/admin/prospects?pageSize=101").set("Cookie", admin.cookies);
+    expect(invalid.status).toBe(400);
+
+    const filtered = await request(app.getHttpServer())
+      .get(`/api/v1/admin/prospects?search=${encodeURIComponent(prospect.documentOrNit)}&pageSize=1&sortBy=fullNameOrLegalName&sortOrder=asc`)
+      .set("Cookie", admin.cookies);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body).toMatchObject({ total: 1, page: 1, pageSize: 1 });
+    expect(filtered.body.items[0].id).toBe(prospect.id);
+  });
+
+  it("rejects a stale opportunity stage write with 409 and does not append history", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "CONTACTED", expectedUpdatedAt: opportunity.updatedAt });
+    expect(first.status).toBe(200);
+
+    const stale = await request(app.getHttpServer())
+      .post(`/api/v1/admin/opportunities/${opportunity.id}/stage`)
+      .set("Cookie", admin.cookies)
+      .send({ stage: "QUALIFIED", expectedUpdatedAt: opportunity.updatedAt });
+    expect(stale.status).toBe(409);
+    expect(stale.body.message).toContain("modificada por otra persona");
+    expect(await prisma.opportunityStatusHistory.count({ where: { opportunityId: opportunity.id } })).toBe(1);
+  });
+
+  it("assigns existing owners with optimistic concurrency and audits opportunity ownership changes", async () => {
+    const { prospect, opportunity } = await promoteLeadAndCreateOpportunity();
+    const assignedProspect = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/prospects/${prospect.id}/assignment`)
+      .set("Cookie", admin.cookies)
+      .send({ assignedUserId: admin.user.id, expectedUpdatedAt: prospect.updatedAt });
+    expect(assignedProspect.status).toBe(200);
+    expect(assignedProspect.body.assignedUserId).toBe(admin.user.id);
+
+    const assignedOpportunity = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/opportunities/${opportunity.id}/assignment`)
+      .set("Cookie", admin.cookies)
+      .send({ assignedUserId: admin.user.id, expectedUpdatedAt: opportunity.updatedAt });
+    expect(assignedOpportunity.status).toBe(200);
+    expect(assignedOpportunity.body.assignedUserId).toBe(admin.user.id);
+    const audit = await prisma.auditLog.findFirst({ where: { opportunityId: opportunity.id, action: "opportunity.assignment_changed" } });
+    expect(audit?.actorUserId).toBe(admin.user.id);
+    expect(audit?.metadata).toMatchObject({ before: { assignedUserId: null }, after: { assignedUserId: admin.user.id } });
+
+    const stale = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/opportunities/${opportunity.id}/assignment`)
+      .set("Cookie", admin.cookies)
+      .send({ assignedUserId: null, expectedUpdatedAt: opportunity.updatedAt });
+    expect(stale.status).toBe(409);
+  });
+
+  it("rejects assigning a CRM entity to a nonexistent user", async () => {
+    const { prospect } = await promoteLeadAndCreateOpportunity();
+    const response = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/prospects/${prospect.id}/assignment`)
+      .set("Cookie", admin.cookies)
+      .send({ assignedUserId: randomUUID(), expectedUpdatedAt: prospect.updatedAt });
+    expect(response.status).toBe(404);
+  });
+
+  it("serializes concurrent proposal creation into distinct sequential versions", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer()).post(`/api/v1/admin/opportunities/${opportunity.id}/proposals`).set("Cookie", admin.cookies).send({ content: { source: "concurrent-a" } }),
+      request(app.getHttpServer()).post(`/api/v1/admin/opportunities/${opportunity.id}/proposals`).set("Cookie", admin.cookies).send({ content: { source: "concurrent-b" } }),
+    ]);
+    expect([first.status, second.status]).toEqual([201, 201]);
+    expect([first.body.version, second.body.version].sort()).toEqual([1, 2]);
+  });
+
+  it("replays an admin proposal idempotency key safely and rejects payload drift", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    const key = randomUUID();
+    const endpoint = `/api/v1/admin/opportunities/${opportunity.id}/proposals`;
+    const payload = { content: { benefit: "Propuesta idempotente" } };
+    const first = await request(app.getHttpServer()).post(endpoint).set("Cookie", admin.cookies).set("Idempotency-Key", key).send(payload);
+    const replay = await request(app.getHttpServer()).post(endpoint).set("Cookie", admin.cookies).set("Idempotency-Key", key).send(payload);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(replay.body).toEqual(first.body);
+    expect(await prisma.proposal.count({ where: { opportunityId: opportunity.id } })).toBe(1);
+
+    const drift = await request(app.getHttpServer()).post(endpoint).set("Cookie", admin.cookies).set("Idempotency-Key", key).send({ content: { benefit: "Otro contenido" } });
+    expect(drift.status).toBe(409);
   });
 
   it("Example (AC): creating two Proposal versions for the same opportunity preserves both, with the latest flagged as current", async () => {
@@ -395,8 +488,8 @@ describe("CRM endpoints (integration, real HTTP)", () => {
     const response = await request(app.getHttpServer()).get("/api/v1/admin/leads").set("Cookie", admin.cookies);
     expect(response.status).toBe(200);
 
-    const unpromotedEntry = response.body.find((l: { id: string }) => l.id === unpromoted.id);
-    const promotedEntry = response.body.find((l: { id: string }) => l.id === promoted.id);
+    const unpromotedEntry = response.body.items.find((l: { id: string }) => l.id === unpromoted.id);
+    const promotedEntry = response.body.items.find((l: { id: string }) => l.id === promoted.id);
     expect(unpromotedEntry.prospectId).toBeNull();
     expect(promotedEntry.prospectId).toBe(prospect.id);
   });
@@ -438,6 +531,20 @@ describe("CRM endpoints (integration, real HTTP)", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.some((a: { id: string }) => a.id === schedule.body.id)).toBe(true);
+  });
+
+  it("returns a bounded unified opportunity timeline with domain and audit events", async () => {
+    const { opportunity } = await promoteLeadAndCreateOpportunity();
+    await request(app.getHttpServer()).post(`/api/v1/admin/opportunities/${opportunity.id}/activities`).set("Cookie", admin.cookies).send({ type: "TASK", note: "Seguimiento" });
+    await request(app.getHttpServer()).post(`/api/v1/admin/opportunities/${opportunity.id}/stage`).set("Cookie", admin.cookies).send({ stage: "CONTACTED" });
+    const response = await request(app.getHttpServer()).get(`/api/v1/admin/opportunities/${opportunity.id}/timeline?pageSize=20`).set("Cookie", admin.cookies);
+    expect(response.status).toBe(200);
+    expect(response.body.pageSize).toBe(20);
+    expect(response.body.total).toBeGreaterThanOrEqual(5);
+    expect(response.body.items.map((item: { kind: string }) => item.kind)).toEqual(expect.arrayContaining(["ACTIVITY", "STAGE_CHANGE", "AUDIT"]));
+    expect(response.body.items.map((item: { occurredAt: string }) => item.occurredAt)).toEqual([...response.body.items.map((item: { occurredAt: string }) => item.occurredAt)].sort().reverse());
+    const invalid = await request(app.getHttpServer()).get(`/api/v1/admin/opportunities/${opportunity.id}/timeline?pageSize=101`).set("Cookie", admin.cookies);
+    expect(invalid.status).toBe(400);
   });
 
   it("creates an Agreement once the opportunity reaches contract_pending", async () => {

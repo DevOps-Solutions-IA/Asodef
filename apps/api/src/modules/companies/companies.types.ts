@@ -1,4 +1,4 @@
-import type { Company } from "@prisma/client";
+import type { CommercialContact, Company, CompanySite } from "@prisma/client";
 
 /** US-061: /admin/crm/empresas lists Companies alongside BusinessPartners.
  * Company (unlike BusinessPartner) has no publication gate/benefits data -
@@ -34,4 +34,32 @@ export interface AdminCompanyDetailResponse extends AdminCompanyResponse {
   opportunityCount: number;
   agreementCount: number;
   contractCount: number;
+}
+
+export interface AdminCompanyContactResponse {
+  id: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  isPrimary: boolean;
+}
+
+export function toAdminCompanyContactResponse(contact: CommercialContact): AdminCompanyContactResponse {
+  return { id: contact.id, fullName: contact.fullName, role: contact.role, phone: contact.phone, email: contact.email, isPrimary: contact.isPrimary };
+}
+
+export interface AdminCompanySiteResponse {
+  id: string;
+  companyId: string;
+  name: string;
+  address: string;
+  city: string;
+  phone: string | null;
+  isPrimary: boolean;
+  createdAt: Date;
+}
+
+export function toAdminCompanySiteResponse(site: CompanySite): AdminCompanySiteResponse {
+  return { id: site.id, companyId: site.companyId, name: site.name, address: site.address, city: site.city, phone: site.phone, isPrimary: site.isPrimary, createdAt: site.createdAt };
 }

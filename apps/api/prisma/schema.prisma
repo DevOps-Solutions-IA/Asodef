@@ -80,8 +80,28 @@ model User {
   resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
   requestedExportJobs               ExportJob[]
   approvedApprovalGates             ApprovalGate[]
+  adminIdempotencyRecords           AdminIdempotency[]
 
   @@map("users")
+}
+
+// Administrative write replay protection. This is intentionally separate
+// from SelfServiceIdempotency: authority is scoped by authenticated actor,
+// operation and key, not by a self-service session.
+model AdminIdempotency {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  operation   String
+  key         String
+  requestHash String   @map("request_hash")
+  response    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actorUser User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, operation, key])
+  @@index([createdAt])
+  @@map("admin_idempotency")
 }
 
 enum AdminMfaCredentialStatus {
@@ -532,6 +552,7 @@ model LeadSubmission {
   prospect       Prospect?         @relation(fields: [prospectId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([createdAt(sort: Desc), id], map: "lead_submissions_created_at_id_idx")
   @@index([source, audience, need])
   @@map("lead_submissions")
 }
@@ -699,12 +720,31 @@ model Company {
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
   commercialContacts CommercialContact[]
+  sites              CompanySite[]
   opportunities      Opportunity[]
   agreements         Agreement[]
   contracts          Contract[]
   auditLogs          AuditLog[]
 
+  @@index([createdAt(sort: Desc), id])
+  @@index([status, createdAt(sort: Desc), id])
   @@map("companies")
+}
+
+model CompanySite {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  address   String
+  city      String
+  phone     String?
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@map("company_sites")
 }
 
 // US-054: Plan is now a stable identity (mirrors LegalDocument's own
@@ -1458,12 +1498,14 @@ model Prospect {
 
   @@index([stage])
   @@index([assignedUserId])
+  @@index([createdAt(sort: Desc), id])
+  @@index([stage, createdAt(sort: Desc), id])
   @@map("prospects")
 }
 
 model CommercialContact {
   id         String  @id @default(uuid()) @db.Uuid
-  prospectId String  @map("prospect_id") @db.Uuid
+  prospectId String? @map("prospect_id") @db.Uuid
   companyId  String? @map("company_id") @db.Uuid
   fullName   String  @map("full_name")
   role       String?
@@ -1471,7 +1513,7 @@ model CommercialContact {
   email      String?
   isPrimary  Boolean @default(false) @map("is_primary")
 
-  prospect         Prospect          @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  prospect         Prospect?         @relation(fields: [prospectId], references: [id], onDelete: Restrict)
   company          Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
   businessPartners BusinessPartner[]
 
@@ -1504,6 +1546,8 @@ model Opportunity {
 
   @@index([stage])
   @@index([prospectId])
+  @@index([createdAt(sort: Desc), id])
+  @@index([stage, createdAt(sort: Desc), id])
   @@map("opportunities")
 }
 
@@ -1654,6 +1698,8 @@ model BusinessPartner {
   commercialContact CommercialContact? @relation(fields: [commercialContactId], references: [id], onDelete: SetNull)
 
   @@index([publicationStatus])
+  @@index([createdAt(sort: Desc), id])
+  @@index([publicationStatus, createdAt(sort: Desc), id], map: "business_partners_publication_created_at_id_idx")
   @@map("business_partners")
 }
 

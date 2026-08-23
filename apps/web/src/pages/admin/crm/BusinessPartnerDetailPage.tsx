@@ -29,12 +29,12 @@ export function BusinessPartnerDetailPage() {
   }
 
   const checksMutation = useMutation({
-    mutationFn: (checks: Partial<Record<string, boolean>>) => updateBusinessPartnerChecks(partnerId!, checks),
+    mutationFn: (checks: Partial<Record<string, boolean>>) => updateBusinessPartnerChecks(partnerId!, checks, partnerQuery.data!.updatedAt),
     onSuccess: invalidate,
   });
 
   const publishMutation = useMutation({
-    mutationFn: () => publishBusinessPartner(partnerId!),
+    mutationFn: () => publishBusinessPartner(partnerId!, partnerQuery.data!.updatedAt),
     onSuccess: invalidate,
   });
 
@@ -87,6 +87,16 @@ export function BusinessPartnerDetailPage() {
               <Badge variant={isPublished ? "success" : "neutral"}>{partner.publicationStatus}</Badge>
             </dd>
           </div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="partner-contact-heading" className="rounded-2xl border border-border-soft p-5">
+        <h2 id="partner-contact-heading" className="font-display text-lg font-semibold text-text-main">Contacto corporativo</h2>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          <div><dt className="text-text-muted">Correo</dt><dd className="break-words">{partner.corporateEmail}</dd></div>
+          <div><dt className="text-text-muted">Teléfono</dt><dd>{partner.phone}</dd></div>
+          <div><dt className="text-text-muted">Representante legal</dt><dd>{partner.legalRepresentative ?? "—"}</dd></div>
+          <div><dt className="text-text-muted">Ciudad y dirección</dt><dd>{partner.city} · {partner.address}</dd></div>
         </dl>
       </section>
 

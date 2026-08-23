@@ -24,10 +24,15 @@ export function OpportunitiesBoardPage() {
   const canManage = hasPermission("crm.manage");
   const queryClient = useQueryClient();
 
-  const opportunitiesQuery = useQuery({ queryKey: queryKeys.admin.crm.opportunities(), queryFn: ({ signal }) => listOpportunities(signal) });
+  const opportunityFilters = { page: 1, pageSize: 100, sortBy: "updatedAt", sortOrder: "desc" as const };
+  const opportunitiesQuery = useQuery({
+    queryKey: queryKeys.admin.crm.opportunities(opportunityFilters),
+    queryFn: ({ signal }) => listOpportunities(opportunityFilters, signal),
+  });
 
   const stageMutation = useMutation({
-    mutationFn: ({ opportunityId, stage }: { opportunityId: string; stage: string }) => changeOpportunityStage(opportunityId, stage),
+    mutationFn: ({ opportunityId, stage, expectedUpdatedAt }: { opportunityId: string; stage: string; expectedUpdatedAt: string }) =>
+      changeOpportunityStage(opportunityId, stage, expectedUpdatedAt),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.opportunities() });
     },
@@ -46,11 +51,15 @@ export function OpportunitiesBoardPage() {
     return <ErrorState description={getAdminErrorMessage(opportunitiesQuery.error)} action={<Button onClick={() => opportunitiesQuery.refetch()}>Reintentar</Button>} />;
   }
 
-  const opportunities = opportunitiesQuery.data ?? [];
+  const opportunities = opportunitiesQuery.data?.items ?? [];
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Oportunidades" description="Tablero del embudo comercial, agrupado por etapa." />
+
+      {opportunitiesQuery.data && opportunitiesQuery.data.total > opportunitiesQuery.data.pageSize && (
+        <Alert variant="warning">Se muestran las 100 oportunidades actualizadas más recientemente. Usa los filtros de la API para consultas completas.</Alert>
+      )}
 
       {stageMutation.isSuccess && stageMutation.data.warning && (
         <Alert variant="warning">{stageMutation.data.warning}</Alert>
@@ -87,7 +96,7 @@ export function OpportunitiesBoardPage() {
                       onChange={(event) => {
                         const nextStage = event.target.value as PipelineStage;
                         if (nextStage !== opportunity.stage) {
-                          stageMutation.mutate({ opportunityId: opportunity.id, stage: nextStage });
+                          stageMutation.mutate({ opportunityId: opportunity.id, stage: nextStage, expectedUpdatedAt: opportunity.updatedAt });
                         }
                       }}
                     >

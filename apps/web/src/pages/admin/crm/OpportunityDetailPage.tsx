@@ -7,6 +7,7 @@ import {
   createAgreement,
   createProposal,
   getOpportunity,
+  getOpportunityTimeline,
   listAgreements,
   listOpportunityActivities,
   listOpportunityStatusHistory,
@@ -61,11 +62,17 @@ export function OpportunityDetailPage() {
     queryFn: ({ signal }) => listAgreements(opportunityId!, signal),
     enabled: !!opportunityId,
   });
+  const timelineQuery = useQuery({ queryKey: queryKeys.admin.crm.timeline(opportunityId!), queryFn: ({ signal }) => getOpportunityTimeline(opportunityId!, signal), enabled: !!opportunityId });
+
+  function invalidateTimeline() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.timeline(opportunityId!) });
+  }
 
   const scheduleActivityMutation = useMutation({
     mutationFn: () => scheduleActivity(opportunityId!, { type: activityType, note: activityNote || undefined }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.activities(opportunityId!) });
+      invalidateTimeline();
       setActivityNote("");
     },
   });
@@ -74,6 +81,7 @@ export function OpportunityDetailPage() {
     mutationFn: (activityId: string) => completeActivity(activityId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.activities(opportunityId!) });
+      invalidateTimeline();
     },
   });
 
@@ -81,6 +89,7 @@ export function OpportunityDetailPage() {
     mutationFn: () => createProposal(opportunityId!, { benefit: proposalBenefit, priceCents: Number(proposalPriceCents) || 0 }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.proposals(opportunityId!) });
+      invalidateTimeline();
       setProposalBenefit("");
       setProposalPriceCents("");
     },
@@ -90,6 +99,7 @@ export function OpportunityDetailPage() {
     mutationFn: () => createAgreement(opportunityId!, agreementCompanyId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.crm.agreements(opportunityId!) });
+      invalidateTimeline();
       setAgreementCompanyId("");
     },
   });
@@ -119,6 +129,19 @@ export function OpportunityDetailPage() {
         title={opportunity.proposedBenefit ?? `Oportunidad ${opportunity.id.slice(0, 8)}`}
         description={`Etapa actual: ${PIPELINE_STAGE_LABELS[opportunity.stage as PipelineStage] ?? opportunity.stage}`}
       />
+
+      <section aria-labelledby="timeline-heading" className="rounded-2xl border border-border-soft p-5">
+        <h2 id="timeline-heading" className="font-display text-lg font-semibold text-text-main">Cronología unificada</h2>
+        {timelineQuery.isLoading && <Skeleton className="mt-3 h-20 w-full" />}
+        {timelineQuery.isError && <ErrorState description={getAdminErrorMessage(timelineQuery.error)} action={<Button onClick={() => timelineQuery.refetch()}>Reintentar</Button>} />}
+        {timelineQuery.isSuccess && timelineQuery.data.items.length === 0 && <EmptyState title="Sin eventos" description="La actividad comercial aparecerá aquí en orden cronológico." />}
+        {timelineQuery.isSuccess && timelineQuery.data.items.length > 0 && (
+          <ol className="mt-3 flex flex-col gap-2 text-sm">
+            {timelineQuery.data.items.map((item) => <li key={`${item.kind}-${item.id}`} className="rounded-xl border border-border-soft p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium text-text-main">{item.title}</p><Badge variant="neutral">{item.kind}</Badge></div><p className="text-text-muted">{formatDateTime(item.occurredAt)}</p></li>)}
+          </ol>
+        )}
+        {timelineQuery.data && timelineQuery.data.total > timelineQuery.data.pageSize && <p className="mt-3 text-sm text-text-muted">Se muestran los {timelineQuery.data.pageSize} eventos más recientes de {timelineQuery.data.total}.</p>}
+      </section>
 
       <section aria-labelledby="activities-heading" className="rounded-2xl border border-border-soft p-5">
         <h2 id="activities-heading" className="font-display text-lg font-semibold text-text-main">

@@ -212,3 +212,18 @@ export function toAdminAgreementResponse(agreement: Agreement): AdminAgreementRe
     createdAt: agreement.createdAt,
   };
 }
+
+export interface AdminOpportunityTimelineItem {
+  id: string;
+  kind: "STAGE_CHANGE" | "ACTIVITY" | "PROPOSAL" | "AGREEMENT" | "AUDIT";
+  occurredAt: Date;
+  title: string;
+  detail: unknown;
+  actorUserId: string | null;
+}
+
+export interface AdminOpportunityTimelineResponse {
+  items: AdminOpportunityTimelineItem[];
+  total: number;
+  pageSize: number;
+}
