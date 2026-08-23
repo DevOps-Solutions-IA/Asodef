@@ -9,18 +9,18 @@ registry; Koral owns conversation/orchestration state and imports the shared
 gateway interfaces. Neither side imports the other, preventing an
 `apps/api <-> Koral` cycle.
 
-PR #19 head `b756161` already replaced its duplicate gateways with Koral-named
-consumer adapters. Once this package is available on its branch, those adapters
-must import the canonical ports/results and map their context into canonical
-`identity`, `audit` and `policy` sections. `agentProfileKey` maps to
-`modelProfileId`. Koral's channel, handoff, conversation-state and orchestration
-contracts remain Koral-owned. No provider key crosses this boundary.
+PR #19 now imports the canonical ports/results and maps Koral context into the
+canonical `identity`, `audit` and `policy` sections. An explicit binding maps
+`agentProfileKey` to a `modelProfileId`, and the model registry requires a
+PUBLISHED version. Koral's channel, handoff, conversation-state and
+orchestration contracts remain Koral-owned. No provider key crosses this
+boundary.
 
 | Concern            | PR #19 head `b756161`                         | Canonical resolution                                                                                         |
 | ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `AiGateway`        | Koral consumer adapter                        | import canonical gateway/result; adapter maps `agentProfileKey` to `modelProfileId`                          |
 | `ToolGateway`      | Koral consumer adapter                        | import canonical versioned request/result; preserve confirmation and idempotency without mutation retries    |
-| `KnowledgeGateway` | temporary `KoralKnowledgeResolver`            | replace its structural port with the canonical published-publication gateway behind the Koral adapter        |
+| `KnowledgeGateway` | canonical `KnowledgeGateway.search` adapter   | import its published-publication request/result without a second structural port                              |
 | identity           | six-level resolved channel identity           | require effective authenticated actor evidence; `VERIFIED` never implies authentication or MFA               |
 | MFA / step-up      | no MFA-specific assurance state               | map only explicit auth evidence; fail closed for MFA tools unless a real authenticated session proves MFA    |
 | audit/correlation  | audit block plus resolved identity            | map correlation/conversation and effective actor; retain request/causation IDs when present                  |

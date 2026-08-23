@@ -1,4 +1,9 @@
 import type { ConversationChannel } from "@prisma/client";
+import {
+  resolveGatewayIdentityLevel,
+  type GatewayIdentityEvidence,
+  type MinimumIdentityLevel,
+} from "@asodef/connect-contracts";
 
 export const IDENTITY_RESOLUTION_CONTRACT_VERSION = "1.0.0" as const;
 
@@ -32,6 +37,7 @@ export interface ResolvedIdentityContext {
   portalUserId?: string;
   channelIdentities: readonly ResolvedChannelIdentity[];
   assuranceLevel: IdentityAssuranceLevel;
+  authenticationEvidence: GatewayIdentityEvidence;
   consentState: {
     status: "UNKNOWN" | "GRANTED" | "DENIED" | "WITHDRAWN";
     purposeKeys: readonly string[];
@@ -54,6 +60,22 @@ export function hasIdentityAssurance(
   required: IdentityAssuranceLevel,
 ): boolean {
   return ASSURANCE_RANK[actual] >= ASSURANCE_RANK[required];
+}
+
+/** Channel claims through VERIFIED are never authentication. AUTHENTICATED
+ * and STEP_UP_VERIFIED additionally require explicit server-side evidence. */
+export function resolveCanonicalIdentityLevel(
+  identity: ResolvedIdentityContext,
+): MinimumIdentityLevel | null {
+  if (!hasIdentityAssurance(identity.assuranceLevel, "AUTHENTICATED")) {
+    return null;
+  }
+  const resolved = resolveGatewayIdentityLevel(identity.authenticationEvidence);
+  if (!resolved) return null;
+  if (identity.assuranceLevel === "STEP_UP_VERIFIED") {
+    return resolved === "STEP_UP_VERIFIED" ? resolved : null;
+  }
+  return resolved === "STEP_UP_VERIFIED" ? null : resolved;
 }
 
 export const IDENTITY_RESOLUTION_CONTRACT_SEMANTICS = {

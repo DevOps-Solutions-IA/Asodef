@@ -1,86 +1,183 @@
 import type {
-  CanonicalAiGatewayPort,
-  CanonicalToolGatewayPort,
-  KoralGatewayInvocationContext,
-} from "./gateway.contract";
+  AiGateway,
+  GatewayRequestContext,
+  KnowledgeGateway,
+  ToolGateway,
+} from "@asodef/connect-contracts";
+import {
+  CanonicalKoralAiGatewayAdapter,
+  CanonicalKoralKnowledgeGatewayAdapter,
+  CanonicalKoralToolGatewayAdapter,
+  PublishedModelProfileResolver,
+  buildCanonicalGatewayRequestContext,
+} from "../koral-gateway.adapters";
+import { ModelRegistry, type ModelProfile } from "../../ai-gateway/model-registry";
 import { KORAL_GATEWAY_ADAPTER_SEMANTICS } from "./gateway.contract";
 import { KORAL_ORCHESTRATION_STEPS } from "./orchestrator.contract";
+import type { ResolvedIdentityContext } from "./identity-resolution.contract";
 
-type Agent2AiRequest = { version: "v1"; modelProfileId: string };
-type Agent2AiContext = { actorId: string; correlationId: string };
-type Agent2AiResponse = { version: "v1"; correlationId: string };
-type Agent2AiGatewayShape = {
-  infer(request: Agent2AiRequest, context: Agent2AiContext): Promise<Agent2AiResponse>;
+const publishedProfile: ModelProfile = {
+  id: "model-profile-crm",
+  name: "Koral CRM assistant",
+  primaryModel: "vendor/model-primary",
+  fallbackModels: [],
+  allowedProviders: ["openrouter"],
+  purpose: "customer-support",
+  maxInputTokens: 8_000,
+  maxOutputTokens: 1_000,
+  budgetPolicy: {
+    currency: "USD",
+    maxCostMicrosPerRequest: 20_000,
+    maxCostMicrosPerDay: 1_000_000,
+    failClosedWhenPricingUnknown: true,
+  },
+  toolCallingAllowed: true,
+  structuredOutputRequired: false,
+  dataClassificationPolicy: {
+    allowed: ["PUBLIC", "INTERNAL", "PERSONAL"],
+    denied: ["SENSITIVE", "HIGHLY_SENSITIVE"],
+    requirePurpose: true,
+    requireConsentFor: ["PERSONAL"],
+    maximumExternalClassification: "PERSONAL",
+  },
+  status: "PUBLISHED",
+  version: 1,
 };
 
-type Agent2ToolRequest = { version: "v1"; toolName: string; toolVersion: `v${number}` };
-type Agent2ToolContext = { actorId: string; correlationId: string; idempotencyKey?: string };
-type Agent2ToolResponse = { version: "v1"; meta: { correlationId: string; replayed: boolean } };
-type Agent2ToolGatewayShape = {
-  invoke(request: Agent2ToolRequest, context: Agent2ToolContext): Promise<Agent2ToolResponse>;
+const authenticatedIdentity: ResolvedIdentityContext = {
+  version: "1.0.0",
+  identityId: "identity-1",
+  portalUserId: "user-1",
+  channelIdentities: [],
+  assuranceLevel: "AUTHENTICATED",
+  authenticationEvidence: {
+    authenticated: true,
+    mfaVerified: false,
+    stepUpVerified: false,
+  },
+  consentState: {
+    status: "GRANTED",
+    purposeKeys: ["customer-support"],
+  },
+  verifiedAttributes: [],
 };
 
-type Assert<T extends true> = T;
-type AiGatewayMethodIsCompatible = Assert<
-  Agent2AiGatewayShape extends CanonicalAiGatewayPort<Agent2AiRequest, Agent2AiContext, Agent2AiResponse>
-    ? true
-    : false
->;
-type ToolGatewayMethodIsCompatible = Assert<
-  Agent2ToolGatewayShape extends CanonicalToolGatewayPort<Agent2ToolRequest, Agent2ToolContext, Agent2ToolResponse>
-    ? true
-    : false
->;
+const context: GatewayRequestContext = buildCanonicalGatewayRequestContext({
+  identity: authenticatedIdentity,
+  principalType: "KORAL",
+  principalId: "koral",
+  effectiveActorId: "user-1",
+  permissions: ["koral.conversations.read"],
+  correlationId: "correlation-1",
+  conversationId: "conversation-1",
+  purpose: "customer-support",
+  piiPolicy: "MINIMIZE",
+  dataClassification: "PERSONAL",
+  deadlineAt: "2026-08-22T20:00:00.000Z",
+});
 
-describe("Agent 2 gateway reconciliation", () => {
-  it("keeps only minimal structural ports compatible with Agent 2 method signatures", () => {
-    const aiCompatible: AiGatewayMethodIsCompatible = true;
-    const toolCompatible: ToolGatewayMethodIsCompatible = true;
-    expect({ aiCompatible, toolCompatible }).toEqual({ aiCompatible: true, toolCompatible: true });
-  });
-
-  it("propagates explicit identity, consent, correlation and one absolute deadline", () => {
-    const context: KoralGatewayInvocationContext<"PERSONAL"> = {
-      version: "1.0.0",
-      audit: {
-        conversationId: "conversation-1",
+describe("canonical Connect gateway reconciliation", () => {
+  it("maps an agent profile key through an explicit published profile binding", async () => {
+    const infer = jest.fn<ReturnType<AiGateway["infer"]>, Parameters<AiGateway["infer"]>>().mockResolvedValue({
+      ok: true,
+      response: {
+        version: "v1",
+        provider: "openrouter",
+        model: "vendor/model-primary",
+        content: "Safe response",
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costMicros: 3 },
         correlationId: "correlation-1",
-        identityId: "identity-1",
-        purpose: "customer-support",
       },
-      identity: {
-        version: "1.0.0",
-        identityId: "identity-1",
-        channelIdentities: [],
-        assuranceLevel: "VERIFIED",
-        consentState: { status: "GRANTED", purposeKeys: ["customer-support"] },
-        verifiedAttributes: [],
-      },
-      permissions: ["koral.conversations.read"],
-      dataClassification: "PERSONAL",
-      consentVerified: true,
-      deadlineAt: "2026-08-22T20:00:00.000Z",
-    };
+    });
+    const resolver = new PublishedModelProfileResolver(
+      new ModelRegistry([publishedProfile]),
+      [{ agentProfileKey: "crm-assistant", modelProfileId: "model-profile-crm" }],
+    );
+    const adapter = new CanonicalKoralAiGatewayAdapter({ infer }, resolver);
 
-    expect(context.audit.correlationId).toBe("correlation-1");
-    expect(context.deadlineAt).toBe("2026-08-22T20:00:00.000Z");
-    expect(KORAL_GATEWAY_ADAPTER_SEMANTICS.idempotency).toContain("never retry");
+    await expect(
+      adapter.infer(
+        { agentProfileKey: "crm-assistant", messages: [{ role: "user", content: "hello" }] },
+        context,
+      ),
+    ).resolves.toMatchObject({ kind: "ASSISTANT_RESPONSE" });
+    expect(infer).toHaveBeenCalledWith(
+      expect.objectContaining({ version: "v1", modelProfileId: "model-profile-crm" }),
+      context,
+    );
+    expect(() => resolver.resolve("model-profile-crm")).toThrow(
+      "AGENT_PROFILE_NOT_BOUND",
+    );
   });
 
-  it("fixes the complete orchestration order without embedding a provider transport", () => {
-    expect(KORAL_ORCHESTRATION_STEPS).toEqual([
-      "RECEIVE_NORMALIZED_MESSAGE",
-      "RESOLVE_CONVERSATION",
-      "BUILD_SAFE_CONTEXT",
-      "EVALUATE_AI_POLICY",
-      "INVOKE_AI_GATEWAY",
-      "RECEIVE_TOOL_REQUEST",
-      "INVOKE_TOOL_GATEWAY",
-      "RETURN_TOOL_RESULT",
-      "CONTINUE_INFERENCE_IF_ALLOWED",
-      "VALIDATE_OUTBOUND_RESPONSE",
-      "HANDOFF_IF_REQUIRED",
-      "APPEND_AUDIT_AND_CONVERSATION_EVENTS",
-    ]);
+  it("rejects an unpublished bound model profile before gateway inference", () => {
+    const resolver = new PublishedModelProfileResolver(
+      new ModelRegistry([{ ...publishedProfile, status: "REVIEW" }]),
+      [{ agentProfileKey: "crm-assistant", modelProfileId: "model-profile-crm" }],
+    );
+    expect(() => resolver.resolve("crm-assistant")).toThrow(
+      "MODEL_PROFILE_NOT_PUBLISHED",
+    );
+  });
+
+  it("adapts canonical tool and knowledge results without duplicate contracts", async () => {
+    const invoke = jest.fn<ReturnType<ToolGateway["invoke"]>, Parameters<ToolGateway["invoke"]>>().mockResolvedValue({
+      ok: true,
+      response: {
+        version: "v1",
+        data: { safe: true },
+        meta: { correlationId: "correlation-1", replayed: false },
+      },
+    });
+    const search = jest.fn<ReturnType<KnowledgeGateway["search"]>, Parameters<KnowledgeGateway["search"]>>().mockResolvedValue({
+      ok: true,
+      response: {
+        version: "v1",
+        correlationId: "correlation-1",
+        citations: [
+          {
+            publicationId: "publication-1",
+            knowledgeVersionId: "version-1",
+            documentId: "document-1",
+            title: "Approved",
+            excerpt: "Approved excerpt",
+            dataClassification: "INTERNAL",
+          },
+        ],
+      },
+    });
+    await expect(
+      new CanonicalKoralToolGatewayAdapter({ invoke }).invoke(
+        {
+          toolName: "crm.list_leads",
+          toolVersion: "v1",
+          input: {},
+          confirmationGranted: false,
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ kind: "SUCCEEDED", replayed: false });
+    await expect(
+      new CanonicalKoralKnowledgeGatewayAdapter({ search }).search(
+        { query: "approved", collectionIds: ["collection-1"], limit: 1 },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      kind: "FOUND",
+      passages: [{ classification: "INTERNAL" }],
+    });
+  });
+
+  it("preserves canonical context, absolute deadline and orchestration order", () => {
+    expect(context).toMatchObject({
+      version: "v1",
+      identity: { identityLevel: "AUTHENTICATED", effectiveActorId: "user-1" },
+      audit: { correlationId: "correlation-1", conversationId: "conversation-1" },
+      policy: { consentVerified: true, dataClassification: "PERSONAL" },
+      deadlineAt: "2026-08-22T20:00:00.000Z",
+    });
+    expect(KORAL_GATEWAY_ADAPTER_SEMANTICS.idempotency).toContain("never retry");
+    expect(KORAL_ORCHESTRATION_STEPS).toHaveLength(12);
   });
 });

@@ -1,119 +1,123 @@
-import type { ResolvedIdentityContext } from "./identity-resolution.contract";
-
-export const KORAL_GATEWAY_ADAPTER_VERSION = "1.0.0" as const;
-
-/**
- * Minimal structural boundary implemented by the canonical Agent 2 gateway.
- * Koral deliberately does not redeclare its request, response, model, tool,
- * knowledge, classification, error or policy contracts.
- */
-export interface CanonicalAiGatewayPort<TRequest, TContext, TResponse> {
-  infer(request: TRequest, context: TContext): Promise<TResponse>;
-}
-
-export interface CanonicalToolGatewayPort<TRequest, TContext, TResponse> {
-  invoke(request: TRequest, context: TContext): Promise<TResponse>;
-}
-
-export interface KoralGatewayAuditContext {
-  conversationId: string;
-  correlationId: string;
-  identityId: string;
-  actorId?: string;
-  purpose: string;
-}
-
-export interface KoralGatewayInvocationContext<TDataClassification = unknown> {
-  version: typeof KORAL_GATEWAY_ADAPTER_VERSION;
-  audit: KoralGatewayAuditContext;
-  identity: ResolvedIdentityContext;
-  permissions: readonly string[];
-  dataClassification: TDataClassification;
-  consentVerified: boolean;
-  deadlineAt: string;
-}
+import type {
+  AiGatewayRequest,
+  DataClassification,
+  GatewayRequestContext,
+  GatewayTimeout,
+  GovernedToolContract,
+  JsonSchema,
+  KnowledgeGatewayRequest,
+  ToolGatewayRequest,
+} from "@asodef/connect-contracts";
 
 export interface KoralInferenceRequest {
   agentProfileKey: string;
-  messages: readonly { role: "system" | "user" | "assistant" | "tool"; content: string }[];
-  responseSchema?: Readonly<Record<string, unknown>>;
-  availableToolNames: readonly string[];
+  task?: string;
+  messages: AiGatewayRequest["messages"];
+  responseSchema?: JsonSchema;
+  availableTools?: readonly GovernedToolContract[];
+  maxOutputTokens?: number;
+  timeout?: GatewayTimeout;
 }
 
+/** Koral owns orchestration meaning; provider/model response contracts remain
+ * exclusively owned by @asodef/connect-contracts. */
 export type KoralInferenceOutcome =
   | {
       kind: "ASSISTANT_RESPONSE";
       content: string;
       structuredOutput?: unknown;
       gatewayCorrelationId: string;
-      usageReference?: string;
     }
   | {
       kind: "TOOL_REQUEST";
-      requests: readonly { callId: string; toolName: string; input: Readonly<Record<string, unknown>> }[];
+      requests: readonly {
+        callId: string;
+        toolName: string;
+        input: Readonly<Record<string, unknown>>;
+      }[];
       gatewayCorrelationId: string;
     }
-  | { kind: "REJECTED"; reasonCode: string; retryable: boolean; gatewayCorrelationId?: string };
+  | {
+      kind: "REJECTED";
+      reasonCode: string;
+      retryable: boolean;
+      gatewayCorrelationId?: string;
+    };
 
-export interface KoralToolRequest {
-  callId: string;
-  toolName: string;
-  toolVersion: `v${number}`;
-  input: Readonly<Record<string, unknown>>;
-  idempotencyKey?: string;
-  confirmationGranted: boolean;
-}
+export type KoralToolRequest = Omit<ToolGatewayRequest, "version">;
 
 export type KoralToolOutcome =
-  | { kind: "SUCCEEDED"; output: unknown; auditReference?: string; replayed: boolean; correlationId: string }
-  | { kind: "REJECTED"; reasonCode: string; retryable: boolean; correlationId: string };
+  | {
+      kind: "SUCCEEDED";
+      output: unknown;
+      auditReference?: string;
+      replayed: boolean;
+      correlationId: string;
+    }
+  | {
+      kind: "REJECTED";
+      reasonCode: string;
+      retryable: boolean;
+      correlationId: string;
+    };
 
-export interface KoralKnowledgeRequest {
-  query: string;
-  collectionKeys: readonly string[];
-  limit: number;
-}
+export type KoralKnowledgeRequest = Omit<KnowledgeGatewayRequest, "version">;
 
 export type KoralKnowledgeOutcome =
   | {
       kind: "FOUND";
-      passages: readonly { reference: string; content: string; score: number; classification: unknown }[];
+      passages: readonly {
+        reference: string;
+        content: string;
+        score?: number;
+        classification: DataClassification;
+      }[];
       correlationId: string;
     }
-  | { kind: "REJECTED"; reasonCode: string; retryable: boolean; correlationId: string };
+  | {
+      kind: "REJECTED";
+      reasonCode: string;
+      retryable: boolean;
+      correlationId: string;
+    };
 
-/** Consumer adapters own mapping only. Agent 2 remains owner of every
- * canonical gateway and governance contract behind these boundaries. */
-export interface KoralAiGatewayAdapter<TDataClassification = unknown> {
+export interface KoralAiGatewayAdapter {
   infer(
     request: KoralInferenceRequest,
-    context: KoralGatewayInvocationContext<TDataClassification>,
+    context: GatewayRequestContext,
   ): Promise<KoralInferenceOutcome>;
 }
 
-export interface KoralToolGatewayAdapter<TDataClassification = unknown> {
+export interface KoralToolGatewayAdapter {
   invoke(
     request: KoralToolRequest,
-    context: KoralGatewayInvocationContext<TDataClassification>,
+    context: GatewayRequestContext,
   ): Promise<KoralToolOutcome>;
 }
 
-/** PR #20 owns knowledge lifecycle but does not yet expose a retrieval
- * gateway. This consumer port stays Koral-named until Agent 2 publishes one. */
-export interface KoralKnowledgeResolver<TDataClassification = unknown> {
-  retrieve(
+export interface KoralKnowledgeGatewayAdapter {
+  search(
     request: KoralKnowledgeRequest,
-    context: KoralGatewayInvocationContext<TDataClassification>,
+    context: GatewayRequestContext,
   ): Promise<KoralKnowledgeOutcome>;
 }
 
 export const KORAL_GATEWAY_ADAPTER_SEMANTICS = {
-  version: KORAL_GATEWAY_ADAPTER_VERSION,
-  inputSchema: "KORAL_NORMALIZED_INPUT;CANONICAL_MAPPING_REQUIRED",
-  outputSchema: "KORAL_ORCHESTRATION_OUTCOME;CANONICAL_DETAILS_NOT_REDECLARED",
-  errors: ["ADAPTER_REJECTED", "CANONICAL_GATEWAY_REJECTED", "DEADLINE_EXCEEDED", "INVALID_MAPPING"],
-  permissions: "Adapters may only narrow the explicit effective permissions carried by Koral.",
-  audit: "Correlation, identity, purpose and canonical audit references are retained; prompts, secrets and raw PII are not logged.",
-  idempotency: "Tool idempotency is canonical Agent 2 policy; adapters preserve keys and never retry a mutation.",
-  timeout: "Koral supplies an absolute deadline; adapters must fail closed after it and never extend it.",
+  version: "v1",
+  inputSchema: "KORAL_NORMALIZED_INPUT_TO_CANONICAL_CONNECT_CONTRACTS",
+  outputSchema: "CANONICAL_RESULTS_TO_KORAL_ORCHESTRATION_OUTCOME",
+  errors: [
+    "CANONICAL_GATEWAY_REJECTED",
+    "DEADLINE_EXCEEDED",
+    "IDENTITY_EVIDENCE_REQUIRED",
+    "MODEL_PROFILE_NOT_PUBLISHED",
+  ],
+  permissions:
+    "Adapters pass only the effective permissions in GatewayRequestContext.",
+  audit:
+    "Canonical correlation and audit context is retained; prompts, secrets and raw PII are not logged.",
+  idempotency:
+    "ToolGateway owns idempotency; adapters preserve keys and never retry mutations.",
+  timeout:
+    "The canonical absolute deadline is propagated unchanged and never extended.",
 } as const;

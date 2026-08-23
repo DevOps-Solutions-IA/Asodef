@@ -1,9 +1,13 @@
 import type { ConversationStatus } from "@prisma/client";
 import type {
+  DataClassification,
+  GatewayRequestContext,
+} from "@asodef/connect-contracts";
+import type {
   KoralAiGatewayAdapter,
   KoralInferenceOutcome,
   KoralKnowledgeOutcome,
-  KoralKnowledgeResolver,
+  KoralKnowledgeGatewayAdapter,
   KoralToolGatewayAdapter,
   KoralToolOutcome,
 } from "./gateway.contract";
@@ -21,14 +25,10 @@ export interface ConversationContext {
   activeAssignmentUserId?: string;
 }
 
-export interface SafeConversationContext<TDataClassification = unknown> extends ConversationContext {
-  correlationId: string;
+export interface SafeConversationContext extends ConversationContext {
   identity: ResolvedIdentityContext;
-  purpose: string;
-  permissions: readonly string[];
-  dataClassification: TDataClassification;
-  consentVerified: boolean;
-  deadlineAt: string;
+  gatewayContext: GatewayRequestContext;
+  dataClassification: DataClassification;
 }
 
 export interface OrchestrationAnalysis {
@@ -55,10 +55,10 @@ export interface ResponseValidationResult {
   safeResponse?: string;
 }
 
-export interface KoralOrchestratorDependencies<TDataClassification = unknown> {
-  aiGateway: KoralAiGatewayAdapter<TDataClassification>;
-  toolGateway: KoralToolGatewayAdapter<TDataClassification>;
-  knowledgeResolver: KoralKnowledgeResolver<TDataClassification>;
+export interface KoralOrchestratorDependencies {
+  aiGateway: KoralAiGatewayAdapter;
+  toolGateway: KoralToolGatewayAdapter;
+  knowledgeGateway: KoralKnowledgeGatewayAdapter;
 }
 
 export interface KoralOrchestrator {
@@ -101,20 +101,20 @@ export type KoralOrchestrationRunResult =
 
 /** Execution contract only. Implementations must keep every business/data
  * access behind the canonical gateways and existing application services. */
-export interface KoralOrchestrationPipeline<TDataClassification = unknown> {
+export interface KoralOrchestrationPipeline {
   receiveNormalizedMessage(input: KoralOrchestrationRunInput): Promise<string>;
   resolveConversation(normalizedMessageId: string, correlationId: string): Promise<string>;
-  buildSafeContext(conversationId: string, correlationId: string, deadlineAt: string): Promise<SafeConversationContext<TDataClassification>>;
-  evaluateAiPolicy(context: SafeConversationContext<TDataClassification>): Promise<OrchestrationDecision>;
-  invokeAiGateway(context: SafeConversationContext<TDataClassification>, decision: OrchestrationDecision): Promise<KoralInferenceOutcome>;
+  buildSafeContext(conversationId: string, correlationId: string, deadlineAt: string): Promise<SafeConversationContext>;
+  evaluateAiPolicy(context: SafeConversationContext): Promise<OrchestrationDecision>;
+  invokeAiGateway(context: SafeConversationContext, decision: OrchestrationDecision): Promise<KoralInferenceOutcome>;
   receiveToolRequest(outcome: KoralInferenceOutcome): Promise<readonly string[]>;
-  invokeToolGateway(context: SafeConversationContext<TDataClassification>, toolCallId: string): Promise<KoralToolOutcome>;
+  invokeToolGateway(context: SafeConversationContext, toolCallId: string): Promise<KoralToolOutcome>;
   returnToolResult(conversationId: string, outcome: KoralToolOutcome): Promise<void>;
-  continueInferenceIfAllowed(context: SafeConversationContext<TDataClassification>): Promise<KoralInferenceOutcome | undefined>;
-  validateOutboundResponse(context: SafeConversationContext<TDataClassification>, candidate: KoralInferenceOutcome): Promise<ResponseValidationResult>;
-  handoffIfRequired(context: SafeConversationContext<TDataClassification>, violations: readonly string[]): Promise<boolean>;
+  continueInferenceIfAllowed(context: SafeConversationContext): Promise<KoralInferenceOutcome | undefined>;
+  validateOutboundResponse(context: SafeConversationContext, candidate: KoralInferenceOutcome): Promise<ResponseValidationResult>;
+  handoffIfRequired(context: SafeConversationContext, violations: readonly string[]): Promise<boolean>;
   appendAuditAndConversationEvents(conversationId: string, correlationId: string, gatewayReferences: readonly string[]): Promise<void>;
-  retrieveKnowledge?(context: SafeConversationContext<TDataClassification>, query: string): Promise<KoralKnowledgeOutcome>;
+  retrieveKnowledge?(context: SafeConversationContext, query: string): Promise<KoralKnowledgeOutcome>;
   run(input: KoralOrchestrationRunInput): Promise<KoralOrchestrationRunResult>;
 }
 

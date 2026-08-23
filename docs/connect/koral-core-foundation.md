@@ -1,6 +1,7 @@
 # Koral Core Foundation — brownfield audit and contracts
 
-Baseline: `origin/main` at `662cb7bfba6f1429d01f86a5e232db1a193a3c67`.
+Baseline after PR #10 and PR #20 integration: `origin/main` at
+`6cd482f2fafedabecd31b4977daa16cc9fb56ac6`.
 
 ## Brownfield decision matrix
 
@@ -21,27 +22,31 @@ Baseline: `origin/main` at `662cb7bfba6f1429d01f86a5e232db1a193a3c67`.
 The TypeScript contracts in `apps/api/src/modules/koral-conversations/contracts` are the source of truth:
 
 - Channel contract: normalized input/output, delivery errors, adapter permissions, audit and idempotency semantics.
-- Gateway consumer contract: Koral-normalized adapters around Agent 2's canonical `AiGateway` and `ToolGateway`. PR #20 does not yet expose a runtime knowledge retrieval interface, so `KoralKnowledgeResolver` is explicitly a temporary consumer port rather than a canonical `KnowledgeGateway` definition.
+- Gateway consumer contract: Koral-normalized adapters import the canonical `AiGateway`, `ToolGateway`, `KnowledgeGateway`, request context, classifications, requests, results, errors and timeout semantics from `@asodef/connect-contracts`.
 - Orchestrator contract: context, analysis, agent-profile selection, policy decision, handoff and response validation. It deliberately contains no provider/model and no monolithic prompt.
 - Identity dependency contract: stable identity/contact/portal references, channel identities, six ordered assurance levels, consent state and verified-attribute evidence. It never performs implicit matching or identity mutation.
 
-Agent 2 dependency: publish its canonical gateway package/path before cross-branch integration. Koral adapters map to that package but do not own or duplicate model profiles, tools, classifications, errors or knowledge lifecycle.
+The Agent 2 dependency is now resolved through the pure workspace package
+`@asodef/connect-contracts`. Koral adapters map to that package but do not own
+or duplicate model profiles, tools, classifications, errors or knowledge
+lifecycle.
 
 ## PR #19 / PR #20 contract reconciliation
 
-Compared against Agent 2 head `f52f668049e1f677e0b7d851286434deac33ae92`:
+Compared against the canonical contracts merged by PR #20 into
+`6cd482f2fafedabecd31b4977daa16cc9fb56ac6`:
 
 | Concept | Classification | Reconciliation |
 |---|---|---|
-| `AiGateway` method | COMPATIBLE | Both use async inference. Koral now exposes only an adapter; Agent 2 owns `AiGatewayRequest`, `AiInvocationContext` and `AiGatewayResponse`. |
-| `ToolGateway` method | COMPATIBLE | Agent 2's canonical method is `invoke`; Koral's former `execute` contract was removed. The adapter preserves tool version, confirmation and idempotency without retries. |
-| Knowledge gateway | NEEDS_ADAPTER | PR #20 owns knowledge lifecycle/publication but has no retrieval gateway interface. Koral uses the non-canonical `KoralKnowledgeResolver` until Agent 2 publishes one. |
-| Model / `ModelProfile` | CONFLICT | `agentProfileKey` is a Koral routing key, not a model profile ID. The adapter must resolve it to a published Agent 2 `modelProfileId`; Koral defines no model shape. |
+| `AiGateway` method | IDENTICAL | The adapter imports `AiGateway` and its canonical request/result directly. |
+| `ToolGateway` method | IDENTICAL | The adapter imports `ToolGateway`; it preserves version, confirmation and idempotency without retries. |
+| Knowledge gateway | IDENTICAL | The temporary resolver was removed; the adapter consumes canonical `KnowledgeGateway.search`. |
+| Model / `ModelProfile` | NEEDS_ADAPTER | `agentProfileKey` resolves through an explicit binding to a `modelProfileId`, then `ModelRegistry.getPublished` fails closed unless a PUBLISHED version exists. |
 | Tool execution result | NEEDS_ADAPTER | Agent 2 returns `data/error/meta`; Koral consumes normalized success/rejection plus audit reference, replay state and correlation ID. |
 | Structured output | COMPATIBLE | Agent 2 owns JSON schema enforcement and returns `structuredOutput`; Koral treats it as unknown until outbound validation. |
 | Errors | NEEDS_ADAPTER | Agent 2 owns canonical error codes. Koral retains only orchestration reason codes and must not translate an unknown code to success. |
 | Audit context | NEEDS_ADAPTER | Agent 2 requires actor, purpose, classification and correlation; Koral adds conversation and resolved identity references. The adapter narrows and maps without raw PII. |
-| Identity context | CONFLICT | PR #20 uses `AUTHENTICATED/MFA_VERIFIED/STEP_UP_VERIFIED`; Connect's canonical six-level vocabulary has no `MFA_VERIFIED`. Mapping must fail closed until Agent 2 accepts the shared vocabulary or publishes an explicit policy. |
+| Identity context | NEEDS_ADAPTER | Channel assurance through `VERIFIED` maps to no gateway identity. `AUTHENTICATED`, `MFA_VERIFIED` and `STEP_UP_VERIFIED` require explicit server evidence; no channel claim elevates authentication. |
 | Data classification | DUPLICATED (REMOVED) | Koral's former free-form classification result was removed as a gateway definition. Agent 2 exclusively owns the ordered classification vocabulary and policies. |
 | Correlation IDs | IDENTICAL | Both require correlation IDs; adapters preserve them end-to-end and conversation events record them. |
 | Timeout semantics | NEEDS_ADAPTER | Agent 2 tool contracts cap one attempt and specify milliseconds; Koral propagates one immutable absolute deadline and never retries mutations. |
@@ -67,7 +72,14 @@ The adapter may only narrow permissions and consent. It cannot extend deadlines,
 
 ## Identity resolution dependency
 
-`ResolvedIdentityContext` contains `identityId`, optional `contactId` and `portalUserId`, channel identities, consent state and verified attributes. Assurance is ordered as `ANONYMOUS → CLAIMED → MATCHED → VERIFIED → AUTHENTICATED → STEP_UP_VERIFIED`. Resolution is read-only: ambiguous evidence fails closed and never creates, merges or upgrades an identity implicitly.
+`ResolvedIdentityContext` contains `identityId`, optional `contactId` and
+`portalUserId`, channel identities, consent state, verified attributes and
+explicit server authentication evidence. Assurance is ordered as `ANONYMOUS →
+CLAIMED → MATCHED → VERIFIED → AUTHENTICATED → STEP_UP_VERIFIED`. The first
+four always map to no authenticated gateway identity. MFA and step-up are
+mapped only from their explicit evidence flags, and step-up additionally
+requires `STEP_UP_VERIFIED`. Resolution is read-only: ambiguous evidence fails
+closed and never creates, merges or upgrades an identity implicitly.
 
 ## Domain and safety invariants
 

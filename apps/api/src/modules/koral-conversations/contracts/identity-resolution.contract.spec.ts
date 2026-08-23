@@ -1,6 +1,7 @@
 import {
   hasIdentityAssurance,
   IDENTITY_ASSURANCE_LEVELS,
+  resolveCanonicalIdentityLevel,
   type ResolvedIdentityContext,
 } from "./identity-resolution.contract";
 
@@ -25,6 +26,11 @@ describe("identity resolution dependency contract", () => {
       identityId: "identity-1",
       channelIdentities: [{ channel: "WEB", externalIdentityId: "web-session-1", verified: false }],
       assuranceLevel: "ANONYMOUS",
+      authenticationEvidence: {
+        authenticated: false,
+        mfaVerified: false,
+        stepUpVerified: false,
+      },
       consentState: { status: "UNKNOWN", purposeKeys: [] },
       verifiedAttributes: [],
     };
@@ -32,5 +38,51 @@ describe("identity resolution dependency contract", () => {
     expect(identity.contactId).toBeUndefined();
     expect(identity.portalUserId).toBeUndefined();
     expect(identity.channelIdentities[0]?.verified).toBe(false);
+    expect(resolveCanonicalIdentityLevel(identity)).toBeNull();
+  });
+
+  it("maps only explicit authenticated, MFA and step-up evidence", () => {
+    const base: ResolvedIdentityContext = {
+      version: "1.0.0",
+      identityId: "identity-1",
+      channelIdentities: [],
+      assuranceLevel: "VERIFIED",
+      authenticationEvidence: {
+        authenticated: true,
+        mfaVerified: true,
+        stepUpVerified: true,
+      },
+      consentState: { status: "GRANTED", purposeKeys: ["support"] },
+      verifiedAttributes: [],
+    };
+    expect(resolveCanonicalIdentityLevel(base)).toBeNull();
+    expect(
+      resolveCanonicalIdentityLevel({
+        ...base,
+        assuranceLevel: "AUTHENTICATED",
+        authenticationEvidence: {
+          authenticated: true,
+          mfaVerified: true,
+          stepUpVerified: false,
+        },
+      }),
+    ).toBe("MFA_VERIFIED");
+    expect(
+      resolveCanonicalIdentityLevel({
+        ...base,
+        assuranceLevel: "STEP_UP_VERIFIED",
+        authenticationEvidence: {
+          authenticated: true,
+          mfaVerified: true,
+          stepUpVerified: false,
+        },
+      }),
+    ).toBeNull();
+    expect(
+      resolveCanonicalIdentityLevel({
+        ...base,
+        assuranceLevel: "STEP_UP_VERIFIED",
+      }),
+    ).toBe("STEP_UP_VERIFIED");
   });
 });
