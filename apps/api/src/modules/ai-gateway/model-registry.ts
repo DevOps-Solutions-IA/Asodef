@@ -21,6 +21,11 @@ export interface ModelProfile {
   toolCallingAllowed: boolean;
   structuredOutputRequired: boolean;
   dataClassificationPolicy: DataClassificationPolicyContract;
+  /** Runtime eligibility is separate from lifecycle publication. An operator
+   * may disable a published profile without pretending it was retired, and
+   * policy approval must be explicit before any provider can resolve it. */
+  enabled: boolean;
+  policyApproved: boolean;
   status: ConfigurationStatus;
   version: number;
 }
@@ -60,10 +65,16 @@ export class ModelRegistry {
 
   getPublished(id: string): ModelProfile {
     const matches = this.profiles
-      .filter((profile) => profile.id === id && profile.status === "PUBLISHED")
+      .filter(
+        (profile) =>
+          profile.id === id &&
+          profile.status === "PUBLISHED" &&
+          profile.enabled &&
+          profile.policyApproved,
+      )
       .sort((left, right) => right.version - left.version);
     if (matches.length === 0)
-      throw new Error(`MODEL_PROFILE_NOT_PUBLISHED:${id}`);
+      throw new Error(`MODEL_PROFILE_NOT_AVAILABLE:${id}`);
     return matches[0]!;
   }
 }

@@ -28,6 +28,8 @@ export const publishedProfile: ModelProfile = {
     requireConsentFor: ["PERSONAL"],
     maximumExternalClassification: "PERSONAL",
   },
+  enabled: true,
+  policyApproved: true,
   status: "PUBLISHED",
   version: 1,
 };
@@ -50,7 +52,7 @@ describe("ModelRegistry", () => {
     });
   });
 
-  it("rejects duplicate profile versions and unpublished lookups", () => {
+  it("rejects duplicate profile versions and unavailable runtime lookups", () => {
     expect(
       () => new ModelRegistry([publishedProfile, publishedProfile]),
     ).toThrow("DUPLICATE_MODEL_PROFILE");
@@ -58,7 +60,17 @@ describe("ModelRegistry", () => {
       new ModelRegistry([
         { ...publishedProfile, status: "DRAFT" },
       ]).getPublished("koral-crm"),
-    ).toThrow("MODEL_PROFILE_NOT_PUBLISHED");
+    ).toThrow("MODEL_PROFILE_NOT_AVAILABLE");
+    expect(() =>
+      new ModelRegistry([{ ...publishedProfile, enabled: false }]).getPublished(
+        "koral-crm",
+      ),
+    ).toThrow("MODEL_PROFILE_NOT_AVAILABLE");
+    expect(() =>
+      new ModelRegistry([
+        { ...publishedProfile, policyApproved: false },
+      ]).getPublished("koral-crm"),
+    ).toThrow("MODEL_PROFILE_NOT_AVAILABLE");
   });
 
   it("enforces the review and publication lifecycle", () => {
