@@ -13,7 +13,7 @@ import type { ListLeadsQueryDto } from "./dto/list-leads-query.dto";
 import type { ListOpportunitiesQueryDto } from "./dto/list-opportunities-query.dto";
 import type { PaginatedResponse } from "../../common/types/paginated-response.type";
 import type { RequestContext } from "../auth/auth.service";
-import { AdminBusinessIdempotencyService } from "./admin-business-idempotency.service";
+import { AdminBusinessIdempotencyService } from "../../common/idempotency/admin-business-idempotency.service";
 import type { AssignOwnerDto } from "./dto/assign-owner.dto";
 import type { OpportunityTimelineQueryDto } from "./dto/opportunity-timeline-query.dto";
 import {

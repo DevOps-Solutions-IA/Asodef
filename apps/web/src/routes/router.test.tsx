@@ -391,7 +391,6 @@ describe("router", () => {
   });
 
   it.each([
-    ["/admin/planes", "Planes"],
     ["/admin/koral/inbox", "Inbox"],
     ["/admin/koral/conocimiento", "Conocimiento"],
     ["/admin/comunicaciones/plantillas", "Plantillas"],
@@ -401,7 +400,7 @@ describe("router", () => {
     expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
   });
 
-  it.each(["/admin/planes", "/admin/koral/inbox", "/admin/comunicaciones/plantillas"])(
+  it.each(["/admin/koral/inbox", "/admin/comunicaciones/plantillas"])(
     "keeps %s and its navigation behind settings.manage",
     async (path) => {
       renderAtPath(path, buildCurrentUser({ roles: ["ADMIN"], permissions: [] }));
@@ -410,6 +409,23 @@ describe("router", () => {
       expect(screen.queryByRole("heading", { name: "Comunicaciones" })).not.toBeInTheDocument();
     },
   );
+
+  it("uses the canonical plans.read permission and real Plans API", async () => {
+    renderAtPath(
+      "/admin/planes",
+      buildCurrentUser({ roles: ["COMMERCIAL"], permissions: ["plans.read"] }),
+      (url) => url.includes("/admin/plans") ? jsonResponse(200, []) : undefined,
+    );
+    expect(await screen.findByRole("heading", { name: "Planes" })).toBeInTheDocument();
+    expect(await screen.findByText("Aún no hay planes")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Planes" })).toBeInTheDocument();
+  });
+
+  it("does not infer Plans access from settings.manage", async () => {
+    renderAtPath("/admin/planes", buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["settings.manage"] }));
+    expect(await screen.findByText("No tienes permisos para ver esta página")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Planes" })).not.toBeInTheDocument();
+  });
 
   it("uses Agent 1's canonical read permission for conversations and Inbox", async () => {
     renderAtPath(

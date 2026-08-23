@@ -7,3 +7,4 @@ export * from "./communications";
 export * from "./cross-contract-boundaries";
 export * from "./domain-events";
 export * from "./templates";
+export * from "./plans";

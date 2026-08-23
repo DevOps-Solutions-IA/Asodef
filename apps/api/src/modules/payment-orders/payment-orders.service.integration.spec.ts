@@ -114,7 +114,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
         publicName: "Plan Dedicado v1",
         description: "Versión 1 de prueba.",
         priceCents: 200_000,
-        billingFrequency: "mensual",
+        billingPeriod: "MONTHLY",
         status: "ACTIVE",
       },
     });
@@ -151,7 +151,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
         publicName: "Plan Dedicado v2",
         description: "Versión 2 de prueba.",
         priceCents: 250_000,
-        billingFrequency: "mensual",
+        billingPeriod: "MONTHLY",
         status: "ACTIVE",
       },
     });
@@ -185,7 +185,7 @@ describe("PaymentOrdersService (integration, real Postgres)", () => {
         publicName: "Plan Suspendido",
         description: "Plan de prueba suspendido.",
         priceCents: 150_000,
-        billingFrequency: "mensual",
+        billingPeriod: "MONTHLY",
         status: "SUSPENDED",
       },
     });

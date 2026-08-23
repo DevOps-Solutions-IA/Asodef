@@ -37,6 +37,8 @@ import { MasterModule } from "./modules/master/master.module";
 import { AdminSystemModule } from "./modules/admin-system/admin-system.module";
 import { KoralConversationsModule } from "./modules/koral-conversations/koral-conversations.module";
 import { DomainEventsModule } from "./modules/domain-events/domain-events.module";
+import { AdminBusinessIdempotencyModule } from "./common/idempotency/admin-business-idempotency.module";
+import { PlansModule } from "./modules/plans/plans.module";
 
 @Module({
   imports: [
@@ -84,6 +86,8 @@ import { DomainEventsModule } from "./modules/domain-events/domain-events.module
     AdminSystemModule,
     KoralConversationsModule,
     DomainEventsModule,
+    AdminBusinessIdempotencyModule,
+    PlansModule,
   ],
   controllers: [AppController],
   providers: [],

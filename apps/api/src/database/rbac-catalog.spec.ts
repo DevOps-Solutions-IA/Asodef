@@ -49,7 +49,7 @@ describe("RBAC catalog data integrity", () => {
     expect(new Set(ROLE_PERMISSIONS.SUPER_ADMIN)).toEqual(permissionKeys);
   });
 
-  it("withholds the eight platform-governance permissions from ADMIN (US-008: legal.approve, US-009: users.unlock, US-011: users.roles.manage/users.security.read)", () => {
+  it("withholds platform-governance permissions from ADMIN", () => {
     const platformOnly = [
       "roles.manage",
       "permissions.manage",
@@ -59,6 +59,7 @@ describe("RBAC catalog data integrity", () => {
       "users.unlock",
       "users.roles.manage",
       "users.security.read",
+      "plans.publish",
     ];
     for (const key of platformOnly) {
       expect(ROLE_PERMISSIONS.ADMIN).not.toContain(key);
@@ -77,6 +78,7 @@ describe("RBAC catalog data integrity", () => {
       "users.unlock",
       "users.roles.manage",
       "users.security.read",
+      "plans.publish",
     ];
     const nonSuperAdminRoles = ROLE_CATALOG.map((r) => r.name).filter((name) => name !== "SUPER_ADMIN");
 

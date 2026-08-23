@@ -64,7 +64,7 @@ const ADMIN_NAV_GROUPS: WorkspaceNavGroup[] = [
         to: "/admin/planes",
         label: "Planes",
         icon: Layers3,
-        permission: "settings.manage",
+        permission: "plans.read",
       },
     ],
   },

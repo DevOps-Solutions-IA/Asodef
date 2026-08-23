@@ -179,6 +179,10 @@ export const routeConfig: RouteObject[] = [
             children: [
               { index: true, element: <AdminDashboardPage /> },
               {
+                element: <PermissionRoute permissions={["plans.read"]} />,
+                children: [{ path: "planes", element: <PlansAdminPage /> }],
+              },
+              {
                 // crm.read gates visibility (same pattern as every other
                 // section here, e.g. payments.read/Pagos); crm.manage
                 // gates mutation on top of that. AC5's "a user without
@@ -225,7 +229,6 @@ export const routeConfig: RouteObject[] = [
                 // inferred by the frontend.
                 element: <PermissionRoute permissions={["settings.manage"]} />,
                 children: [
-                  { path: "planes", element: <PlansAdminPage /> },
                   { path: "koral/:sectionSlug", element: <ControlPlaneSectionPage area="koral" /> },
                   { path: "koral", element: <Navigate to="/admin/koral/resumen" replace /> },
                   { path: "comunicaciones/:sectionSlug", element: <ControlPlaneSectionPage area="comunicaciones" /> },

@@ -204,7 +204,7 @@ export function getContractClassification(
       return "ADAPTER_REQUIRED";
     }
     if (slug === "recomendaciones") {
-      return "BLOCKED_BY_PLANS";
+      return "BACKEND_RUNTIME_MISSING";
     }
   }
   return "BACKEND_RUNTIME_MISSING";

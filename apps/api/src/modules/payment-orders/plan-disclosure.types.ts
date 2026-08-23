@@ -37,7 +37,7 @@ export function toPrePaymentDisclosureResponse(
     currency: obligation.currency,
     taxes: planVersion.taxes,
     concept: obligation.concept,
-    frequency: planVersion.billingFrequency,
+    frequency: planVersion.billingPeriod,
     terms: planVersion.terms,
     renewalConditions: planVersion.renewalRules,
     cancellationConditions: planVersion.cancellationRules,

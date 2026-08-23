@@ -38,6 +38,7 @@ export type RecordAuditParams =
       opportunityId?: never;
       refundId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       legalDocumentVersionId: string;
@@ -47,6 +48,7 @@ export type RecordAuditParams =
       opportunityId?: never;
       refundId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       dataSubjectRequestId: string;
@@ -56,6 +58,7 @@ export type RecordAuditParams =
       opportunityId?: never;
       refundId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       pqrCaseId: string;
@@ -65,6 +68,7 @@ export type RecordAuditParams =
       opportunityId?: never;
       refundId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       opportunityId: string;
@@ -74,6 +78,7 @@ export type RecordAuditParams =
       pqrCaseId?: never;
       refundId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       refundId: string;
@@ -83,6 +88,7 @@ export type RecordAuditParams =
       pqrCaseId?: never;
       opportunityId?: never;
       companyId?: never;
+      planVersionId?: never;
     })
   | (RecordAuditBase & {
       companyId: string;
@@ -92,6 +98,17 @@ export type RecordAuditParams =
       pqrCaseId?: never;
       opportunityId?: never;
       refundId?: never;
+      planVersionId?: never;
+    })
+  | (RecordAuditBase & {
+      planVersionId: string;
+      paymentOrderId?: never;
+      legalDocumentVersionId?: never;
+      dataSubjectRequestId?: never;
+      pqrCaseId?: never;
+      opportunityId?: never;
+      refundId?: never;
+      companyId?: never;
     });
 
 /**
@@ -115,6 +132,7 @@ export class AuditService {
         opportunityId: params.opportunityId,
         refundId: params.refundId,
         companyId: params.companyId,
+        planVersionId: params.planVersionId,
         actorUserId: params.actorUserId,
         action: params.action,
         result: params.result ?? (params.applied ? AuditEventResult.SUCCESS : AuditEventResult.NO_OP),

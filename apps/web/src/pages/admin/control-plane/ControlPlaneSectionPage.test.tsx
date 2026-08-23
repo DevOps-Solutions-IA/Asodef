@@ -69,10 +69,10 @@ describe("ControlPlaneSectionPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps plan-dependent recommendations blocked by Plans", () => {
+  it("keeps recommendations unavailable until its runtime exists", () => {
     renderSection("/admin/koral/recomendaciones", "koral");
     expect(
-      screen.getByText("Bloqueado por el contrato de Planes"),
+      screen.getByText("Runtime administrativo pendiente"),
     ).toBeInTheDocument();
   });
 });

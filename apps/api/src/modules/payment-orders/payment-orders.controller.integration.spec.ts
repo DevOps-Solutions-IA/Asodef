@@ -103,7 +103,7 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
         publicName: "Plan Suspendido de Prueba",
         description: "Plan de prueba en estado suspendido.",
         priceCents: 100_000,
-        billingFrequency: "mensual",
+        billingPeriod: "MONTHLY",
         status: "SUSPENDED",
       },
     });
@@ -140,7 +140,7 @@ describe("Payment orders endpoints (integration, real HTTP via the exact configu
         total: activeVersion.priceCents,
         currency: "COP",
         concept: "Cuota HTTP de prueba",
-        frequency: activeVersion.billingFrequency,
+        frequency: activeVersion.billingPeriod,
       });
       expect(response.body.contactChannel).toBeTruthy();
       expect(response.body.pqrChannel).toBeTruthy();

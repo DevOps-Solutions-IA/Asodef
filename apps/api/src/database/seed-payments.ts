@@ -28,7 +28,7 @@ export async function upsertActivePlanDemo(client: PrismaClient): Promise<Plan> 
         publicName: "Plan Demo",
         description: "Plan de prueba para entorno local - no es un plan comercial real.",
         priceCents: 500_000,
-        billingFrequency: "mensual",
+        billingPeriod: "MONTHLY",
         status: "ACTIVE",
       },
     });
