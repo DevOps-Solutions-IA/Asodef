@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="45"
+readonly EXPECTED_MIGRATIONS="46"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"
@@ -210,10 +210,10 @@ unfinished_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations WHER
 
 expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key');")"
 expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey');")"
-expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','pqr_cases','data_subject_requests','payment_events','payment_orders');")"
+expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','pqr_cases','data_subject_requests','payment_events','payment_orders','connect_domain_events','connect_automations','connect_automation_versions','connect_automation_executions','connect_automation_execution_steps','connect_automation_retries','connect_automation_dead_letters','connect_communications','connect_communication_recipients');")"
 [[ "$expected_indexes" == "6" ]] || fail "one or more required unique indexes are missing"
 [[ "$expected_constraints" == "4" ]] || fail "one or more self-service foreign keys are missing"
-[[ "$expected_tables" == "10" ]] || fail "one or more representative tables are missing"
+[[ "$expected_tables" == "19" ]] || fail "one or more representative tables are missing"
 
 snapshot_sql=$(cat <<'SQL'
 SELECT 'roles=' || count(*) FROM roles

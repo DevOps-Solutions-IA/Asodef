@@ -35,7 +35,7 @@ export type CommunicationStatus =
 export const TRANSPORT_AVAILABILITY: Readonly<
   Record<CommunicationTransport, "REAL_EXISTING_ADAPTER" | "CONTRACT_ONLY">
 > = {
-  EMAIL: "CONTRACT_ONLY",
+  EMAIL: "REAL_EXISTING_ADAPTER",
   WHATSAPP: "CONTRACT_ONLY",
   WEB_NOTIFICATION: "CONTRACT_ONLY",
   FUTURE: "CONTRACT_ONLY",
@@ -291,6 +291,21 @@ export const COMMUNICATIONS_SEND_CONTRACT: PublicContract<
       description: "Request does not match the versioned contract.",
     },
     {
+      code: "COMMUNICATION_PERMISSION_DENIED",
+      retryable: false,
+      description: "Effective actor lacks communications.send.",
+    },
+    {
+      code: "COMMUNICATION_DEADLINE_EXCEEDED",
+      retryable: false,
+      description: "The immutable gateway deadline has elapsed.",
+    },
+    {
+      code: "IDEMPOTENCY_CONFLICT",
+      retryable: false,
+      description: "The replay key or request ID was reused for a different request.",
+    },
+    {
       code: "TEMPLATE_NOT_PUBLISHED",
       retryable: false,
       description: "Template version is not PUBLISHED.",
@@ -299,6 +314,11 @@ export const COMMUNICATIONS_SEND_CONTRACT: PublicContract<
       code: "TEMPLATE_VARIABLES_INVALID",
       retryable: false,
       description: "Variables do not exactly match declarations.",
+    },
+    {
+      code: "TEMPLATE_UNSAFE",
+      retryable: false,
+      description: "Template definition failed safe interpolation validation.",
     },
     {
       code: "TRANSPORT_NOT_AVAILABLE",
@@ -319,6 +339,11 @@ export const COMMUNICATIONS_SEND_CONTRACT: PublicContract<
       code: "RATE_LIMITED",
       retryable: true,
       description: "Caller or recipient rate limit was exceeded.",
+    },
+    {
+      code: "RATE_LIMIT_DEPENDENCY_UNAVAILABLE",
+      retryable: true,
+      description: "The mandatory fail-closed rate-limit dependency is unavailable.",
     },
     {
       code: "DELIVERY_STORE_UNAVAILABLE",
@@ -385,12 +410,12 @@ export interface CommunicationsSendToolBinding
   execution: GovernedToolContract["execution"] & {
     directTransportAccess: false;
   };
-  mode: "CONTRACT_ONLY";
+  mode: "RUNTIME_AVAILABLE";
 }
 
-/** Governed Tool Gateway descriptor. It remains REVIEW because the canonical
- * operation exists only as a contract: there is no CommunicationsService or
- * SMTP adapter exposed to Koral. */
+/** Governed Tool Gateway descriptor. Runtime availability does not publish a
+ * tool: REVIEW remains an explicit control-plane gate. The service writes to
+ * a durable outbox and never exposes a transport or SMTP access to Koral. */
 export const COMMUNICATIONS_SEND_TOOL_BINDING = Object.freeze({
   name: "send_communication",
   operation: "communications.send",
@@ -431,10 +456,10 @@ export const COMMUNICATIONS_SEND_TOOL_BINDING = Object.freeze({
     directTransportAccess: false,
     ownershipAndTenantScope: "APPLICATION_SERVICE_ENFORCED",
   },
-  mode: "CONTRACT_ONLY",
+  mode: "RUNTIME_AVAILABLE",
 } as const satisfies CommunicationsSendToolBinding);
 
-/** Guards the contract-only channels before any persistence or provider call. */
+/** Guards unavailable channels before any persistence or provider call. */
 export function isTransportImplemented(
   transport: CommunicationTransport,
 ): boolean {

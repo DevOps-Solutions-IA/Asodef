@@ -19,6 +19,10 @@ import { EmailTemplateRenderer } from "./email-template.renderer";
     NoopMailTransport,
     mailTransportProvider,
   ],
-  exports: [NotificationService, InMemoryMailTransport],
+  exports: [
+    NotificationService,
+    NotificationPayloadCryptoService,
+    InMemoryMailTransport,
+  ],
 })
 export class NotificationsModule {}

@@ -31,6 +31,7 @@ interface ClaimedNotificationJob {
   type: NotificationType;
   recipientEmail: string;
   userId: string | null;
+  communicationId: string | null;
   correlationId: string;
   retryCount: number;
   maxAttempts: number;
@@ -440,6 +441,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
                 job."type",
                 job."recipient_email" AS "recipientEmail",
                 job."user_id" AS "userId",
+                job."communication_id" AS "communicationId",
                 job."correlation_id" AS "correlationId",
                 job."retry_count" AS "retryCount",
                 job."max_attempts" AS "maxAttempts",
@@ -455,7 +457,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
    * operator reconciliation instead; UNKNOWN_RESULT is deliberately terminal.
    */
   private async quarantineExpiredProcessingLeases(): Promise<void> {
-    const jobs = await this.prisma.$queryRaw<Array<{ id: string; userId: string | null; type: NotificationType }>>(Prisma.sql`
+    const jobs = await this.prisma.$queryRaw<Array<{ id: string; userId: string | null; communicationId: string | null; type: NotificationType }>>(Prisma.sql`
       WITH candidates AS (
         SELECT "id"
         FROM "notification_jobs"
@@ -473,11 +475,13 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
           "updated_at" = NOW()
       FROM candidates
       WHERE job."id" = candidates."id"
-      RETURNING job."id", job."user_id" AS "userId", job."type"
+      RETURNING job."id", job."user_id" AS "userId", job."communication_id" AS "communicationId", job."type"
     `);
 
-    await Promise.all(jobs.map((job) => job.userId && (job.type === "PASSWORD_RESET" || job.type === "PASSWORD_CHANGED")
-      ? this.securityEventService.record({
+    await Promise.all(jobs.map(async (job) => {
+      if (job.communicationId) await this.syncCommunicationStatus(job.communicationId);
+      if (job.userId && (job.type === "PASSWORD_RESET" || job.type === "PASSWORD_CHANGED")) {
+        await this.securityEventService.record({
           type: "PASSWORD_NOTIFICATION_FAILED",
           userId: job.userId,
           metadata: {
@@ -486,8 +490,9 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
             terminal: true,
             outcome: "UNKNOWN_RESULT",
           },
-        })
-      : Promise.resolve()));
+        });
+      }
+    }));
   }
 
   private async deliverClaimedJob(job: ClaimedNotificationJob): Promise<void> {
@@ -520,7 +525,7 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
           idempotencyKey: job.id,
         });
         if (result.delivered) {
-          await this.prisma.notificationJob.updateMany({
+          const updated = await this.prisma.notificationJob.updateMany({
             where: { id: job.id, status: "PROCESSING", lockedBy: this.workerId },
             data: {
               status: "SENT",
@@ -532,6 +537,9 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
               lockedBy: null,
             },
           });
+          if (updated.count === 1 && job.communicationId) {
+            await this.syncCommunicationStatus(job.communicationId);
+          }
           return;
         }
         if (result.disposition === "UNCERTAIN") {
@@ -591,6 +599,9 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
         metadata: { jobId: job.id, failureReason: reason, terminal: deadLetter },
       });
     }
+    if (updated.count === 1 && job.communicationId) {
+      await this.syncCommunicationStatus(job.communicationId);
+    }
   }
 
   private async finishUnknownResult(
@@ -616,6 +627,34 @@ export class NotificationService implements OnApplicationBootstrap, OnApplicatio
         metadata: { jobId: job.id, failureReason: reason, terminal: true, outcome: "UNKNOWN_RESULT" },
       });
     }
+    if (updated.count === 1 && job.communicationId) {
+      await this.syncCommunicationStatus(job.communicationId);
+    }
+  }
+
+  private async syncCommunicationStatus(communicationId: string): Promise<void> {
+    const jobs = await this.prisma.notificationJob.findMany({
+      where: { communicationId },
+      select: { status: true, failureReason: true },
+    });
+    if (jobs.length === 0) return;
+    const terminal = jobs.every((job) =>
+      ["SENT", "FAILED", "UNKNOWN_RESULT", "DEAD_LETTER"].includes(job.status),
+    );
+    let status: "QUEUED" | "DELIVERED" | "FAILED" | "UNKNOWN_RESULT" | "DEAD_LETTER" = "QUEUED";
+    if (jobs.some((job) => job.status === "UNKNOWN_RESULT")) status = "UNKNOWN_RESULT";
+    else if (jobs.some((job) => job.status === "DEAD_LETTER")) status = "DEAD_LETTER";
+    else if (jobs.some((job) => job.status === "FAILED")) status = "FAILED";
+    else if (jobs.every((job) => job.status === "SENT")) status = "DELIVERED";
+    const failure = jobs.find((job) => job.failureReason)?.failureReason ?? null;
+    await this.prisma.connectCommunication.updateMany({
+      where: { id: communicationId },
+      data: {
+        status,
+        failureReason: failure,
+        completedAt: terminal ? new Date() : null,
+      },
+    });
   }
 
   private sanitizeFailureReason(reason: string | undefined): string {

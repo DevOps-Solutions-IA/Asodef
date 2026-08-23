@@ -36,6 +36,7 @@ import { SelfServiceModule } from "./modules/self-service/self-service.module";
 import { MasterModule } from "./modules/master/master.module";
 import { AdminSystemModule } from "./modules/admin-system/admin-system.module";
 import { KoralConversationsModule } from "./modules/koral-conversations/koral-conversations.module";
+import { DomainEventsModule } from "./modules/domain-events/domain-events.module";
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { KoralConversationsModule } from "./modules/koral-conversations/koral-co
     MasterModule,
     AdminSystemModule,
     KoralConversationsModule,
+    DomainEventsModule,
   ],
   controllers: [AppController],
   providers: [],
