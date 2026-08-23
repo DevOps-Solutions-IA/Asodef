@@ -1,6 +1,7 @@
 import { GATEWAY_CONTEXT_SCHEMA } from "./shared";
 import type {
   ConnectContractVersion,
+  ContractError,
   DataClassification,
   GatewayError,
   GatewayRequestContext,
@@ -16,12 +17,6 @@ export const TOOL_STATUSES = [
   "RETIRED",
 ] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
-
-export interface ToolErrorContract {
-  code: string;
-  description: string;
-  retryable: boolean;
-}
 
 export type ToolIdempotencyContract =
   | { required: false; semantics: "READ_ONLY" }
@@ -46,7 +41,7 @@ export interface GovernedToolContract {
   description: string;
   inputSchema: JsonSchema;
   outputSchema: JsonSchema;
-  errors: readonly ToolErrorContract[];
+  errors: readonly ContractError[];
   permission: string;
   minimumIdentityLevel: MinimumIdentityLevel;
   confirmationRequired: boolean;

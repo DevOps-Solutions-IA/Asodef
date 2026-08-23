@@ -2,3 +2,8 @@ export * from "./shared";
 export * from "./ai-gateway";
 export * from "./tool-gateway";
 export * from "./knowledge-gateway";
+export * from "./automation";
+export * from "./communications";
+export * from "./cross-contract-boundaries";
+export * from "./domain-events";
+export * from "./templates";
