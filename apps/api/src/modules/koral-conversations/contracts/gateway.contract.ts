@@ -110,7 +110,7 @@ export const KORAL_GATEWAY_ADAPTER_SEMANTICS = {
     "CANONICAL_GATEWAY_REJECTED",
     "DEADLINE_EXCEEDED",
     "IDENTITY_EVIDENCE_REQUIRED",
-    "MODEL_PROFILE_NOT_PUBLISHED",
+    "MODEL_PROFILE_NOT_AVAILABLE",
   ],
   permissions:
     "Adapters pass only the effective permissions in GatewayRequestContext.",

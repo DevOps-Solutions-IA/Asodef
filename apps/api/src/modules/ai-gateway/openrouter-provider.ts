@@ -28,13 +28,16 @@ export interface OpenRouterTransportRequest {
     inputSchema: Readonly<Record<string, unknown>>;
   }[];
   correlationId: string;
+  timeoutMs: number;
 }
 
 export interface OpenRouterTransportResponse {
   content: string;
   structuredOutput?: unknown;
   toolCalls: AiGatewayResponse["toolCalls"];
-  usage: AiUsage;
+  usage: Omit<AiUsage, "costMicros"> & { costMicros: number | null };
+  costReportedByProvider: boolean;
+  latencyMs: number;
 }
 
 /** The privileged transport owns credential resolution and HTTP delivery.
@@ -66,6 +69,9 @@ export class OpenRouterProvider implements AiGateway {
     private readonly costPolicy = new CostPolicy(),
     private readonly structuredOutputPolicy = new StructuredOutputPolicy(),
     private readonly toolCallingPolicy = new ToolCallingPolicy(),
+    private readonly maximumAttempts = 3,
+    private readonly defaultTimeoutMs = 10_000,
+    private readonly now: () => number = Date.now,
   ) {}
 
   async infer(
@@ -142,13 +148,34 @@ export class OpenRouterProvider implements AiGateway {
     if (estimatedInputTokens > profile.maxInputTokens)
       throw new Error("INVALID_REQUEST:MAX_INPUT_TOKENS");
 
-    const routes = this.routingPolicy.routes(profile, "openrouter");
-    const currentDailyCostMicros = await this.usageMeter.currentDailyCostMicros(
-      profile.id,
+    const remainingMs = Date.parse(context.deadlineAt) - this.now();
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+      throw new Error("TIMEOUT:DEADLINE_EXPIRED");
+    }
+    const requestedTimeoutMs =
+      request.timeout?.milliseconds ?? this.defaultTimeoutMs;
+    if (!Number.isInteger(requestedTimeoutMs) || requestedTimeoutMs < 1) {
+      throw new Error("INVALID_REQUEST:TIMEOUT");
+    }
+    const timeoutMs = Math.max(
+      1,
+      Math.min(requestedTimeoutMs, this.defaultTimeoutMs, remainingMs),
     );
+    const requestedAttempts =
+      request.timeout?.maxAttempts ?? this.maximumAttempts;
+    if (!Number.isInteger(requestedAttempts) || requestedAttempts < 1) {
+      throw new Error("INVALID_REQUEST:MAX_ATTEMPTS");
+    }
+    const routes = this.routingPolicy
+      .routes(profile, "openrouter")
+      .slice(0, Math.min(requestedAttempts, this.maximumAttempts));
     let lastError: unknown;
 
     for (const [routeIndex, route] of routes.entries()) {
+      const attempt = routeIndex + 1;
+      const attemptStartedAt = this.now();
+      const currentDailyCostMicros =
+        await this.usageMeter.currentDailyCostMicros(profile.id);
       const estimatedCostMicros = this.pricing.estimateCostMicros(
         route.model,
         estimatedInputTokens,
@@ -159,6 +186,18 @@ export class OpenRouterProvider implements AiGateway {
         currentDailyCostMicros,
         estimatedCostMicros,
       );
+      if (estimatedCostMicros === null) {
+        throw new Error("BUDGET_EXCEEDED:PRICING_UNKNOWN");
+      }
+      const reserved = await this.usageMeter.reserveDailyCost(
+        profile.id,
+        estimatedCostMicros,
+        profile.budgetPolicy.maxCostMicrosPerDay,
+      );
+      if (!reserved) throw new Error("BUDGET_EXCEEDED:DAILY");
+      let reservationActive = true;
+      let meteredUsage: AiUsage | undefined;
+      let costSource: "PROVIDER_REPORTED" | "CONSERVATIVE_ESTIMATE" | undefined;
       try {
         const response = await this.transport.complete({
           model: route.model,
@@ -171,11 +210,43 @@ export class OpenRouterProvider implements AiGateway {
             inputSchema: tool.inputSchema,
           })),
           correlationId: context.audit.correlationId,
+          timeoutMs,
         });
-        this.structuredOutputPolicy.assertResponse(
-          request,
-          response.structuredOutput,
+        const actualCostMicros =
+          response.usage.costMicros ??
+          this.pricing.estimateCostMicros(
+            route.model,
+            response.usage.inputTokens,
+            response.usage.outputTokens,
+          );
+        this.costPolicy.assertRequestAllowed(
+          profile,
+          currentDailyCostMicros,
+          actualCostMicros,
         );
+        meteredUsage = {
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          totalTokens: response.usage.totalTokens,
+          costMicros: actualCostMicros ?? 0,
+        };
+        costSource = response.costReportedByProvider
+          ? "PROVIDER_REPORTED"
+          : "CONSERVATIVE_ESTIMATE";
+        reservationActive = false;
+        const withinDailyBudget = await this.usageMeter.settleDailyCost(
+          profile.id,
+          estimatedCostMicros,
+          meteredUsage.costMicros,
+          profile.budgetPolicy.maxCostMicrosPerDay,
+        );
+        if (!withinDailyBudget) throw new Error("BUDGET_EXCEEDED:DAILY");
+        if (response.toolCalls.length === 0) {
+          this.structuredOutputPolicy.assertResponse(
+            request,
+            response.structuredOutput,
+          );
+        }
         this.toolCallingPolicy.assertResponse(
           request,
           response.toolCalls.map((toolCall) => toolCall.name),
@@ -187,7 +258,11 @@ export class OpenRouterProvider implements AiGateway {
           model: route.model,
           purpose: context.policy.purpose,
           correlationId: context.audit.correlationId,
-          usage: response.usage,
+          latencyMs: response.latencyMs,
+          success: true,
+          attempt,
+          costSource,
+          usage: meteredUsage,
         });
         return {
           version: "v1",
@@ -196,20 +271,76 @@ export class OpenRouterProvider implements AiGateway {
           content: response.content,
           structuredOutput: response.structuredOutput,
           toolCalls: response.toolCalls,
-          usage: response.usage,
+          usage: meteredUsage,
           correlationId: context.audit.correlationId,
         };
       } catch (error) {
-        lastError = error;
         const errorCode =
           error instanceof Error
             ? (error.message.split(":")[0] ?? "PROVIDER_ERROR")
             : "PROVIDER_ERROR";
+        if (reservationActive) {
+          if (errorCode === "TIMEOUT") {
+            // A timeout has an uncertain billing outcome. Retain the
+            // conservative reservation instead of understating daily spend.
+            meteredUsage = {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              costMicros: estimatedCostMicros,
+            };
+            costSource = "CONSERVATIVE_ESTIMATE";
+          } else {
+            await this.releaseReservation(profile.id, estimatedCostMicros);
+          }
+          reservationActive = false;
+        }
+        lastError = error;
+        await this.recordFailure({
+          actorId: context.identity.effectiveActorId,
+          modelProfileId: profile.id,
+          provider: route.provider,
+          model: route.model,
+          purpose: context.policy.purpose,
+          correlationId: context.audit.correlationId,
+          latencyMs: Math.max(0, this.now() - attemptStartedAt),
+          success: false,
+          errorCode,
+          attempt,
+          costSource,
+          usage: meteredUsage,
+        });
         if (!this.fallbackPolicy.canFallback(errorCode, routes[routeIndex + 1]))
           throw error;
       }
     }
     throw lastError ?? new Error("MODEL_NOT_AVAILABLE");
+  }
+
+  private async releaseReservation(
+    modelProfileId: string,
+    reservedCostMicros: number,
+  ): Promise<void> {
+    try {
+      await this.usageMeter.releaseDailyCost(
+        modelProfileId,
+        reservedCostMicros,
+      );
+    } catch {
+      // Leaving a conservative reservation in place is safer than retrying
+      // an inference whose cost state cannot be reconciled.
+    }
+  }
+
+  private async recordFailure(
+    record: Parameters<UsageMeter["record"]>[0],
+  ): Promise<void> {
+    try {
+      await this.usageMeter.record(record);
+    } catch {
+      // Preserve the provider/policy error. The runtime meter logs its own
+      // bounded failure without prompt, response or credential content.
+    }
   }
 
   private normalizeErrorCode(
@@ -229,6 +360,7 @@ export class OpenRouterProvider implements AiGateway {
     if (code === "DATA_CLASSIFICATION_DENIED") return code;
     if (code === "INVALID_REQUEST") return code;
     if (code === "MODEL_NOT_AVAILABLE") return code;
+    if (code === "MODEL_PROFILE_NOT_AVAILABLE") return "MODEL_NOT_AVAILABLE";
     if (code === "OUTPUT_SCHEMA_VIOLATION") return code;
     if (code === "RATE_LIMITED") return code;
     if (code === "TIMEOUT") return code;

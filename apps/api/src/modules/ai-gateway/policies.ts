@@ -4,6 +4,7 @@ import type {
   AiUsage,
 } from "./ai-contracts";
 import type { ModelProfile } from "./model-registry";
+import { JsonSchemaValidator } from "./json-schema-validator";
 
 export interface ModelRoute {
   provider: string;
@@ -13,8 +14,13 @@ export interface ModelRoute {
 
 export class RoutingPolicy {
   routes(profile: ModelProfile, provider: string): readonly ModelRoute[] {
-    if (profile.status !== "PUBLISHED")
-      throw new Error("MODEL_PROFILE_NOT_PUBLISHED");
+    if (
+      profile.status !== "PUBLISHED" ||
+      !profile.enabled ||
+      !profile.policyApproved
+    ) {
+      throw new Error("MODEL_PROFILE_NOT_AVAILABLE");
+    }
     if (!profile.allowedProviders.includes(provider))
       throw new Error("PROVIDER_NOT_ALLOWED");
     return [profile.primaryModel, ...profile.fallbackModels].map(
@@ -30,9 +36,12 @@ export class RoutingPolicy {
 export class FallbackPolicy {
   canFallback(errorCode: string, nextRoute: ModelRoute | undefined): boolean {
     if (!nextRoute) return false;
-    return ["MODEL_NOT_AVAILABLE", "PROVIDER_ERROR", "RATE_LIMITED"].includes(
-      errorCode,
-    );
+    return [
+      "MODEL_NOT_AVAILABLE",
+      "PROVIDER_ERROR",
+      "RATE_LIMITED",
+      "TIMEOUT",
+    ].includes(errorCode);
   }
 }
 
@@ -43,11 +52,31 @@ export interface UsageRecord {
   model: string;
   purpose: string;
   correlationId: string;
-  usage: AiUsage;
+  latencyMs: number;
+  success: boolean;
+  errorCode?: string;
+  attempt: number;
+  costSource?: "PROVIDER_REPORTED" | "CONSERVATIVE_ESTIMATE";
+  usage?: AiUsage;
 }
 
 export interface UsageMeter {
   currentDailyCostMicros(modelProfileId: string): Promise<number>;
+  reserveDailyCost(
+    modelProfileId: string,
+    estimatedCostMicros: number,
+    dailyLimitMicros: number,
+  ): Promise<boolean>;
+  settleDailyCost(
+    modelProfileId: string,
+    reservedCostMicros: number,
+    actualCostMicros: number,
+    dailyLimitMicros: number,
+  ): Promise<boolean>;
+  releaseDailyCost(
+    modelProfileId: string,
+    reservedCostMicros: number,
+  ): Promise<void>;
   record(record: UsageRecord): Promise<void>;
 }
 
@@ -80,22 +109,20 @@ export class CostPolicy {
 }
 
 export class StructuredOutputPolicy {
+  constructor(private readonly validator = new JsonSchemaValidator()) {}
+
   assertRequest(profile: ModelProfile, request: AiGatewayRequest): void {
     if (profile.structuredOutputRequired && !request.outputSchema)
       throw new Error("OUTPUT_SCHEMA_REQUIRED");
     if (request.outputSchema && request.outputSchema.type !== "object")
       throw new Error("OUTPUT_SCHEMA_MUST_BE_OBJECT");
+    if (request.outputSchema)
+      this.validator.assertSupported(request.outputSchema);
   }
 
   assertResponse(request: AiGatewayRequest, structuredOutput: unknown): void {
     if (!request.outputSchema) return;
-    if (
-      !structuredOutput ||
-      typeof structuredOutput !== "object" ||
-      Array.isArray(structuredOutput)
-    ) {
-      throw new Error("OUTPUT_SCHEMA_VIOLATION");
-    }
+    this.validator.assertMatches(request.outputSchema, structuredOutput);
   }
 }
 

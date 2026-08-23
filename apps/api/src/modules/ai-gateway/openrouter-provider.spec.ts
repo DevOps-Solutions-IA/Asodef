@@ -18,12 +18,19 @@ describe("OpenRouterProvider", () => {
       totalTokens: 12,
       costMicros: 100,
     },
+    costReportedByProvider: true,
+    latencyMs: 25,
   };
   const request = {
     version: "v1" as const,
     modelProfileId: publishedProfile.id,
     messages: [{ role: "user" as const, content: "Summarize this account" }],
-    outputSchema: { type: "object", additionalProperties: false },
+    outputSchema: {
+      type: "object",
+      properties: { answer: { type: "string" } },
+      required: ["answer"],
+      additionalProperties: false,
+    },
   };
   const context = {
     version: "v1" as const,
@@ -42,7 +49,7 @@ describe("OpenRouterProvider", () => {
       dataClassification: "PERSONAL" as const,
       consentVerified: true,
     },
-    deadlineAt: "2026-08-22T20:00:00.000Z",
+    deadlineAt: "2099-08-22T20:00:00.000Z",
   };
 
   function buildProvider(
@@ -52,6 +59,9 @@ describe("OpenRouterProvider", () => {
     const records: UsageRecord[] = [];
     const meter: UsageMeter = {
       currentDailyCostMicros: async () => 0,
+      reserveDailyCost: async () => true,
+      settleDailyCost: async () => true,
+      releaseDailyCost: async () => undefined,
       record: async (record) => {
         records.push(record);
       },
@@ -93,6 +103,28 @@ describe("OpenRouterProvider", () => {
         usage: response.usage,
       }),
     ]);
+  });
+
+  it("fails closed before transport when the atomic daily reservation is denied", async () => {
+    let invocations = 0;
+    const meter: UsageMeter = {
+      currentDailyCostMicros: async () => 0,
+      reserveDailyCost: async () => false,
+      settleDailyCost: async () => true,
+      releaseDailyCost: async () => undefined,
+      record: async () => undefined,
+    };
+    const provider = new OpenRouterProvider(
+      { complete: async () => (invocations++, response) },
+      new ModelRegistry([publishedProfile]),
+      meter,
+      { estimateCostMicros: () => 100 },
+    );
+    await expect(provider.infer(request, context)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "BUDGET_EXCEEDED", retryable: false },
+    });
+    expect(invocations).toBe(0);
   });
 
   it("uses only declared fallbacks for retryable provider failures", async () => {
@@ -151,6 +183,19 @@ describe("OpenRouterProvider", () => {
     await expect(provider.infer(request, context)).resolves.toMatchObject({
       ok: false,
       error: { code: "TOOL_POLICY_DENIED", retryable: false },
+    });
+  });
+
+  it("rejects structured output that does not match the requested schema", async () => {
+    const { provider } = buildProvider({
+      complete: async () => ({
+        ...response,
+        structuredOutput: { answer: 42 },
+      }),
+    });
+    await expect(provider.infer(request, context)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "OUTPUT_SCHEMA_VIOLATION", retryable: false },
     });
   });
 });
