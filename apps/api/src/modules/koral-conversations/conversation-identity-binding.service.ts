@@ -35,13 +35,26 @@ export class ConversationIdentityBindingService {
   }
 
   private async bindInternal(input: BindConversationIdentityInput, retainHistoricalOnLowerAssurance: boolean) {
+    return this.prisma.$transaction(
+      (tx) => this.bindInTransaction(tx, input, retainHistoricalOnLowerAssurance),
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  /** Atomic composition boundary for server-owned identity workflows. The
+   * caller supplies an existing transaction; validation and the identity
+   * advisory lock remain identical to bind()/bindEffective(). */
+  async bindInTransaction(
+    tx: Prisma.TransactionClient,
+    input: BindConversationIdentityInput,
+    retainHistoricalOnLowerAssurance = false,
+  ) {
     validateIdentityEvidence(input.identity);
     const reason = boundedText(input.reason, "INVALID_IDENTITY_REASON", 500);
     const evidenceReference = safeEvidence(input.evidenceReference);
     const correlationId = boundedText(input.correlationId, "INVALID_CORRELATION_ID", 200);
     const idempotencyKey = boundedText(input.idempotencyKey, "INVALID_IDEMPOTENCY_KEY", 200);
 
-    return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw<Array<{ acquired: boolean }>>(
         Prisma.sql`SELECT true AS acquired FROM pg_advisory_xact_lock(hashtextextended(${`koral-identity:${input.conversationId}`}, 0))`,
       );
@@ -143,7 +156,6 @@ export class ConversationIdentityBindingService {
         },
       });
       return { binding, replayed: false };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 
   async findLatest(conversationId: string) {

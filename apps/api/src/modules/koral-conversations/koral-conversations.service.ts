@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   AuditEventResult,
+  ConversationChannel,
   ConversationMessageDirection,
   ConversationMessageStatus,
   ConversationParticipantKind,
@@ -30,6 +31,7 @@ import {
   type KoralOutboundCommitInput,
   type MutationContext,
 } from "./koral-conversations.types";
+import { assertWebChatSessionFence, type WebChatSessionFence } from "./web-chat-session-lock";
 
 const GENERIC_NOT_FOUND = "No se encontró la conversación solicitada.";
 const CONCURRENT_CHANGE = "La conversación cambió mientras se procesaba la acción. Actualiza e intenta nuevamente.";
@@ -41,7 +43,29 @@ export class KoralConversationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async receiveInbound(rawInput: InboundMessage): Promise<InboundReceipt> {
+    return this.receiveInboundInternal(rawInput);
+  }
+
+  async receiveWebChatInbound(
+    rawInput: InboundMessage,
+    fence: WebChatSessionFence,
+    payloadHash: string,
+    bindIdentity: (tx: Prisma.TransactionClient, conversationId: string) => Promise<void>,
+  ): Promise<InboundReceipt> {
+    if (!/^[a-f0-9]{64}$/u.test(payloadHash)) throw new BadRequestException("INVALID_WEB_CHAT_PAYLOAD_HASH");
+    return this.receiveInboundInternal(rawInput, { fence, payloadHash, bindIdentity });
+  }
+
+  private async receiveInboundInternal(
+    rawInput: InboundMessage,
+    webChat?: {
+      fence: WebChatSessionFence;
+      payloadHash: string;
+      bindIdentity: (tx: Prisma.TransactionClient, conversationId: string) => Promise<void>;
+    },
+  ): Promise<InboundReceipt> {
     const input = normalizeInboundMessage(rawInput);
+    if (webChat && input.channel !== ConversationChannel.WEB) throw new BadRequestException("WEB_CHANNEL_REQUIRED");
     return this.prisma.$transaction(async (tx) => {
       const lockKey = `koral:${input.channel}:${input.externalSessionId}`;
       await tx.$queryRaw<Array<{ acquired: boolean }>>(
@@ -74,6 +98,16 @@ export class KoralConversationsService {
         include: { conversation: true },
       });
 
+      if (webChat) {
+        await assertWebChatSessionFence(tx, webChat.fence, new Date());
+        if (
+          channelSession.id !== webChat.fence.channelSessionId
+          || channelSession.channel !== ConversationChannel.WEB
+          || channelSession.externalSessionId !== input.externalSessionId
+        ) throw new ConflictException("WEB_CHAT_SESSION_CHANNEL_MISMATCH");
+        await webChat.bindIdentity(tx, channelSession.conversationId);
+      }
+
       const duplicate = await tx.conversationMessage.findUnique({
         where: {
           channelSessionId_externalMessageId: {
@@ -81,14 +115,20 @@ export class KoralConversationsService {
             externalMessageId: input.externalMessageId,
           },
         },
+        include: { webChatProcessing: true },
       });
       if (duplicate) {
+        const processing = duplicate.webChatProcessing;
+        if (webChat && (!processing || processing.webChatSessionId !== webChat.fence.sessionId || processing.payloadHash !== webChat.payloadHash)) {
+          throw new ConflictException("WEB_CHAT_MESSAGE_DRIFT");
+        }
         return {
           conversationId: duplicate.conversationId,
           messageId: duplicate.id,
           duplicate: true,
           shouldAutoReply: false,
           status: channelSession.conversation.status,
+          ...(processing ? { processingStatus: processing.status } : {}),
         };
       }
 
@@ -126,6 +166,17 @@ export class KoralConversationsService {
         },
       });
 
+      if (webChat) {
+        await tx.webChatMessageProcessing.create({
+          data: {
+            messageId: message.id,
+            webChatSessionId: webChat.fence.sessionId,
+            channelSessionId: webChat.fence.channelSessionId,
+            payloadHash: webChat.payloadHash,
+          },
+        });
+      }
+
       const previousStatus = channelSession.conversation.status;
       const nextStatus = statusAfterInbound(previousStatus);
       const updated = await tx.conversation.update({
@@ -162,6 +213,7 @@ export class KoralConversationsService {
         duplicate: false,
         shouldAutoReply: mayKoralAutoReply(updated.status, Boolean(activeAssignment)),
         status: updated.status,
+        ...(webChat ? { processingStatus: "PENDING" as const } : {}),
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
@@ -278,7 +330,14 @@ export class KoralConversationsService {
   }
 
   async getRuntimeState(id: string): Promise<ConversationRuntimeState> {
-    const conversation = await this.prisma.conversation.findUnique({
+    return this.getRuntimeStateWithClient(this.prisma, id);
+  }
+
+  async getRuntimeStateWithClient(
+    client: Pick<Prisma.TransactionClient, "conversation">,
+    id: string,
+  ): Promise<ConversationRuntimeState> {
+    const conversation = await client.conversation.findUnique({
       where: { id },
       select: {
         id: true,
