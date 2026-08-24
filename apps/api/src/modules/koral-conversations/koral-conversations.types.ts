@@ -27,6 +27,14 @@ export interface MutationContext {
   correlationId?: string;
 }
 
+export interface ConversationRuntimeState {
+  id: string;
+  status: ConversationStatus;
+  version: number;
+  hasActiveAssignment: boolean;
+  mayAutoReply: boolean;
+}
+
 export interface KoralOutboundCommitInput {
   conversationId: string;
   channel: ConversationChannel;

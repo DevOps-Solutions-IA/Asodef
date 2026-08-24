@@ -23,6 +23,18 @@ export class ConversationIdentityBindingService {
   constructor(private readonly prisma: PrismaService) {}
 
   async bind(input: BindConversationIdentityInput) {
+    return this.bindInternal(input, false);
+  }
+
+  /** Records progressive evidence without treating the historical maximum as
+   * current authorization. A request whose live assurance is lower (logout,
+   * MFA/step-up expiry or anonymous reconnect) keeps the append-only binding
+   * intact and writes only a sanitized effective-assurance timeline event. */
+  async bindEffective(input: BindConversationIdentityInput) {
+    return this.bindInternal(input, true);
+  }
+
+  private async bindInternal(input: BindConversationIdentityInput, retainHistoricalOnLowerAssurance: boolean) {
     validateIdentityEvidence(input.identity);
     const reason = boundedText(input.reason, "INVALID_IDENTITY_REASON", 500);
     const evidenceReference = safeEvidence(input.evidenceReference);
@@ -53,8 +65,45 @@ export class ConversationIdentityBindingService {
 
       const previous = await latestBinding(tx, input.conversationId);
       if (previous) {
+        if (
+          previous.identityId !== input.identity.identityId
+          && hasIdentityAssurance(previous.newAssurance as IdentityAssuranceLevel, "MATCHED")
+          && hasIdentityAssurance(input.identity.assuranceLevel, "MATCHED")
+        ) throw new ConflictException("IDENTITY_CONFLICT");
         if (!hasIdentityAssurance(input.identity.assuranceLevel, previous.newAssurance as IdentityAssuranceLevel)) {
-          throw new ConflictException("ASSURANCE_DOWNGRADE_REJECTED");
+          if (!retainHistoricalOnLowerAssurance) throw new ConflictException("ASSURANCE_DOWNGRADE_REJECTED");
+          const effectiveEventKey = `identity-effective:${idempotencyKey}`;
+          const effectiveReplay = await tx.conversationEvent.findUnique({
+            where: { conversationId_idempotencyKey: { conversationId: input.conversationId, idempotencyKey: effectiveEventKey } },
+          });
+          if (effectiveReplay) {
+            const metadata = jsonObject(effectiveReplay.metadata);
+            if (
+              effectiveReplay.eventType !== "IDENTITY_EFFECTIVE_ASSURANCE_REDUCED"
+              || effectiveReplay.reason !== reason
+              || metadata.identityId !== input.identity.identityId
+              || metadata.effectiveAssurance !== input.identity.assuranceLevel
+              || metadata.evidenceReference !== evidenceReference
+            ) throw new ConflictException("IDENTITY_BINDING_IDEMPOTENCY_CONFLICT");
+            return { binding: previous, replayed: true, historicalAssuranceRetained: true, effectiveIdentity: input.identity };
+          }
+          await tx.conversationEvent.create({
+            data: {
+              conversationId: input.conversationId,
+              eventType: "IDENTITY_EFFECTIVE_ASSURANCE_REDUCED",
+              correlationId,
+              idempotencyKey: effectiveEventKey,
+              reason,
+              result: AuditEventResult.SUCCESS,
+              metadata: {
+                identityId: input.identity.identityId,
+                historicalAssurance: previous.newAssurance,
+                effectiveAssurance: input.identity.assuranceLevel,
+                evidenceReference,
+              },
+            },
+          });
+          return { binding: previous, replayed: false, historicalAssuranceRetained: true, effectiveIdentity: input.identity };
         }
         if (
           previous.identityId !== input.identity.identityId
@@ -139,4 +188,9 @@ function containsControlCharacter(value: string): boolean {
     const code = character.charCodeAt(0);
     return code < 32 || code === 127;
   });
+}
+
+function jsonObject(value: Prisma.JsonValue | null): Prisma.JsonObject {
+  if (value === null || Array.isArray(value) || typeof value !== "object") return {};
+  return value;
 }

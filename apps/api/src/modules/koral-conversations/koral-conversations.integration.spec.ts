@@ -125,6 +125,131 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     expect(await prisma.conversationEvent.count({ where: { conversationId: conversation.id, eventType: "ASSIGNMENT_CREATED" } })).toBe(1);
   });
 
+  it("enforces state-machine transitions before assignment", async () => {
+    const actor = await createActiveUser("resolved-assignment");
+    const conversation = await prisma.conversation.create({ data: { status: ConversationStatus.RESOLVED, resolvedAt: new Date() } });
+    conversationIds.push(conversation.id);
+
+    await expect(service.assign(conversation.id, {
+      assigneeUserId: actor.id,
+      priority: ConversationPriority.NORMAL,
+      expectedVersion: conversation.version,
+      idempotencyKey: randomUUID(),
+      reason: "Invalid direct assignment",
+    }, { actorUserId: actor.id })).rejects.toThrow("INVALID_CONVERSATION_TRANSITION");
+    expect(await prisma.conversationAssignment.count({ where: { conversationId: conversation.id } })).toBe(0);
+  });
+
+  it("distinguishes transfer and takeover and retains the same assignee without duplicate ownership", async () => {
+    const [first, second] = await Promise.all([
+      createActiveUser("handoff-first"),
+      createActiveUser("handoff-second"),
+    ]);
+    const conversation = await prisma.conversation.create({ data: { status: ConversationStatus.HUMAN_REQUIRED } });
+    conversationIds.push(conversation.id);
+
+    await service.assign(conversation.id, {
+      assigneeUserId: first.id,
+      priority: ConversationPriority.NORMAL,
+      expectedVersion: conversation.version,
+      idempotencyKey: randomUUID(),
+      reason: "Initial assignment",
+    }, { actorUserId: first.id });
+    const retainedState = await service.getRuntimeState(conversation.id);
+    await service.assign(conversation.id, {
+      assigneeUserId: first.id,
+      priority: ConversationPriority.NORMAL,
+      expectedVersion: retainedState.version,
+      idempotencyKey: randomUUID(),
+      reason: "Confirm current ownership",
+    }, { actorUserId: first.id });
+    expect((await service.getRuntimeState(conversation.id)).version).toBe(retainedState.version);
+
+    const transferState = await service.getRuntimeState(conversation.id);
+    await service.assign(conversation.id, {
+      assigneeUserId: second.id,
+      priority: ConversationPriority.HIGH,
+      expectedVersion: transferState.version,
+      idempotencyKey: randomUUID(),
+      reason: "Transfer to specialist",
+    }, { actorUserId: first.id });
+    const takeoverState = await service.getRuntimeState(conversation.id);
+    await service.assign(conversation.id, {
+      assigneeUserId: first.id,
+      priority: ConversationPriority.URGENT,
+      expectedVersion: takeoverState.version,
+      idempotencyKey: randomUUID(),
+      reason: "Take back urgent case",
+    }, { actorUserId: first.id });
+
+    expect(await prisma.conversationAssignment.count({ where: { conversationId: conversation.id, releasedAt: null } })).toBe(1);
+    const events = await prisma.conversationEvent.findMany({ where: { conversationId: conversation.id }, select: { eventType: true } });
+    expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      "ASSIGNMENT_CREATED",
+      "ASSIGNMENT_RETAINED",
+      "ASSIGNMENT_TRANSFERRED",
+      "ASSIGNMENT_TAKEN_OVER",
+    ]));
+  });
+
+  it("escalates, releases to the human queue and reopens only through audited transitions", async () => {
+    const actor = await createActiveUser("lifecycle-actor");
+    const conversation = await prisma.conversation.create({ data: { status: ConversationStatus.AI_ACTIVE } });
+    conversationIds.push(conversation.id);
+
+    const escalated = await service.escalate(conversation.id, {
+      expectedVersion: conversation.version,
+      idempotencyKey: randomUUID(),
+      reasonCode: "POLICY_REVIEW_REQUIRED",
+      reason: "Human policy review is required",
+    }, { actorUserId: actor.id, correlationId: randomUUID() });
+    expect(escalated.status).toBe(ConversationStatus.HUMAN_REQUIRED);
+
+    const assigned = await service.assign(conversation.id, {
+      assigneeUserId: actor.id,
+      priority: ConversationPriority.HIGH,
+      expectedVersion: escalated.version,
+      idempotencyKey: randomUUID(),
+      reason: "Take escalated case",
+    }, { actorUserId: actor.id });
+    const released = await service.release(conversation.id, {
+      expectedVersion: assigned.version,
+      idempotencyKey: randomUUID(),
+      reason: "Return case to human queue",
+    }, { actorUserId: actor.id });
+    expect(released.status).toBe(ConversationStatus.HUMAN_REQUIRED);
+    expect(await prisma.conversationAssignment.count({ where: { conversationId: conversation.id, releasedAt: null } })).toBe(0);
+
+    const reassigned = await service.assign(conversation.id, {
+      assigneeUserId: actor.id,
+      priority: ConversationPriority.NORMAL,
+      expectedVersion: released.version,
+      idempotencyKey: randomUUID(),
+      reason: "Retake queued case",
+    }, { actorUserId: actor.id });
+    const waiting = await service.transitionStatus(conversation.id, {
+      targetStatus: ConversationStatus.WAITING_INTERNAL,
+      expectedVersion: reassigned.version,
+      idempotencyKey: randomUUID(),
+      reason: "Await internal validation",
+    }, { actorUserId: actor.id });
+    const resolved = await service.transitionStatus(conversation.id, {
+      targetStatus: ConversationStatus.RESOLVED,
+      expectedVersion: waiting.version,
+      idempotencyKey: randomUUID(),
+      reason: "Internal validation completed",
+    }, { actorUserId: actor.id });
+    expect(resolved.status).toBe(ConversationStatus.RESOLVED);
+    expect(await prisma.conversationAssignment.count({ where: { conversationId: conversation.id, releasedAt: null } })).toBe(0);
+    const reopened = await service.transitionStatus(conversation.id, {
+      targetStatus: ConversationStatus.AI_ACTIVE,
+      expectedVersion: resolved.version,
+      idempotencyKey: randomUUID(),
+      reason: "User requested a new follow-up",
+    }, { actorUserId: actor.id });
+    expect(reopened.status).toBe(ConversationStatus.AI_ACTIVE);
+  });
+
   it("lets a concurrent human takeover suppress an AI outbound commit", async () => {
     const actor = await createActiveUser("takeover-actor");
     const externalSessionId = randomUUID();
@@ -151,6 +276,33 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     });
     expect(result).toMatchObject({ committed: false, reason: "CONVERSATION_NOT_AI_ACTIVE" });
     expect(await prisma.conversationMessage.count({ where: { conversationId: receipt.conversationId, direction: "OUTBOUND" } })).toBe(0);
+  });
+
+  it("suppresses AI output whenever an active human assignment exists even if status is inconsistent", async () => {
+    const actor = await createActiveUser("defense-in-depth-actor");
+    const externalSessionId = randomUUID();
+    const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID()));
+    conversationIds.push(receipt.conversationId);
+    await prisma.conversationAssignment.create({
+      data: {
+        conversationId: receipt.conversationId,
+        assigneeUserId: actor.id,
+        assignedByUserId: actor.id,
+        priority: ConversationPriority.NORMAL,
+      },
+    });
+    const state = await service.getRuntimeState(receipt.conversationId);
+    expect(state).toMatchObject({ status: ConversationStatus.AI_ACTIVE, hasActiveAssignment: true, mayAutoReply: false });
+    await expect(service.commitKoralOutbound({
+      conversationId: receipt.conversationId,
+      channel: ConversationChannel.WEB,
+      externalSessionId,
+      expectedVersion: state.version,
+      idempotencyKey: randomUUID(),
+      correlationId: randomUUID(),
+      contentType: "text/plain",
+      body: "Must be suppressed",
+    })).resolves.toMatchObject({ committed: false, reason: "CONVERSATION_NOT_AI_ACTIVE" });
   });
 
   it("queues an AI response once and rejects idempotency-key reuse with different content", async () => {

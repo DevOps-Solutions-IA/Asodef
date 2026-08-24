@@ -6,8 +6,11 @@ import { RequireStepUp } from "../auth/decorators/require-step-up.decorator";
 import type { AuthenticatedRequest, RequestUser } from "../auth/types/request-user.type";
 import { AddInternalNoteDto } from "./dto/add-internal-note.dto";
 import { AssignConversationDto } from "./dto/assign-conversation.dto";
+import { EscalateConversationDto } from "./dto/escalate-conversation.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
+import { ReleaseConversationDto } from "./dto/release-conversation.dto";
 import { ReturnToKoralDto } from "./dto/return-to-koral.dto";
+import { TransitionConversationDto } from "./dto/transition-conversation.dto";
 import { KoralConversationsService } from "./koral-conversations.service";
 
 @ApiTags("koral-conversations")
@@ -39,6 +42,45 @@ export class KoralConversationsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.conversations.assign(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @RequireStepUp()
+  @Post(":id/escalate")
+  @HttpCode(HttpStatus.OK)
+  escalate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: EscalateConversationDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversations.escalate(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @RequireStepUp()
+  @Post(":id/release")
+  @HttpCode(HttpStatus.OK)
+  release(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ReleaseConversationDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversations.release(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @RequireStepUp()
+  @Post(":id/status-transitions")
+  @HttpCode(HttpStatus.OK)
+  transitionStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: TransitionConversationDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversations.transitionStatus(id, dto, requestContext(actor, request));
   }
 
   @RequirePermissions("koral.conversations.manage")

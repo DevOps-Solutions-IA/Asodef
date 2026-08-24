@@ -91,4 +91,27 @@ describe("conversation identity binding (integration, real Postgres)", () => {
     await expect(service.bind(input(row.id, "VERIFIED", randomUUID(), "different-identity"))).rejects.toThrow("IDENTITY_CONFLICT");
     expect(await prisma.conversationIdentityBinding.count({ where: { conversationId: row.id } })).toBe(1);
   });
+
+  it("retains historical assurance while exposing lower live request assurance after expiry", async () => {
+    const row = await conversation();
+    await service.bind(input(row.id, "STEP_UP_VERIFIED", randomUUID(), "portal-user:user-1"));
+    const effectiveKey = randomUUID();
+    const effectiveInput = input(row.id, "ANONYMOUS", effectiveKey, "anonymous-reconnect");
+    const effective = await service.bindEffective(effectiveInput);
+    const replay = await service.bindEffective(effectiveInput);
+
+    expect(effective).toMatchObject({
+      historicalAssuranceRetained: true,
+      effectiveIdentity: { assuranceLevel: "ANONYMOUS" },
+      binding: { newAssurance: "STEP_UP_VERIFIED" },
+    });
+    expect(await prisma.conversationIdentityBinding.count({ where: { conversationId: row.id } })).toBe(1);
+    expect(replay).toMatchObject({ replayed: true, historicalAssuranceRetained: true });
+    expect(await prisma.conversationEvent.count({
+      where: { conversationId: row.id, eventType: "IDENTITY_EFFECTIVE_ASSURANCE_REDUCED" },
+    })).toBe(1);
+    await expect(service.bindEffective(
+      input(row.id, "AUTHENTICATED", randomUUID(), "portal-user:different-user"),
+    )).rejects.toThrow("IDENTITY_CONFLICT");
+  });
 });

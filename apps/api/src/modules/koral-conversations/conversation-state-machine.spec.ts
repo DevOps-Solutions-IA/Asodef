@@ -7,6 +7,7 @@ describe("Koral conversation state machine", () => {
     expect(canTransitionConversation(ConversationStatus.AI_ACTIVE, ConversationStatus.HUMAN_ACTIVE)).toBe(true);
     expect(canTransitionConversation(ConversationStatus.HUMAN_REQUIRED, ConversationStatus.HUMAN_ACTIVE)).toBe(true);
     expect(canTransitionConversation(ConversationStatus.HUMAN_ACTIVE, ConversationStatus.AI_ACTIVE)).toBe(true);
+    expect(canTransitionConversation(ConversationStatus.HUMAN_ACTIVE, ConversationStatus.HUMAN_REQUIRED)).toBe(true);
   });
 
   it("keeps CLOSED terminal and rejects invalid shortcuts", () => {
@@ -18,6 +19,8 @@ describe("Koral conversation state machine", () => {
     expect(mayKoralAutoReply(ConversationStatus.HUMAN_ACTIVE)).toBe(false);
     expect(mayKoralAutoReply(ConversationStatus.HUMAN_REQUIRED)).toBe(false);
     expect(mayKoralAutoReply(ConversationStatus.AI_ACTIVE)).toBe(true);
+    expect(mayKoralAutoReply(ConversationStatus.AI_ACTIVE, true)).toBe(false);
+    expect(mayKoralAutoReply(ConversationStatus.WAITING_USER, true)).toBe(false);
   });
 
   it("reactivates a waiting/resolved conversation on inbound without overriding human state", () => {

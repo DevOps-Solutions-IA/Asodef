@@ -55,9 +55,6 @@ export class KoralWebChatRuntimeAdapter {
       throw new HttpException({ code: "RATE_LIMITED", message: "Intenta nuevamente más tarde." }, HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    const receipt = await this.conversations.receiveInbound(normalizedMessage);
-    if (receipt.duplicate) return { kind: "DUPLICATE", conversationId: receipt.conversationId, messageId: receipt.messageId };
-
     const resolved = input.principal
       ? await this.identities.resolveAuthenticated({
           channel: ConversationChannel.WEB,
@@ -70,7 +67,13 @@ export class KoralWebChatRuntimeAdapter {
           externalIdentityId: input.message.identity.externalIdentityId,
         });
 
-    await this.bindings.bind({
+    // Authentication evidence is resolved before persistence. A forged,
+    // revoked or expired principal therefore fails closed without leaving a
+    // message that appears accepted but can never be processed.
+    const receipt = await this.conversations.receiveInbound(normalizedMessage);
+    if (receipt.duplicate) return { kind: "DUPLICATE", conversationId: receipt.conversationId, messageId: receipt.messageId };
+
+    await this.bindings.bindEffective({
       conversationId: receipt.conversationId,
       identity: resolved.identity,
       reason: resolved.reason,
@@ -88,6 +91,7 @@ export class KoralWebChatRuntimeAdapter {
       normalizedMessageId: receipt.messageId,
       correlationId,
       deadlineAt,
+      effectiveIdentity: resolved.identity,
     });
     return { kind: "ORCHESTRATED", conversationId: receipt.conversationId, messageId: receipt.messageId, outcome };
   }
