@@ -94,6 +94,7 @@ const AdminReconciliationPage = lazy(() => import("../pages/admin/payments/Admin
 const AdminReportsPage = lazy(() => import("../pages/admin/reports/AdminReportsPage").then((m) => ({ default: m.AdminReportsPage })));
 const PlansAdminPage = lazy(() => import("../pages/admin/control-plane/PlansAdminPage").then((m) => ({ default: m.PlansAdminPage })));
 const ControlPlaneSectionPage = lazy(() => import("../pages/admin/control-plane/ControlPlaneSectionPage").then((m) => ({ default: m.ControlPlaneSectionPage })));
+const KoralHumanInboxPage = lazy(() => import("../features/koral-inbox/KoralHumanInboxPage").then((m) => ({ default: m.KoralHumanInboxPage })));
 
 /**
  * Exported separately (not just the built router) so tests can build a
@@ -219,7 +220,7 @@ export const routeConfig: RouteObject[] = [
                 element: <PermissionRoute permissions={["koral.conversations.read"]} />,
                 children: [
                   { path: "koral/conversaciones", element: <ControlPlaneSectionPage area="koral" section="conversaciones" /> },
-                  { path: "koral/inbox", element: <ControlPlaneSectionPage area="koral" section="inbox" /> },
+                  { path: "koral/inbox", element: <KoralHumanInboxPage /> },
                 ],
               },
               {

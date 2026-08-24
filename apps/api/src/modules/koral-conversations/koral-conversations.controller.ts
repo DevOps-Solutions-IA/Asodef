@@ -7,6 +7,7 @@ import type { AuthenticatedRequest, RequestUser } from "../auth/types/request-us
 import { AddInternalNoteDto } from "./dto/add-internal-note.dto";
 import { AssignConversationDto } from "./dto/assign-conversation.dto";
 import { EscalateConversationDto } from "./dto/escalate-conversation.dto";
+import { ChangeConversationPriorityDto } from "./dto/change-conversation-priority.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { ReleaseConversationDto } from "./dto/release-conversation.dto";
 import { ReturnToKoralDto } from "./dto/return-to-koral.dto";
@@ -21,14 +22,20 @@ export class KoralConversationsController {
 
   @RequirePermissions("koral.conversations.read")
   @Get()
-  list(@Query() query: ListConversationsQueryDto) {
-    return this.conversations.list(query);
+  list(@Query() query: ListConversationsQueryDto, @CurrentUser() actor: RequestUser) {
+    return this.conversations.list(query, actor.id);
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @Get("eligible-assignees")
+  eligibleAssignees() {
+    return this.conversations.listEligibleAssignees();
   }
 
   @RequirePermissions("koral.conversations.read")
   @Get(":id")
-  findById(@Param("id", ParseUUIDPipe) id: string) {
-    return this.conversations.findById(id);
+  findById(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() actor: RequestUser) {
+    return this.conversations.findById(id, actor.id);
   }
 
   @RequirePermissions("koral.conversations.manage")
@@ -59,19 +66,6 @@ export class KoralConversationsController {
 
   @RequirePermissions("koral.conversations.manage")
   @RequireStepUp()
-  @Post(":id/release")
-  @HttpCode(HttpStatus.OK)
-  release(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: ReleaseConversationDto,
-    @CurrentUser() actor: RequestUser,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.conversations.release(id, dto, requestContext(actor, request));
-  }
-
-  @RequirePermissions("koral.conversations.manage")
-  @RequireStepUp()
   @Post(":id/status-transitions")
   @HttpCode(HttpStatus.OK)
   transitionStatus(
@@ -94,6 +88,39 @@ export class KoralConversationsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.conversations.returnToKoral(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @RequireStepUp()
+  @Post(":id/release")
+  @HttpCode(HttpStatus.OK)
+  release(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ReleaseConversationDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversations.release(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.manage")
+  @RequireStepUp()
+  @Post(":id/priority")
+  @HttpCode(HttpStatus.OK)
+  changePriority(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ChangeConversationPriorityDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversations.changePriority(id, dto, requestContext(actor, request));
+  }
+
+  @RequirePermissions("koral.conversations.read")
+  @Post(":id/read")
+  @HttpCode(HttpStatus.OK)
+  markRead(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() actor: RequestUser) {
+    return this.conversations.markRead(id, actor.id);
   }
 
   @RequirePermissions("koral.conversations.manage")

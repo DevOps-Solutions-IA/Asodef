@@ -63,6 +63,7 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
         fullName: `Koral ${label}`,
         passwordHash: "integration-only-not-a-real-password-hash",
         status: "ACTIVE",
+        roles: { create: { role: { connect: { name: "CUSTOMER_SERVICE" } } } },
       },
     });
     userIds.push(user.id);
