@@ -503,6 +503,7 @@ describe("Koral Web Chat security boundary (integration, real Postgres + Redis)"
         fullName: "Web Chat race actor",
         passwordHash: "integration-only-not-a-real-password-hash",
         status: "ACTIVE",
+        roles: { create: { role: { connect: { name: "CUSTOMER_SERVICE" } } } },
       },
     });
     userIds.push(actor.id);
