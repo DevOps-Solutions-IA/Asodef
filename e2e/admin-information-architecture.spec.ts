@@ -144,12 +144,12 @@ test.describe("admin information architecture", () => {
         ).toBeVisible();
         await expect(
           page.getByRole("heading", {
-            name: "Campos requeridos por el Control Plane",
+            name: "Catálogo administrativo",
           }),
         ).toBeVisible();
-        await expect(page.getByRole("alert")).toContainText(
-          "Bloqueado por el contrato de Planes",
-        );
+        await expect(page.getByText("Backend canónico")).toBeVisible();
+        await expect(page.getByText("LEGACY / SIN CÓDIGO")).toBeVisible();
+        await expect(page.getByRole("alert")).toHaveCount(0);
 
         await page.goto("/admin/koral/herramientas");
         await expect(

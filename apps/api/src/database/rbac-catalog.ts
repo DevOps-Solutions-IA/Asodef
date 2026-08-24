@@ -84,6 +84,10 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "content.manage", description: "Administrar contenido institucional" },
   { key: "audit.read", description: "Ver auditoría" },
   { key: "settings.manage", description: "Administrar configuración del sistema" },
+  { key: "plans.read", description: "Ver planes y sus versiones comerciales" },
+  { key: "plans.manage", description: "Crear y editar borradores de planes" },
+  { key: "plans.publish", description: "Publicar o retirar versiones comerciales de planes" },
+  { key: "koral.plans.read", description: "Consultar planes publicados y visibles para Koral" },
   { key: "legal.approve", description: "Aprobar y publicar documentos legales" },
   { key: "data.manage", description: "Gestionar solicitudes de derechos de datos (habeas data)" },
   { key: "retention.manage", description: "Aprobar retención, anonimización o eliminación de datos" },
@@ -138,6 +142,7 @@ const PLATFORM_ONLY_KEYS = [
   "users.unlock",
   "users.roles.manage",
   "users.security.read",
+  "plans.publish",
 ];
 
 /**
@@ -188,6 +193,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "reports.read",
     "content.read",
     "koral.conversations.read",
+    "plans.read",
+    "plans.manage",
+    "koral.plans.read",
   ],
   CUSTOMER_SERVICE: [
     "customers.read",
@@ -201,6 +209,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "crm.read",
     "koral.conversations.read",
     "koral.conversations.manage",
+    "plans.read",
+    "koral.plans.read",
   ],
   COMPANY_PARTNER: ["companies.read", "contracts.read", "documents.read"],
   AFFILIATE: ["customers.read", "payments.read"],
@@ -215,5 +225,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     "documents.read",
     "crm.read",
     "koral.conversations.read",
+    "plans.read",
+    "koral.plans.read",
   ],
 };

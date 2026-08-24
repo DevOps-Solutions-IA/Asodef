@@ -181,6 +181,9 @@ importers:
       '@asodef/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@asodef/connect-contracts':
+        specifier: workspace:*
+        version: link:../../packages/connect-contracts
       '@asodef/ui':
         specifier: workspace:*
         version: link:../../packages/ui

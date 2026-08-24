@@ -13,6 +13,7 @@ import type { UploadContractVersionDto } from "./dto/upload-contract-version.dto
 import type { AddContractSignerDto } from "./dto/add-contract-signer.dto";
 import type { RecordContractAcceptanceDto } from "./dto/record-contract-acceptance.dto";
 import type { TransitionContractDto } from "./dto/transition-contract.dto";
+import { PlansService } from "../plans/plans.service";
 import {
   toAdminContractAcceptanceResponse,
   toAdminContractResponse,
@@ -32,6 +33,7 @@ export class ContractsService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly downloadTokenService: ContractDownloadTokenService,
+    private readonly plansService: PlansService,
   ) {}
 
   async createContract(dto: CreateContractDto): Promise<AdminContractResponse> {
@@ -76,6 +78,8 @@ export class ContractsService {
         throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
       }
 
+      if (dto.planVersionId) await this.plansService.assertContractSelectable(tx, dto.planVersionId);
+
       const latest = await tx.contractVersion.findFirst({ where: { contractId }, orderBy: { version: "desc" } });
       const nextVersion = (latest?.version ?? 0) + 1;
       const checksum = createHash("sha256").update(file.buffer).digest("hex");
@@ -93,6 +97,7 @@ export class ContractsService {
           checksum,
           changeSummary: dto.changeSummary,
           createdByUserId: actorUserId,
+          planVersionId: dto.planVersionId,
         },
       });
 

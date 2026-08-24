@@ -3,7 +3,7 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 
-type TransactionClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+export type BusinessTransactionClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -21,13 +21,7 @@ function requestHash(payload: unknown): string {
 export class AdminBusinessIdempotencyService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async execute<T>(params: {
-    actorUserId: string;
-    operation: string;
-    key?: string;
-    payload: unknown;
-    work: (tx: TransactionClient) => Promise<T>;
-  }): Promise<T> {
+  async execute<T>(params: { actorUserId: string; operation: string; key?: string; payload: unknown; work: (tx: BusinessTransactionClient) => Promise<T> }): Promise<T> {
     if (!params.key) return this.prisma.$transaction((tx) => params.work(tx));
     if (!/^[A-Za-z0-9._:-]{16,100}$/.test(params.key)) throw new BadRequestException("Idempotency-Key inválida.");
     const hash = requestHash(params.payload);
@@ -40,9 +34,7 @@ export class AdminBusinessIdempotencyService {
         const raced = await tx.adminIdempotency.findUnique({ where });
         if (raced) return this.replay<T>(raced.requestHash, hash, raced.response);
         const response = await params.work(tx);
-        await tx.adminIdempotency.create({
-          data: { actorUserId: params.actorUserId, operation: params.operation, key: params.key!, requestHash: hash, response: response as Prisma.InputJsonValue },
-        });
+        await tx.adminIdempotency.create({ data: { actorUserId: params.actorUserId, operation: params.operation, key: params.key!, requestHash: hash, response: response as Prisma.InputJsonValue } });
         return response;
       });
     } catch (error) {

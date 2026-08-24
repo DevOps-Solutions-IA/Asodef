@@ -1,92 +1,83 @@
-# Plans canonical backend design — decision gate
+# Canonical Plans backend and migration audit
 
-This document audits the brownfield model and proposes its additive evolution.
-It deliberately adds no Prisma migration, service, route or UI because the
-required backfill and lifecycle mappings need an explicit architectural/data
-decision.
+## Verified brownfield model and data policy
 
-## Current plan model
+`Plan` was already the stable identity and `PlanVersion` the numbered
+commercial snapshot. `Obligation.planId` points to the stable aggregate and
+`PaymentOrder.planVersionAcceptedId` already pins the exact disclosed version.
+`ContractVersion` previously had no plan reference. No Plans application API
+existed. The public benefits page is editorial content, not a priced plan
+catalog. Master/Firebird has a separate read-only projection and is not an
+authoritative Plans source.
 
-`Plan` is the stable aggregate (`id`, unique `name`, `currentVersionId`,
-`createdAt`). `PlanVersion` already provides immutable numbered versions with
-`internalName`, `publicName`, `description`, `coverage`, JSON
-`includedServices`, JSON `exclusions`, `eligibility`, `beneficiaryRules`,
-`priceCents`, `billingFrequency`, `taxes`, `startDate`, `endDate`, `terms`,
-`cancellationRules`, `renewalRules` and `paymentConditions`.
+Legacy statuses (`UNDER_REVIEW`, `ACTIVE`, `SUSPENDED`, `ARCHIVED`) and their
+data are preserved exactly. There is no inferred `ACTIVE -> PUBLISHED` mapping,
+no generated code, currency, visibility or effective date. Admin reports these
+rows as `LEGACY_UNMAPPED`; public, Koral, CRM and Contracts reads fail closed.
+Any business-approved backfill is a separate operational change.
 
-The current lifecycle is `DRAFT`, `UNDER_REVIEW`, `ACTIVE`, `SUSPENDED`,
-`RETIRED`, `ARCHIVED`. Payment Orders retain `planVersionAcceptedId`, which is
-important immutable disclosure evidence. Obligations point to the stable Plan.
-There is no Plans application module/API; local payment seed and payment-order
-disclosure are the only PostgreSQL consumers found. Master/Firebird exposes a
-separate read-only external `Plan` projection and is not the Admin Core source.
-Public benefit content is currently a curated static catalog, not this Prisma
-aggregate.
+## Canonical aggregate
 
-## Field matrix
+`Plan` owns stable `id`, immutable unique business `code`, administrative
+`name`, `currentVersionId` and creation time. `code` is nullable at database
+level only to preserve existing rows; canonical create requires
+`^[A-Z][A-Z0-9_]{2,63}$`.
 
-| Target             | Brownfield field                          | Assessment                                                                                                 |
-| ------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `code`             | none                                      | Missing immutable unique business key.                                                                     |
-| `name`             | `Plan.name`, `internalName`, `publicName` | Reusable data, conflicting semantics; choose canonical versioned display name and preserve internal label. |
-| `description`      | `PlanVersion.description`                 | Reusable.                                                                                                  |
-| `features`         | `includedServices` JSON                   | Partially reusable; schema and meaning must be normalized before rename/mapping.                           |
-| `benefits`         | none                                      | Missing; unrelated Business Partner benefits must not be reused.                                           |
-| `eligibility`      | `eligibility`                             | Reusable.                                                                                                  |
-| `pricing`          | `priceCents`                              | Reusable minor-unit value; target API/DB naming and numeric semantics require decision.                    |
-| `currency`         | none                                      | Missing ISO-4217 currency.                                                                                 |
-| `billingPeriod`    | `billingFrequency`                        | Reusable after vocabulary contract.                                                                        |
-| `commercialText`   | none                                      | Missing.                                                                                                   |
-| `terms`            | `terms`                                   | Reusable.                                                                                                  |
-| `status`           | `PlanVersionStatus`                       | Semantic conflict; current enum is not the approved lifecycle.                                             |
-| `publicVisibility` | none                                      | Missing.                                                                                                   |
-| `koralVisibility`  | none                                      | Missing.                                                                                                   |
-| `recommended`      | none                                      | Missing.                                                                                                   |
-| `displayOrder`     | none                                      | Missing.                                                                                                   |
-| `effectiveFrom`    | `startDate`                               | Reusable.                                                                                                  |
-| `effectiveTo`      | `endDate`                                 | Reusable.                                                                                                  |
-| `version`          | `PlanVersion.version`                     | Reusable and database-unique per Plan.                                                                     |
+`PlanVersion` owns all versioned commercial content:
 
-Existing `coverage`, `exclusions`, `beneficiaryRules`, `taxes`, cancellation,
-renewal and payment-condition fields remain valuable and must be preserved.
+| Contract concept | Canonical storage |
+| --- | --- |
+| Display name / description | `publicName`, `description` |
+| Features | existing `included_services` JSONB, exposed as `features` |
+| Benefits | additive `benefits` JSONB |
+| Eligibility | `eligibility` |
+| Pricing | `priceCents` minor units + additive ISO-4217 `currency` |
+| Billing period | existing `billing_frequency`, exposed as `billingPeriod`; allowed `MONTHLY`, `QUARTERLY`, `SEMIANNUAL`, `ANNUAL`, `ONE_TIME` |
+| Visibility | `publicVisibility`, `koralVisibility`, `crmVisibility`, `contractVisibility` |
+| Publication | `status`, `reviewedAt`, `publishedAt`, `retiredAt`, existing start/end columns exposed as `effectiveFrom`/`effectiveTo` |
+| Presentation | `commercialText`, `recommended`, `displayOrder` |
+| Concurrency | monotonic `revision` |
 
-## Target single-source aggregate
+Features and benefits use one explicit shape: an array of `{ code, name,
+description? }` with stable unique uppercase codes. Existing coverage,
+exclusions, beneficiary rules, taxes, terms, cancellation, renewal and payment
+conditions remain intact.
 
-- Keep one stable PostgreSQL `Plan` identity and the existing version history.
-- Add immutable unique `Plan.code`; do not derive or backfill a business code
-  from display text without approved source data.
-- Put all mutable commercial content on `PlanVersion`, including the target
-  fields and the valuable existing disclosure fields.
-- Publish via a single current-published-version pointer. Admin authors draft
-  versions; public pages, Koral, CRM and Contracts read that same published
-  version through one Plans application service with channel visibility and
-  RBAC/policy filters.
-- Preserve `PaymentOrder.planVersionAcceptedId` and any future Contract version
-  reference so historical acceptance never changes after a later publication.
-- Treat Master/Firebird only as an optional integration/projection, never as a
-  second canonical catalog.
+## Lifecycle, permissions and atomicity
 
-Lifecycle target: `DRAFT -> REVIEW -> PUBLISHED -> RETIRED`. Only `PUBLISHED`
-is consumable by public/Koral/CRM/contract creation, subject to its visibility
-flags and effective dates.
+Canonical lifecycle is `DRAFT -> REVIEW -> PUBLISHED -> RETIRED`. Draft content
+is editable only with the expected `revision`. Publication and retirement
+require `plans.publish` plus step-up; draft authoring uses `plans.manage`; reads
+use `plans.read` and Koral uses `koral.plans.read`. Every mutation requires an
+`Idempotency-Key` and every lifecycle transition writes an audit record in the
+same transaction.
 
-## Migration decision
+Publication locks the parent Plan, retires (never deletes or edits) the prior
+published version, publishes the reviewed target, and changes the sole
+`currentVersionId` pointer atomically. A partial unique index independently
+enforces at most one `PUBLISHED` row per Plan.
 
-`MIGRATION_REQUIRED=YES`. Recommended type: additive columns plus controlled
-data backfill and a staged enum transition; no replacement table and no
-destructive rewrite. Migration implementation is blocked on these decisions:
+## One read source and immutable references
 
-1. approved `code` values/backfill for every existing Plan;
-2. canonical source for `name` (`publicName` versus stable `Plan.name`) and
-   treatment of `internalName`;
-3. JSON schemas for `features` and `benefits`;
-4. pricing storage/API shape and allowed billing-period vocabulary;
-5. deterministic mappings for `ACTIVE -> PUBLISHED` and
-   `UNDER_REVIEW -> REVIEW`, plus business disposition of `SUSPENDED` and
-   `ARCHIVED` records;
-6. initial public/Koral visibility and effective-date defaults.
+`PlansService.listPublished(audience)` is the one application read path.
+`GET /plans` supplies the public site, `GET /koral/plans` supplies Koral, and
+the same method supplies CRM/Contracts audiences. It returns only the current
+`PUBLISHED`, visible and effective version. It never returns a legacy state.
+Koral and recommendation logic therefore receive persisted plan names and
+prices; an LLM cannot provide or override them.
 
-Backward compatibility requires a transition adapter for existing payment
-disclosure (`publicName`, `priceCents`, `billingFrequency`, `startDate`,
-`endDate`) and continued acceptance of historical PlanVersion IDs until all
-consumers move to the canonical read contract.
+`ContractVersion.planVersionId` and the existing
+`PaymentOrder.planVersionAcceptedId` both use `ON DELETE RESTRICT` to pin exact
+historical snapshots. A later publication only moves the Plan pointer and
+retires the old version; it never mutates either reference or accepted content.
+Existing ContractVersions remain null rather than receiving an invented
+backfill. New contract versions may pin only a currently published, effective,
+`contractVisibility=true` version.
+
+## Migration and rollout
+
+The two migrations are additive and bring the migration count from 44 to 46.
+They add canonical fields, contract/audit foreign keys, enum values and the
+publication uniqueness index. They contain no `UPDATE`, `DELETE`, table drop,
+column drop, legacy status rewrite or generated business mapping. Production
+execution is outside this mission.

@@ -32,7 +32,7 @@ describe("Control Plane consumer catalog", () => {
       );
     }
     expect(getContractClassification("koral", "recomendaciones")).toBe(
-      "BLOCKED_BY_PLANS",
+      "BACKEND_RUNTIME_MISSING",
     );
     for (const section of COMMUNICATION_SECTIONS) {
       expect(getControlPlanePermission("comunicaciones", section.slug)).toBe(

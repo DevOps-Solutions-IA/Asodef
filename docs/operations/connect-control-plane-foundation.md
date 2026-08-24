@@ -33,11 +33,12 @@ Editable model, agent, tool, automation and communications surfaces present the 
 
 The configuration flow recognizes `ROLLED_BACK` for reversible histories. Knowledge follows the canonical flow `DRAFT -> REVIEW -> APPROVED -> PUBLISHED -> RETIRED`. Preview, semantic diff and audit evidence are required before publication. No publish action is enabled in this foundation.
 
-## Verified backend dependency conflict: Plans
+## Plans dependency (superseded by canonical implementation)
 
-The approved Control Plane plan contract is not equivalent to the current Prisma `Plan`/`PlanVersion` model. Current persistence uses lifecycle values `DRAFT`, `UNDER_REVIEW`, `ACTIVE`, `SUSPENDED`, `RETIRED`, `ARCHIVED`, and does not contain direct equivalents for all approved visibility, recommendation, ordering and commercial fields.
-
-Per the contract-first and no-parallel-API rules, this branch does not map, migrate, mutate or reinterpret those fields. The owning backend work must provide one canonical, audited contract and an explicit compatibility decision before the public page or Koral can consume the new published source.
+The canonical Plans implementation now supplies additive fields, governed
+contracts and one application read service for Public, Koral, CRM and
+Contracts. Legacy rows are preserved as `LEGACY_UNMAPPED`; no status or
+commercial backfill is inferred. Plans Admin consumes the real read API.
 
 ## Provider health and secrets
 
@@ -49,7 +50,7 @@ Automation, Communications and Template contracts are integrated, but their admi
 
 ```text
 CONTROL_PLANE_ARCHITECTURE=IMPLEMENTED_FRONTEND_FOUNDATION
-PLANS_ADMIN=CONSUMER_UI_BACKEND_BLOCKED
+PLANS_ADMIN=CANONICAL_READ_CONSUMER
 KORAL_ADMIN=FOUNDATION_READY
 INBOX_UI=OWNERSHIP_GUARD_READY_BACKEND_BLOCKED
 KNOWLEDGE_UI=FOUNDATION_READY
@@ -57,6 +58,6 @@ AUTOMATION_UI=FOUNDATION_READY
 COMMUNICATIONS_UI=FOUNDATION_READY
 MODEL_PROFILE_UI=FOUNDATION_READY
 SECRETS_RENDERED=NO
-RBAC_PRESERVED=YES_CANONICAL_CONVERSATION_READ_AND_SETTINGS_MANAGE_FAIL_CLOSED
+RBAC_PRESERVED=YES_CANONICAL_PLANS_AND_CONVERSATION_PERMISSIONS
 PRODUCTION_TOUCHED=NO
 ```

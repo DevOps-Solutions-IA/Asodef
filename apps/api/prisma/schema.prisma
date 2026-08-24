@@ -1051,6 +1051,9 @@ model CompanySite {
 // superseded by PlanVersion.status === ACTIVE.
 model Plan {
   id               String   @id @default(uuid()) @db.Uuid
+  // Stable commercial identifier. Nullable only so existing rows can be
+  // preserved without inventing a backfill; canonical creation requires it.
+  code             String?  @unique
   // @unique is a constraint on an existing PRD-listed field, not an
   // added field - needed so the seed script can upsert idempotently
   // (the PRD's dataModel gives no other natural unique key for Plan).
@@ -1070,6 +1073,8 @@ model Plan {
 
 enum PlanVersionStatus {
   DRAFT
+  REVIEW
+  PUBLISHED
   UNDER_REVIEW
   ACTIVE
   SUSPENDED
@@ -1086,32 +1091,47 @@ enum PlanVersionStatus {
 // exclusions, mirroring BusinessPartner.benefitsOffered's precedent),
 // never an invented structure.
 model PlanVersion {
-  id                String            @id @default(uuid()) @db.Uuid
-  planId            String            @map("plan_id") @db.Uuid
-  version           Int
-  internalName      String            @map("internal_name")
-  publicName        String            @map("public_name")
-  description       String
-  coverage          String?
-  includedServices  Json?             @map("included_services")
-  exclusions        Json?
-  eligibility       String?
-  beneficiaryRules  String?           @map("beneficiary_rules")
-  priceCents        Int               @map("price_cents")
-  billingFrequency  String            @map("billing_frequency")
-  taxes             String?
-  startDate         DateTime?         @map("start_date") @db.Timestamptz(3)
-  endDate           DateTime?         @map("end_date") @db.Timestamptz(3)
-  status            PlanVersionStatus @default(DRAFT)
-  terms             String?
-  cancellationRules String?           @map("cancellation_rules")
-  renewalRules      String?           @map("renewal_rules")
-  paymentConditions String?           @map("payment_conditions")
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                 String            @id @default(uuid()) @db.Uuid
+  planId             String            @map("plan_id") @db.Uuid
+  version            Int
+  internalName       String            @map("internal_name")
+  publicName         String            @map("public_name")
+  description        String
+  coverage           String?
+  features           Json?             @map("included_services")
+  benefits           Json?
+  exclusions         Json?
+  eligibility        String?
+  beneficiaryRules   String?           @map("beneficiary_rules")
+  priceCents         Int               @map("price_cents")
+  currency           String?           @db.VarChar(3)
+  billingPeriod      String            @map("billing_frequency")
+  taxes              String?
+  effectiveFrom      DateTime?         @map("start_date") @db.Timestamptz(3)
+  effectiveTo        DateTime?         @map("end_date") @db.Timestamptz(3)
+  status             PlanVersionStatus @default(DRAFT)
+  commercialText     String?           @map("commercial_text")
+  publicVisibility   Boolean           @default(false) @map("public_visibility")
+  koralVisibility    Boolean           @default(false) @map("koral_visibility")
+  crmVisibility      Boolean           @default(false) @map("crm_visibility")
+  contractVisibility Boolean           @default(false) @map("contract_visibility")
+  recommended        Boolean           @default(false)
+  displayOrder       Int               @default(0) @map("display_order")
+  revision           Int               @default(1)
+  reviewedAt         DateTime?         @map("reviewed_at") @db.Timestamptz(3)
+  publishedAt        DateTime?         @map("published_at") @db.Timestamptz(3)
+  retiredAt          DateTime?         @map("retired_at") @db.Timestamptz(3)
+  terms              String?
+  cancellationRules  String?           @map("cancellation_rules")
+  renewalRules       String?           @map("renewal_rules")
+  paymentConditions  String?           @map("payment_conditions")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  plan           Plan           @relation("PlanVersions", fields: [planId], references: [id], onDelete: Restrict)
-  currentForPlan Plan?          @relation("CurrentPlanVersion")
-  paymentOrders  PaymentOrder[]
+  plan             Plan              @relation("PlanVersions", fields: [planId], references: [id], onDelete: Restrict)
+  currentForPlan   Plan?             @relation("CurrentPlanVersion")
+  paymentOrders    PaymentOrder[]
+  contractVersions ContractVersion[]
+  auditLogs        AuditLog[]
 
   // Version numbers are database-protected, same as
   // LegalDocumentVersion - never just an application-level MAX+1.
@@ -1302,6 +1322,7 @@ model AuditLog {
   refundId               String?           @map("refund_id") @db.Uuid
   // US-074: generalized to a 7th domain, same pattern.
   companyId              String?           @map("company_id") @db.Uuid
+  planVersionId          String?           @map("plan_version_id") @db.Uuid
   // US-043: who performed a MANUAL (human-triggered) action - always
   // null for the payment domain's own automated sources (webhook/poll/
   // order-create/bold-create); set for legal-workflow actions, which
@@ -1332,6 +1353,7 @@ model AuditLog {
   opportunity          Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
   refund               Refund?               @relation(fields: [refundId], references: [id], onDelete: Restrict)
   company              Company?              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  planVersion          PlanVersion?          @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   // Audit history must survive even a (currently unsupported) user
   // deletion - same onDelete: SetNull precedent as SecurityEvent.userId.
   actorUser            User?                 @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -1343,6 +1365,7 @@ model AuditLog {
   @@index([opportunityId, createdAt])
   @@index([refundId, createdAt])
   @@index([companyId, createdAt])
+  @@index([planVersionId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([correlationId])
   @@map("audit_logs")
@@ -2053,16 +2076,21 @@ model ContractVersion {
   checksum        String
   changeSummary   String?  @map("change_summary")
   createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  // Immutable commercial snapshot reference. Existing versions remain null;
+  // new versions may pin the exact published PlanVersion they accepted.
+  planVersionId   String?  @map("plan_version_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   contract           Contract                @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Restrict)
   currentForContract Contract?               @relation("CurrentContractVersion")
   createdByUser      User?                   @relation("ContractVersionUploader", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  planVersion        PlanVersion?            @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   signers            ContractSigner[]
   acceptances        ContractAcceptance[]
   downloadTokens     ContractDownloadToken[]
 
   @@unique([contractId, version])
+  @@index([planVersionId])
   @@map("contract_versions")
 }
 

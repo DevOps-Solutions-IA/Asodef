@@ -11,6 +11,9 @@ import {
   INITIAL_DOMAIN_EVENT_TYPES,
   KNOWLEDGE_GATEWAY_CONTRACT,
   KNOWLEDGE_STATUSES,
+  PLAN_LIFECYCLE,
+  PLAN_LIFECYCLE_COMMAND_CONTRACT,
+  PUBLISHED_PLANS_READ_CONTRACT,
   TEMPLATE_PREVIEW_CONTRACT,
   TOOL_GATEWAY_CONTRACT,
   TOOL_STATUSES,
@@ -26,6 +29,18 @@ import {
 } from "./index";
 
 describe("canonical ASODEF Connect gateway contracts", () => {
+  it("publishes one canonical plan lifecycle and governed contracts", () => {
+    expect(PLAN_LIFECYCLE).toEqual(["DRAFT", "REVIEW", "PUBLISHED", "RETIRED"]);
+    for (const contract of [PUBLISHED_PLANS_READ_CONTRACT, PLAN_LIFECYCLE_COMMAND_CONTRACT]) {
+      expect(contract.version).toBe("1.0.0");
+      expect(contract.inputSchema.required.length).toBeGreaterThan(0);
+      expect(contract.outputSchema.required.length).toBeGreaterThan(0);
+      expect(contract.errors.length).toBeGreaterThan(0);
+      expect(contract.permissions.length).toBeGreaterThan(0);
+      expect(contract.audit.required).toBe(true);
+      expect(contract.idempotency.scope).not.toBe("");
+    }
+  });
   it("keeps the executable tool lifecycle closed", () => {
     expect(TOOL_STATUSES).toEqual([
       "PUBLISHED",

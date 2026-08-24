@@ -89,9 +89,10 @@ export class PaymentOrdersService {
         throw new ConflictException("Esta obligación ya no está pendiente de pago.");
       }
       // US-054 negative case: an obligation whose plan has no current
-      // ACTIVE version (e.g. SUSPENDED, or none configured at all)
+      // payable version (canonical PUBLISHED, or legacy ACTIVE during the
+      // non-destructive transition window)
       // cannot be paid - there is nothing valid left to disclose/accept.
-      if (obligation.plan_version_status !== "ACTIVE") {
+      if (obligation.plan_version_status !== "ACTIVE" && obligation.plan_version_status !== "PUBLISHED") {
         throw new ConflictException("El plan asociado a esta obligación no está activo actualmente.");
       }
 

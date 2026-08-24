@@ -40,6 +40,7 @@ export interface AdminContractVersionResponse {
   checksum: string;
   changeSummary: string | null;
   createdByUserId: string | null;
+  planVersionId: string | null;
   createdAt: Date;
 }
 
@@ -51,6 +52,7 @@ export function toAdminContractVersionResponse(version: ContractVersion): AdminC
     checksum: version.checksum,
     changeSummary: version.changeSummary,
     createdByUserId: version.createdByUserId,
+    planVersionId: version.planVersionId,
     createdAt: version.createdAt,
   };
 }
