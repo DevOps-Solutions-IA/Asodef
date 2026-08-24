@@ -26,3 +26,14 @@ export interface MutationContext {
   requestId?: string;
   correlationId?: string;
 }
+
+export interface KoralOutboundCommitInput {
+  conversationId: string;
+  channel: ConversationChannel;
+  externalSessionId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  correlationId: string;
+  contentType: string;
+  body: string;
+}

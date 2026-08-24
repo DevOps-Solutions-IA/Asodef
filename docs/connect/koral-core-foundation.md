@@ -75,11 +75,40 @@ The adapter may only narrow permissions and consent. It cannot extend deadlines,
 `ResolvedIdentityContext` contains `identityId`, optional `contactId` and
 `portalUserId`, channel identities, consent state, verified attributes and
 explicit server authentication evidence. Assurance is ordered as `ANONYMOUS →
-CLAIMED → MATCHED → VERIFIED → AUTHENTICATED → STEP_UP_VERIFIED`. The first
+CLAIMED → MATCHED → VERIFIED → AUTHENTICATED → MFA_VERIFIED → STEP_UP_VERIFIED`. The first
 four always map to no authenticated gateway identity. MFA and step-up are
 mapped only from their explicit evidence flags, and step-up additionally
 requires `STEP_UP_VERIFIED`. Resolution is read-only: ambiguous evidence fails
 closed and never creates, merges or upgrades an identity implicitly.
+
+## Identity and Web Chat runtime preparation
+
+The runtime resolver derives anonymous identifiers by digesting channel
+evidence, accepts claimed/matched/verified evidence only through explicit
+typed methods, and re-reads both the ACTIVE user and usable server session for
+authenticated levels. `MFA_VERIFIED` requires the session's trusted MFA
+timestamp; `STEP_UP_VERIFIED` requires both MFA and recent-auth timestamps
+inside the configured step-up TTL. Channel claims cannot select either path.
+
+`ConversationIdentityBinding` is an append-only evidence ledger. Each row
+records previous/new assurance, reason, a sanitized evidence reference,
+timestamp, correlation and an idempotency key. Transaction-scoped advisory
+locking prevents split histories; downgrades and identity replacement after a
+MATCHED binding fail closed. The ledger is historical evidence, never a live
+authorization credential.
+
+`KoralWebChatRuntimeAdapter` prepares the application boundary without adding
+a public UI or provider transport. It applies strict Redis-backed rate limits,
+normalizes inbound handling through the existing conversation service, binds
+server-resolved identity and invokes the existing orchestration pipeline under
+one bounded absolute deadline. A duplicate message is not orchestrated.
+`HUMAN_ACTIVE` suppresses orchestration, and outbound persistence uses an
+optimistic version plus an advisory lock so a concurrent human takeover wins.
+
+`KoralGatewayRuntime` depends only on Koral's adapters for canonical
+`AiGateway`, `ToolGateway` and `KnowledgeGateway` contracts. It has no
+OpenRouter, Prisma, SQL, Redis or Firebird dependency and rejects an expired
+deadline before invoking any gateway.
 
 ## Domain and safety invariants
 

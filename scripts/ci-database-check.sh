@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="44"
+readonly EXPECTED_MIGRATIONS="45"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"

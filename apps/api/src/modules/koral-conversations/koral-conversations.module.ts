@@ -7,6 +7,9 @@ import {
 } from "../ai-gateway/ai-gateway.module";
 import type { ModelRegistry } from "../ai-gateway/model-registry";
 import { APPROVED_AGENT_MODEL_BINDINGS } from "../ai-gateway/runtime-model-catalog";
+import { AuthModule } from "../auth/auth.module";
+import { ConversationIdentityBindingService } from "./conversation-identity-binding.service";
+import { KoralIdentityResolutionService } from "./identity-resolution.service";
 import { KoralConversationsController } from "./koral-conversations.controller";
 import { KoralConversationsService } from "./koral-conversations.service";
 import {
@@ -17,7 +20,7 @@ import {
 export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
 
 @Module({
-  imports: [AiGatewayModule],
+  imports: [AiGatewayModule, AuthModule],
   controllers: [KoralConversationsController],
   providers: [
     KoralConversationsService,
@@ -38,7 +41,14 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
         profiles: PublishedModelProfileResolver,
       ) => new CanonicalKoralAiGatewayAdapter(gateway, profiles),
     },
+    KoralIdentityResolutionService,
+    ConversationIdentityBindingService,
   ],
-  exports: [KoralConversationsService, KORAL_AI_GATEWAY_ADAPTER],
+  exports: [
+    KoralConversationsService,
+    KORAL_AI_GATEWAY_ADAPTER,
+    KoralIdentityResolutionService,
+    ConversationIdentityBindingService,
+  ],
 })
 export class KoralConversationsModule {}

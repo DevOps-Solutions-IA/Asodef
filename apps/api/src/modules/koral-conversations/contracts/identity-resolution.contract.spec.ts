@@ -13,10 +13,12 @@ describe("identity resolution dependency contract", () => {
       "MATCHED",
       "VERIFIED",
       "AUTHENTICATED",
+      "MFA_VERIFIED",
       "STEP_UP_VERIFIED",
     ]);
     expect(hasIdentityAssurance("MATCHED", "VERIFIED")).toBe(false);
     expect(hasIdentityAssurance("AUTHENTICATED", "VERIFIED")).toBe(true);
+    expect(hasIdentityAssurance("AUTHENTICATED", "MFA_VERIFIED")).toBe(false);
     expect(hasIdentityAssurance("AUTHENTICATED", "STEP_UP_VERIFIED")).toBe(false);
   });
 
@@ -59,7 +61,7 @@ describe("identity resolution dependency contract", () => {
     expect(
       resolveCanonicalIdentityLevel({
         ...base,
-        assuranceLevel: "AUTHENTICATED",
+        assuranceLevel: "MFA_VERIFIED",
         authenticationEvidence: {
           authenticated: true,
           mfaVerified: true,
@@ -67,6 +69,12 @@ describe("identity resolution dependency contract", () => {
         },
       }),
     ).toBe("MFA_VERIFIED");
+    expect(
+      resolveCanonicalIdentityLevel({
+        ...base,
+        assuranceLevel: "AUTHENTICATED",
+      }),
+    ).toBe("AUTHENTICATED");
     expect(
       resolveCanonicalIdentityLevel({
         ...base,
