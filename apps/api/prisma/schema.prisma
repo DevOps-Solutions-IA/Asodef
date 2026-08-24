@@ -615,6 +615,7 @@ enum NotificationType {
   PASSWORD_RESET
   PASSWORD_CHANGED
   SECURITY_ALERT
+  COMMUNICATION
 
   @@map("notification_type")
 }
@@ -643,6 +644,7 @@ model NotificationJob {
   status            NotificationStatus @default(QUEUED)
   recipientEmail    String             @map("recipient_email")
   userId            String?            @map("user_id") @db.Uuid
+  communicationId   String?            @map("communication_id") @db.Uuid
   correlationId     String             @map("correlation_id")
   templateVersion   String             @map("template_version")
   retryCount        Int                @default(0) @map("retry_count")
@@ -659,13 +661,15 @@ model NotificationJob {
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user          User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  communication ConnectCommunication? @relation(fields: [communicationId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([status, nextAttemptAt])
   @@index([status, lockExpiresAt])
   @@index([correlationId])
+  @@index([communicationId])
   @@map("notification_jobs")
 }
 
@@ -2348,6 +2352,294 @@ model SuppressionListEntry {
   // dataModel's own "(unique per channel)" annotation on recipient.
   @@unique([channel, recipient])
   @@map("suppression_list_entries")
+}
+
+enum ConnectDomainEventStatus {
+  RECEIVED
+  DISPATCHED
+  REJECTED
+
+  @@map("connect_domain_event_status")
+}
+
+enum ConnectAutomationLifecycle {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ACTIVE
+  DISABLED
+  RETIRED
+
+  @@map("connect_automation_lifecycle")
+}
+
+enum ConnectAutomationTriggerType {
+  EVENT
+  SCHEDULE
+  MANUAL_AUTHORIZED
+
+  @@map("connect_automation_trigger_type")
+}
+
+enum ConnectAutomationExecutionMode {
+  EVENT
+  SCHEDULE
+  MANUAL_AUTHORIZED
+
+  @@map("connect_automation_execution_mode")
+}
+
+enum ConnectAutomationExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+  CANCELLED
+
+  @@map("connect_automation_execution_status")
+}
+
+enum ConnectAutomationStepStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  RETRY_PENDING
+  FAILED
+  SKIPPED
+  DEAD_LETTER
+
+  @@map("connect_automation_step_status")
+}
+
+enum ConnectDeadLetterResolution {
+  UNRESOLVED
+  REQUEUED_AUTHORIZED
+  RESOLVED_NO_RETRY
+
+  @@map("connect_dead_letter_resolution")
+}
+
+enum ConnectCommunicationStatus {
+  REQUESTED
+  SUPPRESSED
+  QUEUED
+  DELIVERED
+  FAILED
+  UNKNOWN_RESULT
+  DEAD_LETTER
+
+  @@map("connect_communication_status")
+}
+
+enum ConnectRecipientDecision {
+  ALLOWED
+  SUPPRESSED
+
+  @@map("connect_recipient_decision")
+}
+
+model ConnectDomainEvent {
+  eventId        String                   @id @map("event_id") @db.Uuid
+  eventType      String                   @map("event_type")
+  schemaVersion  Int                      @map("schema_version")
+  occurredAt     DateTime                 @map("occurred_at") @db.Timestamptz(3)
+  producer       String
+  subjectType    String                   @map("subject_type")
+  subjectId      String                   @map("subject_id")
+  correlationId  String                   @map("correlation_id")
+  causationId    String?                  @map("causation_id")
+  idempotencyKey String                   @map("idempotency_key")
+  envelopeHash   String                   @map("envelope_hash")
+  payload        Json
+  status         ConnectDomainEventStatus @default(RECEIVED)
+  failureReason  String?                  @map("failure_reason")
+  dispatchedAt   DateTime?                @map("dispatched_at") @db.Timestamptz(3)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  executions ConnectAutomationExecution[]
+
+  @@unique([producer, idempotencyKey])
+  @@index([eventType, schemaVersion, status])
+  @@index([correlationId])
+  @@map("connect_domain_events")
+}
+
+model ConnectAutomation {
+  id        String                     @id @default(uuid()) @db.Uuid
+  key       String                     @unique
+  name      String
+  status    ConnectAutomationLifecycle @default(DRAFT)
+  createdAt DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions ConnectAutomationVersion[]
+
+  @@index([status])
+  @@map("connect_automations")
+}
+
+model ConnectAutomationVersion {
+  id              String                       @id @default(uuid()) @db.Uuid
+  automationId    String                       @map("automation_id") @db.Uuid
+  version         Int
+  status          ConnectAutomationLifecycle   @default(DRAFT)
+  triggerType     ConnectAutomationTriggerType @map("trigger_type")
+  trigger         Json
+  conditions      Json
+  actions         Json
+  executionPolicy Json                         @map("execution_policy")
+  createdBy       String                       @map("created_by")
+  reviewedBy      String?                      @map("reviewed_by")
+  publishedAt     DateTime?                    @map("published_at") @db.Timestamptz(3)
+  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  automation ConnectAutomation            @relation(fields: [automationId], references: [id], onDelete: Restrict)
+  executions ConnectAutomationExecution[]
+
+  @@unique([automationId, version])
+  @@index([status, triggerType])
+  @@map("connect_automation_versions")
+}
+
+model ConnectAutomationExecution {
+  id                  String                           @id @default(uuid()) @db.Uuid
+  automationVersionId String                           @map("automation_version_id") @db.Uuid
+  domainEventId       String?                          @map("domain_event_id") @db.Uuid
+  mode                ConnectAutomationExecutionMode
+  status              ConnectAutomationExecutionStatus @default(PENDING)
+  triggerReference    String                           @map("trigger_reference")
+  idempotencyKey      String                           @map("idempotency_key")
+  correlationId       String                           @map("correlation_id")
+  causationId         String?                          @map("causation_id")
+  requestedBy         String?                          @map("requested_by")
+  startedAt           DateTime?                        @map("started_at") @db.Timestamptz(3)
+  finishedAt          DateTime?                        @map("finished_at") @db.Timestamptz(3)
+  failureCode         String?                          @map("failure_code")
+  failureRetryable    Boolean?                         @map("failure_retryable")
+  createdAt           DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  automationVersion ConnectAutomationVersion         @relation(fields: [automationVersionId], references: [id], onDelete: Restrict)
+  domainEvent       ConnectDomainEvent?              @relation(fields: [domainEventId], references: [eventId], onDelete: Restrict)
+  steps             ConnectAutomationExecutionStep[]
+  deadLetter        ConnectAutomationDeadLetter?
+
+  @@unique([automationVersionId, mode, idempotencyKey])
+  @@index([status, createdAt])
+  @@index([domainEventId])
+  @@index([correlationId])
+  @@map("connect_automation_executions")
+}
+
+model ConnectAutomationExecutionStep {
+  id               String                      @id @default(uuid()) @db.Uuid
+  executionId      String                      @map("execution_id") @db.Uuid
+  actionIndex      Int                         @map("action_index")
+  actionType       String                      @map("action_type")
+  status           ConnectAutomationStepStatus @default(PENDING)
+  attemptCount     Int                         @default(0) @map("attempt_count")
+  nextAttemptAt    DateTime?                   @map("next_attempt_at") @db.Timestamptz(3)
+  startedAt        DateTime?                   @map("started_at") @db.Timestamptz(3)
+  finishedAt       DateTime?                   @map("finished_at") @db.Timestamptz(3)
+  failureCode      String?                     @map("failure_code")
+  failureRetryable Boolean?                    @map("failure_retryable")
+  output           Json?
+  createdAt        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  execution  ConnectAutomationExecution   @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  retries    ConnectAutomationRetry[]
+  deadLetter ConnectAutomationDeadLetter?
+
+  @@unique([executionId, actionIndex])
+  @@index([status, nextAttemptAt])
+  @@map("connect_automation_execution_steps")
+}
+
+model ConnectAutomationRetry {
+  id          String    @id @default(uuid()) @db.Uuid
+  stepId      String    @map("step_id") @db.Uuid
+  attempt     Int
+  scheduledAt DateTime  @map("scheduled_at") @db.Timestamptz(3)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(3)
+  failureCode String?   @map("failure_code")
+  retryable   Boolean?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  step ConnectAutomationExecutionStep @relation(fields: [stepId], references: [id], onDelete: Restrict)
+
+  @@unique([stepId, attempt])
+  @@map("connect_automation_retries")
+}
+
+model ConnectAutomationDeadLetter {
+  id            String                      @id @default(uuid()) @db.Uuid
+  executionId   String                      @unique @map("execution_id") @db.Uuid
+  stepId        String?                     @unique @map("step_id") @db.Uuid
+  reasonCode    String                      @map("reason_code")
+  retryCount    Int                         @map("retry_count")
+  correlationId String                      @map("correlation_id")
+  resolution    ConnectDeadLetterResolution @default(UNRESOLVED)
+  resolvedBy    String?                     @map("resolved_by")
+  resolvedAt    DateTime?                   @map("resolved_at") @db.Timestamptz(3)
+  createdAt     DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  execution ConnectAutomationExecution      @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  step      ConnectAutomationExecutionStep? @relation(fields: [stepId], references: [id], onDelete: Restrict)
+
+  @@index([resolution, createdAt])
+  @@index([correlationId])
+  @@map("connect_automation_dead_letters")
+}
+
+model ConnectCommunication {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  requestId          String                     @map("request_id")
+  requestedBy        String                     @map("requested_by")
+  idempotencyKey     String                     @map("idempotency_key")
+  requestHash        String                     @map("request_hash")
+  channel            String
+  purpose            CommunicationKind
+  dataClassification String                     @map("data_classification")
+  templateKey        String                     @map("template_key")
+  templateVersion    Int                        @map("template_version")
+  correlationId      String                     @map("correlation_id")
+  causationId        String?                    @map("causation_id")
+  status             ConnectCommunicationStatus @default(REQUESTED)
+  failureReason      String?                    @map("failure_reason")
+  completedAt        DateTime?                  @map("completed_at") @db.Timestamptz(3)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  recipients       ConnectCommunicationRecipient[]
+  notificationJobs NotificationJob[]
+
+  @@unique([requestedBy, idempotencyKey])
+  @@unique([requestedBy, requestId])
+  @@index([status, createdAt])
+  @@index([correlationId])
+  @@map("connect_communications")
+}
+
+model ConnectCommunicationRecipient {
+  id              String                   @id @default(uuid()) @db.Uuid
+  communicationId String                   @map("communication_id") @db.Uuid
+  recipientIndex  Int                      @map("recipient_index")
+  recipientType   String                   @map("recipient_type")
+  address         String
+  subjectType     String?                  @map("subject_type")
+  subjectId       String?                  @map("subject_id")
+  decision        ConnectRecipientDecision
+  decisionReason  String                   @map("decision_reason")
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  communication ConnectCommunication @relation(fields: [communicationId], references: [id], onDelete: Restrict)
+
+  @@unique([communicationId, recipientIndex])
+  @@index([subjectType, subjectId])
+  @@map("connect_communication_recipients")
 }
 
 enum ExportJobStatus {

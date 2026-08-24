@@ -41,16 +41,18 @@ describe("Tool Gateway contracts", () => {
       TOOL_GATEWAY_CATALOG.filter((tool) => tool.status === "REVIEW")
         .map((tool) => tool.name)
         .sort(),
-    ).toEqual(["get_lead", "update_lead"]);
+    ).toEqual(["get_lead", "send_communication", "update_lead"]);
   });
 
-  it("keeps Plans and Communications as explicit non-executable dependencies", () => {
+  it("keeps Plans blocked and communications governed but not published", () => {
     expect(TOOL_DOMAIN_DEPENDENCIES).toEqual([
       expect.objectContaining({ domain: "PLANS", status: "BLOCKED" }),
-      expect.objectContaining({ domain: "COMMUNICATIONS", status: "BLOCKED" }),
     ]);
+    expect(TOOL_GATEWAY_CATALOG.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["send_communication"]),
+    );
     expect(TOOL_GATEWAY_CATALOG.map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining(["send_communication", "get_plan"]),
+      expect.arrayContaining(["get_plan"]),
     );
   });
 
@@ -61,9 +63,12 @@ describe("Tool Gateway contracts", () => {
         .list("REVIEW")
         .map((tool) => tool.name)
         .sort(),
-    ).toEqual(["get_lead", "update_lead"]);
+    ).toEqual(["get_lead", "send_communication", "update_lead"]);
     expect(() => registry.getPublished("get_lead", "v1")).toThrow(
       "TOOL_NOT_PUBLISHED:get_lead@v1:REVIEW",
+    );
+    expect(() => registry.getPublished("send_communication", "v1")).toThrow(
+      "TOOL_NOT_PUBLISHED:send_communication@v1:REVIEW",
     );
     expect(registry.getPublished("search_leads", "v1").status).toBe(
       "PUBLISHED",

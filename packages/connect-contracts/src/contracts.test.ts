@@ -165,8 +165,8 @@ describe("ASODEF Connect events and communications contracts", () => {
     expect(canTransitionTemplate("DRAFT", "PUBLISHED")).toBe(false);
   });
 
-  it("keeps every transport contract-only until a reviewed adapter exists", () => {
-    expect(isTransportImplemented("EMAIL")).toBe(false);
+  it("exposes only the reviewed EMAIL outbox adapter", () => {
+    expect(isTransportImplemented("EMAIL")).toBe(true);
     expect(isTransportImplemented("WHATSAPP")).toBe(false);
     expect(isTransportImplemented("WEB_NOTIFICATION")).toBe(false);
     expect(isTransportImplemented("FUTURE")).toBe(false);
@@ -186,7 +186,7 @@ describe("ASODEF Connect events and communications contracts", () => {
       version: "v1",
       permission: "communications.send",
       status: "REVIEW",
-      mode: "CONTRACT_ONLY",
+      mode: "RUNTIME_AVAILABLE",
       execution: {
         applicationServiceMethod: "CommunicationsService.send",
         directDataAccess: false,

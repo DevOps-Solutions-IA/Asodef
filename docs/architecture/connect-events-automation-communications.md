@@ -1,8 +1,8 @@
 # ASODEF Connect — events, automation and communications foundation
 
-Status: contract foundation, not deployed. Resynchronized against `origin/main`
-commit `e8979e87d090f2f09de244ec79d331be05436b46` on 2026-08-22 after Business
-Core, AI/Tool/Knowledge Gateway and Koral Conversation Core integration.
+Status: initial runtime, not deployed. Built from `origin/main` commit
+`b3fd305caec24577e95ef02152523d4fc61aa943` on 2026-08-22 after the canonical
+contracts and Control Plane foundation were integrated.
 
 ## Brownfield audit
 
@@ -26,22 +26,23 @@ production configuration is modified by this change.
 
 ```mermaid
 flowchart LR
-  D[Domain transaction] --> O[(Durable event outbox)]
-  O --> E[Versioned event dispatcher]
+  D[Domain application service] --> E[DomainEvent dispatcher]
+  E --> O[(Durable event inbox)]
   E --> A[Automation evaluator]
-  A --> T[Tool Gateway]
   A --> C[communications.send v1]
   C --> P[RBAC / consent / PII / step-up / rate limit]
-  P -. future reviewed adapter .-> N[Existing notification outbox]
+  P --> N[Existing encrypted notification outbox]
   N --> M[Existing private SMTP transport]
 ```
 
 - Koral cannot invoke `communications.send` while its governed tool remains in
-  `REVIEW/CONTRACT_ONLY`; after publication it may request it only through Tool
+  `REVIEW`; its runtime mode is `RUNTIME_AVAILABLE`, but after publication it
+  may request it only through Tool
   Gateway. It never calls SMTP, PostgreSQL, Prisma, Redis or Firebird.
-- Domain producers append their domain mutation and event-outbox row in the
-  same transaction. Consumers use `eventId` plus their own consumer identity
-  as an inbox deduplication key.
+- No CRM, PQR or Contracts producer is wired in this runtime. A future producer
+  must append its domain mutation and outbox row in the same transaction, then
+  submit the canonical envelope to this dispatcher. Direct transport calls are
+  forbidden.
 - No event consumer imports another domain service. Cross-domain effects are
   declarative automation actions through Tool Gateway or new events.
 - Event payload contracts are intentionally not invented here. Each producer
@@ -59,7 +60,7 @@ Koral `ConversationEvent` and `DomainEvent` are intentionally different:
 | ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Purpose       | Internal append-only conversation timeline and audit evidence | Published business/integration fact for independent consumers    |
 | Scope         | One conversation, FK-backed                                   | Domain-neutral envelope plus producer-owned payload schema       |
-| Storage       | `conversation_events`                                         | Future durable event outbox/inbox                                |
+| Storage       | `conversation_events`                                         | Durable `connect_domain_events` integration inbox                 |
 | Publication   | Never automatic                                               | Explicit transaction-coupled publish                             |
 | Typical facts | Message received, assignment, internal note, return to Koral  | `ConversationEscalated`, payment, contract or PQR business facts |
 
@@ -74,11 +75,14 @@ Koral does not yet persist a `CONVERSATION_ESCALATED` timeline event; that is an
 explicit future producer dependency. Assignment, handoff or message-received
 events are not silently reclassified as escalation.
 
-Business Core mutations remain application-service operations. They may append
-a DomainEvent atomically in a future runtime, but CRM never calls mail directly.
+Business Core mutations remain application-service operations. No producer is
+wired by this change; a future producer may append a DomainEvent atomically with
+its domain mutation, but CRM never calls mail directly.
 The canonical Tool Gateway describes `communications.send` as
-`send_communication@v1`; the binding stays `REVIEW/CONTRACT_ONLY` until a real
-`CommunicationsService.send` adapter exists. Tool Gateway supplies actor,
+`send_communication@v1`; the binding is now `REVIEW/RUNTIME_AVAILABLE` because
+`CommunicationsService.send` durably enqueues through the existing EMAIL
+outbox. REVIEW deliberately prevents Koral execution until a separate
+Control Plane publication decision. Tool Gateway supplies actor,
 permissions, identity level, correlation and policy through the canonical
 `GatewayRequestContext`. Koral controls only the validated business request and
 cannot assert trusted context or receive SMTP/provider configuration.
@@ -153,19 +157,28 @@ decisions. A dead letter is evidence: it is never silently deleted. Requeue
 requires explicit permission, a new idempotency key tied to the dead-letter ID,
 step-up for sensitive actions and an audit record.
 
+The initial executor activates only `EVENT` triggers with declarative
+conditions and `COMMUNICATION_SEND` actions. `SCHEDULE`, `MANUAL_AUTHORIZED`,
+generic `TOOL_CALL` and `EMIT_EVENT` retain their contracts but have no runtime
+binding yet. Retryable steps are picked up by a bounded worker; tests disable
+all automatic workers and use the in-memory mail adapter.
+
 ## Communications and templates
 
 The model defines `Communication`, `CommunicationRecipient`,
 `CommunicationTemplate`, immutable `TemplateVersion`, `DeliveryAttempt` and
-`CommunicationPreference`. Every channel, including `EMAIL`, currently fails
-closed as contract-only. Email will become a reviewed adapter over the existing
-notification outbox; this foundation does not expose or activate SMTP runtime.
+`CommunicationPreference`. EMAIL is implemented as an adapter over the existing
+encrypted `NotificationJob` outbox. It never imports or calls `MailTransport`;
+the existing notification worker remains the sole private delivery boundary.
+WhatsApp, web notification and future channels remain contract-only and fail
+closed before persistence.
 
 `communications.send` validates RBAC, recipient shape, purpose, consent and
 suppression, PII policy, rate limit, template publication and exact variables
-before durable enqueue. A successful enqueue is not delivery. Delivery emits
-`CommunicationDelivered`; terminal or uncertain outcomes emit
-`CommunicationFailed` with sanitized reason codes.
+before durable enqueue. A successful enqueue is not delivery. The existing
+worker synchronizes `DELIVERED`, `UNKNOWN_RESULT` and `DEAD_LETTER` back to the
+communication record using sanitized outcomes. Publishing the corresponding
+domain events remains a future transaction-coupled producer task.
 
 Managed templates follow `DRAFT -> REVIEW -> PUBLISHED -> RETIRED/ROLLED_BACK`.
 Published content is immutable and content-addressed. The renderer accepts only
@@ -180,19 +193,19 @@ requirement, while the gateway independently verifies both against policy and
 authoritative records. `communications.send` returns a
 queue/suppression result and audit reference—not a false delivery claim.
 
-## Integration gates before runtime activation
+## Runtime activation boundary
 
-1. Add durable event/inbox and automation persistence with non-destructive
-   migrations and unique idempotency constraints.
-2. Register producer-owned payload schemas; dependencies are unresolved until
+1. The additive runtime migration provides event inbox, execution/step/retry,
+   dead-letter, communication and recipient history with unique idempotency
+   constraints.
+2. Producer-owned payload schemas remain unresolved until
    those domain owners publish them.
-3. Implement `communications.send` as an adapter over the existing encrypted
-   notification outbox and SMTP transport. Preserve stable message identity,
-   retry classification, `UNKNOWN_RESULT` and dead-letter behavior.
-4. Run existing notification outbox, SMTP transport, consent, PQR, CRM and
-   payment integration suites plus the new contract gates.
-5. Activate no automation until its version is reviewed, published and
+3. `communications.send` reuses the existing encrypted notification outbox and
+   preserves stable job identity, retry classification, `UNKNOWN_RESULT` and
+   dead-letter behavior without changing SMTP infrastructure.
+4. Activation still requires all repository validation and exact-head CI.
+5. No automation is seeded or activated. A version must be reviewed, published and
    explicitly made `ACTIVE` in the Control Plane.
 
-This foundation introduces no API endpoint, database migration, deployment or
-production mutation.
+This runtime introduces one additive migration and no public API endpoint,
+deployment, production mutation or SMTP/Postfix/OpenDKIM/TLS change.

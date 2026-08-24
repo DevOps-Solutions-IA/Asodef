@@ -1,3 +1,4 @@
+import { COMMUNICATIONS_SEND_TOOL_BINDING } from "@asodef/connect-contracts";
 import { CRM_TOOL_CONTRACTS } from "../crm/ai/crm-tool-contracts";
 import { defineGovernedTool } from "./tool-contract.factory";
 import type { GovernedToolContract } from "./tool-gateway.types";
@@ -185,18 +186,21 @@ const BUSINESS_READ_TOOLS = [
 ] as const;
 
 export const TOOL_GATEWAY_CATALOG: readonly GovernedToolContract[] =
-  Object.freeze([...Object.values(CRM_TOOL_CONTRACTS), ...BUSINESS_READ_TOOLS]);
+  Object.freeze([
+    ...Object.values(CRM_TOOL_CONTRACTS),
+    ...BUSINESS_READ_TOOLS,
+    COMMUNICATIONS_SEND_TOOL_BINDING,
+  ]);
 
 export interface ToolDomainDependency {
-  domain: "PLANS" | "COMMUNICATIONS";
+  domain: "PLANS";
   status: "BLOCKED";
   reason: string;
   requiredContract: string;
 }
 
-/** These are deliberately not executable tools. The repository has no Plans
- * application service and Communications exposes only public unsubscribe;
- * inventing a callable implementation would bypass the approved boundaries. */
+/** Plans remains deliberately non-executable until an application-service
+ * contract exists. */
 export const TOOL_DOMAIN_DEPENDENCIES: readonly ToolDomainDependency[] =
   Object.freeze([
     {
@@ -206,13 +210,5 @@ export const TOOL_DOMAIN_DEPENDENCIES: readonly ToolDomainDependency[] =
         "No versioned Plans application-service contract exists in the current brownfield.",
       requiredContract:
         "Plans read contract with RBAC, classification and published lifecycle semantics.",
-    },
-    {
-      domain: "COMMUNICATIONS",
-      status: "BLOCKED",
-      reason:
-        "The current Communications controller only supports public unsubscribe; it is not a governed send API.",
-      requiredContract:
-        "Authenticated Communications command contract with consent, suppression, idempotency and audit.",
     },
   ]);
