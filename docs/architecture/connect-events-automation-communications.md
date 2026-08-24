@@ -1,8 +1,9 @@
 # ASODEF Connect — events, automation and communications foundation
 
-Status: initial runtime, not deployed. Built from `origin/main` commit
-`b3fd305caec24577e95ef02152523d4fc61aa943` on 2026-08-22 after the canonical
-contracts and Control Plane foundation were integrated.
+Status: initial runtime and versioned Wave 3 contracts, not deployed. The v2
+event contract was prepared from certified `origin/main` commit
+`04e6acc5afca2bb4770a819a773d414d2d9a4f9a` after the canonical contracts,
+Control Plane foundation and runtime migration were integrated.
 
 ## Brownfield audit
 
@@ -60,17 +61,19 @@ Koral `ConversationEvent` and `DomainEvent` are intentionally different:
 | ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Purpose       | Internal append-only conversation timeline and audit evidence | Published business/integration fact for independent consumers    |
 | Scope         | One conversation, FK-backed                                   | Domain-neutral envelope plus producer-owned payload schema       |
-| Storage       | `conversation_events`                                         | Durable `connect_domain_events` integration inbox                 |
+| Storage       | `conversation_events`                                         | Durable `connect_domain_events` integration inbox                |
 | Publication   | Never automatic                                               | Explicit transaction-coupled publish                             |
 | Typical facts | Message received, assignment, internal note, return to Koral  | `ConversationEscalated`, payment, contract or PQR business facts |
 
 There is no second generic envelope for conversations. A reviewed promotion
 creates a new DomainEvent identity, inherits `correlationId`, sets
 `causationId=ConversationEvent.id`, preserves the source `occurredAt`, uses
-`producer=koral-conversations`, maps subject to
-`(subjectType=conversation, subjectId=conversationId)`, and derives a new
+`producer=koral-conversations`, maps the aggregate to
+`(aggregateType=conversation, aggregateId=conversationId)`, and derives a new
 layer-scoped idempotency key. Message bodies and raw conversation metadata are
-never copied. Missing correlation fails publication closed.
+never copied. Missing correlation fails publication closed. This promotion is
+not registered in the first business v2 catalog and therefore remains blocked
+until its producer semantics and sanitized payload schema are reviewed.
 Koral does not yet persist a `CONVERSATION_ESCALATED` timeline event; that is an
 explicit future producer dependency. Assignment, handoff or message-received
 events are not silently reclassified as escalation.
@@ -97,7 +100,8 @@ Trace semantics across contracts:
   contract APIs retain their published `v1`/`1.0.0` identifiers;
 - `occurredAt`: time the source fact occurred, not dispatcher time;
 - `producer`: stable publishing service identity;
-- subject: the pair `subjectType + subjectId`, not a database object.
+- aggregate: v2 uses `aggregateType + aggregateId`; legacy v1 replay maps its
+  `subjectType + subjectId` pair to the same persisted columns.
 
 Existing `AuditService`, `ConversationEvent`, Tool Gateway audit references,
 automation execution history and communication delivery audit each retain their
@@ -110,7 +114,8 @@ The executable TypeScript catalog is in `@asodef/connect-contracts`.
 
 | Contract                           | Version | Permission                                                                                 | Idempotency                                                        |
 | ---------------------------------- | ------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `events.publish`                   | `1.0.0` | `events.publish:<eventType>`                                                               | `producer + idempotencyKey`; duplicate returns the original event. |
+| `events.publish` legacy replay     | `1.0.0` | `events.publish:<eventType>`                                                               | `producer + idempotencyKey`; duplicate returns the original event. |
+| `events.publish` canonical         | `2.0.0` | `events.publish:<eventType>`                                                               | `producer + idempotencyKey`; duplicate returns the original event. |
 | `automations.execute`              | `1.0.0` | `automations.execute` and automation scope                                                 | Version/mode/key; duplicate returns the original execution.        |
 | `communications.send`              | `1.0.0` | `communications.send`; test mode additionally needs `communications.test-send` and step-up | Requester/key; duplicate never enqueues again.                     |
 | `communications.templates.preview` | `1.0.0` | `communications.templates.preview`                                                         | Read-only; no state mutation.                                      |
@@ -122,20 +127,49 @@ recipient data.
 
 ## Domain events
 
-Envelope v1 contains exactly:
+Envelope v1 remains available only for compatibility and replay. It contains
+exactly:
 
 `eventId`, `eventType`, `schemaVersion`, `occurredAt`, `producer`,
 `subjectType`, `subjectId`, `correlationId`, `causationId`, `idempotencyKey`,
-and `payload`.
+and `payload`. New producers never emit v1.
 
 The initial registered vocabulary is `LeadCreated`, `OpportunityWon`,
 `CompanyCreated`, `PlanPublished`, `ContractCreated`, `ContractApproved`,
 `ContractExpiring`, `PaymentReceived`, `PaymentFailed`, `PqrCreated`,
 `PqrResolved`, `ConsentGranted`, `ConversationEscalated`,
 `CommunicationRequested`, `CommunicationDelivered` and `CommunicationFailed`.
+These PascalCase names remain the legacy v1 vocabulary and are not aliases for
+the dotted names.
 
-Adding fields incompatibly requires a new `schemaVersion`. Producers must
-support the previous published version during an agreed migration window.
+Envelope v2 contains exactly:
+
+`eventId`, `eventType`, `schemaVersion`, `occurredAt`, `producer`,
+`aggregateType`, `aggregateId`, `correlationId`, `causationId`,
+`idempotencyKey`, and `sanitizedPayload`.
+
+Every new producer follows `EMIT_V2_ONLY`. The canonical v2 registry is:
+
+`lead.created`, `company.created`, `contract.created`,
+`contract.version.created`, `contract.cancelled`, `payment.created`,
+`payment.received`, `payment.failed`, `pqr.created`, `pqr.assigned`,
+`pqr.resolved`, `consent.granted`, `consent.revoked`,
+`plan.version.published`, and `plan.retired`.
+
+The following names are deliberately deferred and cannot be emitted:
+
+`lead.updated`, `lead.qualified`, `lead.assigned`, `company.approved`,
+`company.updated`, `contract.signed`, `pqr.updated`, and `payment.overdue`.
+Their mutation semantics or producer boundary are not yet unequivocal.
+
+No database migration is required for the envelope evolution. Persistence maps
+`aggregateType -> subject_type`, `aggregateId -> subject_id`, and
+`sanitizedPayload -> payload`. It never stores both envelope shapes for one
+fact and never emits v1 and v2 aliases for the same mutation.
+
+`schemaVersion` versions the producer-owned sanitized payload for its exact
+event type. The public contract version (`1.0.0` or `2.0.0`) versions the
+envelope shape; these two concepts are intentionally separate.
 
 ## Automation model
 

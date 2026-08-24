@@ -3,11 +3,16 @@ import {
   AI_GATEWAY_CONTRACT,
   AUTOMATION_EVENT_BOUNDARY,
   AUTOMATION_EXECUTE_CONTRACT,
+  CANONICAL_DOMAIN_EVENT_REGISTRY,
+  CANONICAL_DOMAIN_EVENT_TYPES,
   COMMUNICATIONS_SEND_CONTRACT,
   COMMUNICATIONS_SEND_TOOL_BINDING,
   CONVERSATION_EVENT_BOUNDARY,
   DATA_CLASSIFICATIONS,
+  DEFERRED_DOMAIN_EVENT_TYPES,
+  DOMAIN_EVENT_ENVELOPE_EVOLUTION,
   DOMAIN_EVENT_PUBLISH_CONTRACT,
+  DOMAIN_EVENT_PUBLISH_V2_CONTRACT,
   INITIAL_DOMAIN_EVENT_TYPES,
   KNOWLEDGE_GATEWAY_CONTRACT,
   KNOWLEDGE_STATUSES,
@@ -21,6 +26,7 @@ import {
   canTransitionTemplate,
   isConsentRequirementCompatible,
   isDomainEventEnvelope,
+  isDomainEventEnvelopeV2,
   isTransportImplemented,
   promoteConversationEscalation,
   resolveGatewayIdentityLevel,
@@ -31,7 +37,10 @@ import {
 describe("canonical ASODEF Connect gateway contracts", () => {
   it("publishes one canonical plan lifecycle and governed contracts", () => {
     expect(PLAN_LIFECYCLE).toEqual(["DRAFT", "REVIEW", "PUBLISHED", "RETIRED"]);
-    for (const contract of [PUBLISHED_PLANS_READ_CONTRACT, PLAN_LIFECYCLE_COMMAND_CONTRACT]) {
+    for (const contract of [
+      PUBLISHED_PLANS_READ_CONTRACT,
+      PLAN_LIFECYCLE_COMMAND_CONTRACT,
+    ]) {
       expect(contract.version).toBe("1.0.0");
       expect(contract.inputSchema.required.length).toBeGreaterThan(0);
       expect(contract.outputSchema.required.length).toBeGreaterThan(0);
@@ -110,6 +119,7 @@ describe("canonical ASODEF Connect gateway contracts", () => {
 describe("ASODEF Connect events and communications contracts", () => {
   const contracts: readonly PublicContract<unknown, unknown>[] = [
     DOMAIN_EVENT_PUBLISH_CONTRACT,
+    DOMAIN_EVENT_PUBLISH_V2_CONTRACT,
     AUTOMATION_EXECUTE_CONTRACT,
     COMMUNICATIONS_SEND_CONTRACT,
     TEMPLATE_PREVIEW_CONTRACT,
@@ -170,6 +180,111 @@ describe("ASODEF Connect events and communications contracts", () => {
     ).toBe(false);
     expect(isDomainEventEnvelope({ ...valid, payload: [] })).toBe(false);
     expect(isDomainEventEnvelope({ ...valid, unexpected: true })).toBe(false);
+    expect(
+      isDomainEventEnvelope({
+        ...valid,
+        eventType: "lead.created",
+      }),
+    ).toBe(false);
+  });
+
+  it("publishes the canonical v2 dotted vocabulary and defers ambiguous facts", () => {
+    expect(CANONICAL_DOMAIN_EVENT_TYPES).toEqual([
+      "lead.created",
+      "company.created",
+      "contract.created",
+      "contract.version.created",
+      "contract.cancelled",
+      "payment.created",
+      "payment.received",
+      "payment.failed",
+      "pqr.created",
+      "pqr.assigned",
+      "pqr.resolved",
+      "consent.granted",
+      "consent.revoked",
+      "plan.version.published",
+      "plan.retired",
+    ]);
+    expect(DEFERRED_DOMAIN_EVENT_TYPES).toEqual([
+      "lead.updated",
+      "lead.qualified",
+      "lead.assigned",
+      "company.approved",
+      "company.updated",
+      "contract.signed",
+      "pqr.updated",
+      "payment.overdue",
+    ]);
+    expect(CANONICAL_DOMAIN_EVENT_TYPES).not.toContain("pqr.updated");
+    expect(CANONICAL_DOMAIN_EVENT_REGISTRY["payment.created"]).toEqual({
+      eventType: "payment.created",
+      schemaVersion: 1,
+      aggregateType: "payment",
+    });
+    expect(CANONICAL_DOMAIN_EVENT_REGISTRY["plan.version.published"]).toEqual({
+      eventType: "plan.version.published",
+      schemaVersion: 1,
+      aggregateType: "plan",
+    });
+  });
+
+  it("keeps v1 replay-compatible while requiring new producers to emit v2 only", () => {
+    expect(DOMAIN_EVENT_ENVELOPE_EVOLUTION).toEqual({
+      legacyV1: {
+        contractVersion: "1.0.0",
+        producerPolicy: "LEGACY_REPLAY_ONLY",
+      },
+      canonicalV2: {
+        contractVersion: "2.0.0",
+        producerPolicy: "EMIT_V2_ONLY",
+      },
+      persistenceMapping: {
+        aggregateType: "subject_type",
+        aggregateId: "subject_id",
+        sanitizedPayload: "payload",
+      },
+    });
+    expect(DOMAIN_EVENT_PUBLISH_CONTRACT.version).toBe("1.0.0");
+    expect(DOMAIN_EVENT_PUBLISH_V2_CONTRACT.version).toBe("2.0.0");
+  });
+
+  it("validates v2 without mixing legacy subject or payload fields", () => {
+    const valid = {
+      eventId: "b198a56d-7346-4f23-a44e-15d0e5f73d38",
+      eventType: "lead.created",
+      schemaVersion: 1,
+      occurredAt: "2026-08-23T12:00:00.000Z",
+      producer: "leads",
+      aggregateType: "lead",
+      aggregateId: "lead-123",
+      correlationId: "corr-123",
+      causationId: null,
+      idempotencyKey: "leads:lead-123:created",
+      sanitizedPayload: {},
+    };
+    expect(isDomainEventEnvelopeV2(valid)).toBe(true);
+    expect(
+      isDomainEventEnvelopeV2({ ...valid, eventType: "LeadCreated" }),
+    ).toBe(false);
+    expect(
+      isDomainEventEnvelopeV2({
+        ...valid,
+        subjectType: "lead",
+      }),
+    ).toBe(false);
+    expect(
+      isDomainEventEnvelopeV2({
+        ...valid,
+        sanitizedPayload: [],
+      }),
+    ).toBe(false);
+    expect(
+      isDomainEventEnvelopeV2({
+        ...valid,
+        eventType: "pqr.updated",
+      }),
+    ).toBe(false);
   });
 
   it("enforces reviewed lifecycle transitions", () => {
