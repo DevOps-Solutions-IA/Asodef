@@ -1,4 +1,4 @@
-import type { ConversationChannel, ConversationPriority, ConversationStatus } from "@prisma/client";
+import type { ConversationChannel, ConversationPriority, ConversationStatus, WebChatProcessingStatus } from "@prisma/client";
 
 export enum ConversationQueueView {
   ALL = "ALL",
@@ -42,6 +42,7 @@ export interface InboundReceipt {
   duplicate: boolean;
   shouldAutoReply: boolean;
   status: ConversationStatus;
+  processingStatus?: WebChatProcessingStatus;
 }
 
 export interface MutationContext {

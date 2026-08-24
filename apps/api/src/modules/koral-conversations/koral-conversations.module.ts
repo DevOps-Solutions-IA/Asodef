@@ -16,12 +16,19 @@ import {
   CanonicalKoralAiGatewayAdapter,
   PublishedModelProfileResolver,
 } from "./koral-gateway.adapters";
+import { KoralWebChatRuntimeAdapter } from "./web-chat-runtime.adapter";
+import { WebChatController } from "./web-chat.controller";
+import { WebChatCryptoService } from "./web-chat-crypto.service";
+import { WebChatMessageProcessingService } from "./web-chat-message-processing.service";
+import { WebChatRequestGuard } from "./web-chat-request.guard";
+import { WebChatServerService } from "./web-chat-server.service";
+import { WebChatSessionService } from "./web-chat-session.service";
 
 export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
 
 @Module({
   imports: [AiGatewayModule, AuthModule],
-  controllers: [KoralConversationsController],
+  controllers: [KoralConversationsController, WebChatController],
   providers: [
     KoralConversationsService,
     {
@@ -43,6 +50,12 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
     },
     KoralIdentityResolutionService,
     ConversationIdentityBindingService,
+    KoralWebChatRuntimeAdapter,
+    WebChatCryptoService,
+    WebChatMessageProcessingService,
+    WebChatRequestGuard,
+    WebChatSessionService,
+    WebChatServerService,
   ],
   exports: [
     KoralConversationsService,

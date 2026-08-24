@@ -14,6 +14,7 @@ import type {
 import type { ResolvedIdentityContext } from "./identity-resolution.contract";
 
 export const KORAL_ORCHESTRATOR_CONTRACT_VERSION = "1.0.0" as const;
+export const KORAL_ORCHESTRATION_PIPELINE = Symbol("KORAL_ORCHESTRATION_PIPELINE");
 
 export interface ConversationContext {
   version: typeof KORAL_ORCHESTRATOR_CONTRACT_VERSION;

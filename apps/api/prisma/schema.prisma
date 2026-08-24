@@ -188,6 +188,17 @@ enum ConversationIdentityAssurance {
   @@map("conversation_identity_assurance")
 }
 
+enum WebChatProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  SUPPRESSED
+  FAILED
+  UNKNOWN_RESULT
+
+  @@map("web_chat_processing_status")
+}
+
 model Conversation {
   id            String               @id @default(uuid()) @db.Uuid
   status        ConversationStatus   @default(AI_ACTIVE)
@@ -274,12 +285,41 @@ model ConversationChannelSession {
   lastSeenAt        DateTime            @default(now()) @map("last_seen_at") @db.Timestamptz(3)
   closedAt          DateTime?           @map("closed_at") @db.Timestamptz(3)
 
-  conversation Conversation          @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  messages     ConversationMessage[]
+  conversation   Conversation          @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  messages       ConversationMessage[]
+  webChatSession WebChatSession?
 
   @@unique([channel, externalSessionId])
   @@index([conversationId, lastSeenAt])
   @@map("conversation_channel_sessions")
+}
+
+// Browser capability for the public Koral Web Chat. Only a keyed digest of
+// the opaque cookie is retained. Conversation/channel identifiers are never
+// accepted as credentials and expiry/revocation remain server-authoritative.
+model WebChatSession {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  channelSessionId   String                        @unique @map("channel_session_id") @db.Uuid
+  tokenDigest        String                        @unique @map("token_digest") @db.Char(64)
+  generation         Int                           @default(0)
+  identityId         String                        @map("identity_id")
+  assuranceLevel     ConversationIdentityAssurance @default(ANONYMOUS) @map("assurance_level")
+  claimedDisplayName String?                       @map("claimed_display_name")
+  idleExpiresAt      DateTime                      @map("idle_expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt  DateTime                      @map("absolute_expires_at") @db.Timestamptz(3)
+  lastSeenAt         DateTime                      @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt          DateTime?                     @map("revoked_at") @db.Timestamptz(3)
+  createdAt          DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  channelSession ConversationChannelSession @relation(fields: [channelSessionId], references: [id], onDelete: Restrict)
+  processings    WebChatMessageProcessing[]
+
+  @@unique([id, channelSessionId], map: "web_chat_sessions_id_channel_session_id_key")
+  @@index([idleExpiresAt])
+  @@index([absoluteExpiresAt])
+  @@index([revokedAt])
+  @@map("web_chat_sessions")
 }
 
 model ConversationMessage {
@@ -297,19 +337,48 @@ model ConversationMessage {
   occurredAt        DateTime                     @map("occurred_at") @db.Timestamptz(3)
   createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  conversation   Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  channelSession ConversationChannelSession? @relation(fields: [channelSessionId], references: [id], onDelete: Restrict)
-  participant    ConversationParticipant?    @relation(fields: [participantId], references: [id], onDelete: SetNull)
-  replyToMessage ConversationMessage?        @relation("ConversationMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies        ConversationMessage[]       @relation("ConversationMessageReply")
-  attachments    ConversationAttachment[]
-  readStates     ConversationReadState[]
+  conversation      Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  channelSession    ConversationChannelSession? @relation(fields: [channelSessionId], references: [id], onDelete: Restrict)
+  participant       ConversationParticipant?    @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  replyToMessage    ConversationMessage?        @relation("ConversationMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies           ConversationMessage[]       @relation("ConversationMessageReply")
+  attachments       ConversationAttachment[]
+  readStates        ConversationReadState[]
+  webChatProcessing WebChatMessageProcessing?
 
   @@unique([channelSessionId, externalMessageId])
   @@unique([conversationId, id], map: "conversation_messages_conversation_id_id_uq")
+  @@unique([id, channelSessionId], map: "conversation_messages_id_channel_session_id_key")
   @@index([conversationId, occurredAt])
   @@index([correlationId])
   @@map("conversation_messages")
+}
+
+// Durable inference boundary for public Web Chat. It stores only safe state
+// and opaque hashes; prompts, provider payloads and PII are excluded.
+model WebChatMessageProcessing {
+  id               String                  @id @default(uuid()) @db.Uuid
+  messageId        String                  @unique @map("message_id") @db.Uuid
+  webChatSessionId String                  @map("web_chat_session_id") @db.Uuid
+  channelSessionId String                  @map("channel_session_id") @db.Uuid
+  payloadHash      String                  @map("payload_hash") @db.Char(64)
+  status           WebChatProcessingStatus @default(PENDING)
+  leaseId          String?                 @map("lease_id") @db.Uuid
+  leaseExpiresAt   DateTime?               @map("lease_expires_at") @db.Timestamptz(3)
+  attemptCount     Int                     @default(0) @map("attempt_count")
+  outcomeClass     String?                 @map("outcome_class")
+  failureCode      String?                 @map("failure_code")
+  completedAt      DateTime?               @map("completed_at") @db.Timestamptz(3)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  message        ConversationMessage @relation(fields: [messageId, channelSessionId], references: [id, channelSessionId], onDelete: Restrict)
+  webChatSession WebChatSession      @relation(fields: [webChatSessionId, channelSessionId], references: [id, channelSessionId], onDelete: Restrict)
+
+  @@unique([messageId, channelSessionId], map: "web_chat_message_processings_message_channel_key")
+  @@index([webChatSessionId, status, updatedAt], map: "web_chat_message_processings_session_status_idx")
+  @@index([status, leaseExpiresAt], map: "web_chat_message_processings_lease_idx")
+  @@map("web_chat_message_processings")
 }
 
 model ConversationAttachment {
