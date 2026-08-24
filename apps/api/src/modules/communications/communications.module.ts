@@ -6,6 +6,8 @@ import { CommunicationsController } from "./communications.controller";
 import { CommunicationsService } from "./communications.service";
 import { EmailOutboxAdapter } from "./email-outbox.adapter";
 import { PublishedTemplateRenderer } from "./published-template.renderer";
+import { CommunicationChannelRegistry } from "./communication-channel.registry";
+import { CommunicationRecipientPolicyService } from "./communication-recipient-policy.service";
 
 @Module({
   imports: [RedisModule, AuthModule, NotificationsModule],
@@ -14,6 +16,8 @@ import { PublishedTemplateRenderer } from "./published-template.renderer";
     CommunicationsService,
     EmailOutboxAdapter,
     PublishedTemplateRenderer,
+    CommunicationChannelRegistry,
+    CommunicationRecipientPolicyService,
   ],
   exports: [CommunicationsService],
 })

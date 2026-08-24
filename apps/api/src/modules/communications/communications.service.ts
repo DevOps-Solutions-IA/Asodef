@@ -11,8 +11,9 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { PrismaService } from "../../database/prisma.service";
 import { CommunicationsRuntimeError } from "./communications-runtime.error";
-import { EmailOutboxAdapter } from "./email-outbox.adapter";
 import { PublishedTemplateRenderer } from "./published-template.renderer";
+import { CommunicationChannelRegistry } from "./communication-channel.registry";
+import { CommunicationRecipientPolicyService } from "./communication-recipient-policy.service";
 import {
   RateLimitDependencyUnavailableError,
   RateLimiterService,
@@ -26,7 +27,8 @@ export class CommunicationsService implements CommunicationsServiceContract {
   constructor(
     private readonly prisma: PrismaService,
     private readonly templates: PublishedTemplateRenderer,
-    private readonly emailOutbox: EmailOutboxAdapter,
+    private readonly channels: CommunicationChannelRegistry,
+    private readonly recipientPolicy: CommunicationRecipientPolicyService,
     private readonly rateLimiter: RateLimiterService,
   ) {}
 
@@ -35,9 +37,7 @@ export class CommunicationsService implements CommunicationsServiceContract {
     context: GatewayRequestContext,
   ): Promise<CommunicationsSendOutput> {
     this.validateRequest(request, context);
-    if (request.channel !== "EMAIL") {
-      throw new CommunicationsRuntimeError("TRANSPORT_NOT_AVAILABLE", false);
-    }
+    this.channels.assertAvailable(request.channel);
     if (!isConsentRequirementCompatible(request.purpose, request.consentRequirement)) {
       throw new CommunicationsRuntimeError("CONSENT_REQUIRED", false);
     }
@@ -65,7 +65,7 @@ export class CommunicationsService implements CommunicationsServiceContract {
 
     await this.enforceRateLimits(request, requestedBy);
 
-    const decisions = await this.resolveRecipientDecisions(request, context);
+    const decisions = await this.recipientPolicy.evaluate(request, context);
     try {
       const communication = await this.prisma.$transaction(async (tx) => {
         const created = await tx.connectCommunication.create({
@@ -110,7 +110,7 @@ export class CommunicationsService implements CommunicationsServiceContract {
             include: { recipients: { orderBy: { recipientIndex: "asc" } } },
           });
         }
-        await this.emailOutbox.enqueue(tx, {
+        await this.channels.dispatch(tx, request.channel, {
           communicationId: created.id,
           recipients: deliverable,
           subject: rendered.subject ?? "ASODEF",
@@ -228,58 +228,6 @@ export class CommunicationsService implements CommunicationsServiceContract {
     }
   }
 
-  private async resolveRecipientDecisions(
-    request: CommunicationsSendRequest,
-    context: GatewayRequestContext,
-  ): Promise<Array<{ allowed: boolean; reasonCode: string }>> {
-    try {
-    if (request.purpose === "MARKETING") {
-      const requirement = request.consentRequirement;
-      if (
-        !context.policy.consentVerified ||
-        !requirement.consentRecordId ||
-        !requirement.purposeKey ||
-        !context.policy.consentPurposeKeys.includes(requirement.purposeKey)
-      ) {
-        throw new CommunicationsRuntimeError("CONSENT_REQUIRED", false);
-      }
-      const consent = await this.prisma.consentRecord.findFirst({
-        where: {
-          id: requirement.consentRecordId,
-          status: "GRANTED",
-          revokedAt: null,
-          consentPurpose: { key: requirement.purposeKey },
-        },
-      });
-      if (!consent) throw new CommunicationsRuntimeError("CONSENT_REQUIRED", false);
-      for (const recipient of request.recipients) {
-        if (!matchesConsentSubject(recipient, consent)) {
-          throw new CommunicationsRuntimeError("CONSENT_REQUIRED", false);
-        }
-      }
-    }
-
-    return await Promise.all(
-      request.recipients.map(async (recipient) => {
-        const suppressed = await this.prisma.suppressionListEntry.findUnique({
-          where: {
-            channel_recipient: {
-              channel: request.channel.toLowerCase(),
-              recipient: recipient.address,
-            },
-          },
-        });
-        return suppressed
-          ? { allowed: false, reasonCode: "SUPPRESSION_LIST" }
-          : { allowed: true, reasonCode: "POLICY_ALLOWED" };
-      }),
-    );
-    } catch (error) {
-      if (error instanceof CommunicationsRuntimeError) throw error;
-      throw new CommunicationsRuntimeError("DELIVERY_STORE_UNAVAILABLE", true);
-    }
-  }
-
   private replay(
     communication: CommunicationRecord,
     requestHash: string,
@@ -320,26 +268,6 @@ export class CommunicationsService implements CommunicationsServiceContract {
 type CommunicationRecord = Prisma.ConnectCommunicationGetPayload<{
   include: { recipients: true };
 }>;
-
-type ConsentRecord = {
-  userId: string | null;
-  leadSubmissionId: string | null;
-  customerId: string | null;
-};
-
-function matchesConsentSubject(
-  recipient: CommunicationAddress,
-  consent: ConsentRecord,
-): boolean {
-  if (!recipient.subjectType || !recipient.subjectId) return false;
-  const normalized = recipient.subjectType.toUpperCase();
-  if (normalized === "USER") return consent.userId === recipient.subjectId;
-  if (normalized === "LEAD" || normalized === "LEADSUBMISSION") {
-    return consent.leadSubmissionId === recipient.subjectId;
-  }
-  if (normalized === "CUSTOMER") return consent.customerId === recipient.subjectId;
-  return false;
-}
 
 function hashCanonical(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(canonicalize(value))).digest("hex");
