@@ -304,10 +304,11 @@ describe("AdminMfaService (integration)", () => {
   });
 
   it("consumes the enrollment TOTP counter and rejects immediate same-step reuse", async () => {
-    const { started } = await enroll();
+    const started = await service.beginEnrollment(adminUserId, adminSessionId, PASSWORD, context());
+    const sameStepCode = generateCode(started.secret);
+    await service.confirmEnrollment(adminUserId, adminSessionId, PASSWORD, sameStepCode, context());
     const user = await prisma.user.findUniqueOrThrow({ where: { id: adminUserId } });
     const challenge = await service.createLoginChallenge(user, context());
-    const sameStepCode = generateCode(started.secret);
     await expect(completeChallenge(challenge.challengeToken, sameStepCode))
       .rejects.toMatchObject({ code: "MFA_INVALID_CODE" });
   });
