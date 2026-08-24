@@ -1,5 +1,24 @@
 import type { ConversationChannel, ConversationPriority, ConversationStatus } from "@prisma/client";
 
+export enum ConversationQueueView {
+  ALL = "ALL",
+  MINE = "MINE",
+  UNASSIGNED = "UNASSIGNED",
+  HUMAN_REQUIRED = "HUMAN_REQUIRED",
+}
+
+export enum ConversationSlaState {
+  NONE = "NONE",
+  ON_TRACK = "ON_TRACK",
+  DUE_SOON = "DUE_SOON",
+  OVERDUE = "OVERDUE",
+}
+
+export interface ConversationAssigneeResponse {
+  id: string;
+  displayName: string;
+}
+
 export interface ConversationSummaryResponse {
   id: string;
   status: ConversationStatus;
@@ -8,8 +27,12 @@ export interface ConversationSummaryResponse {
   subject: string | null;
   lastMessageAt: Date | null;
   slaDueAt: Date | null;
-  activeAssigneeUserId: string | null;
+  slaState: ConversationSlaState;
+  queue: ConversationQueueView;
+  activeAssignee: ConversationAssigneeResponse | null;
   channels: ConversationChannel[];
+  tags: string[];
+  unread: boolean;
   updatedAt: Date;
 }
 

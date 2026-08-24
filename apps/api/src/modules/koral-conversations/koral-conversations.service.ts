@@ -16,11 +16,20 @@ import type { InboundMessage } from "./contracts/channel.contract";
 import type { AddInternalNoteDto } from "./dto/add-internal-note.dto";
 import type { AssignConversationDto } from "./dto/assign-conversation.dto";
 import type { EscalateConversationDto } from "./dto/escalate-conversation.dto";
+import type { ChangeConversationPriorityDto } from "./dto/change-conversation-priority.dto";
 import type { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import type { ReleaseConversationDto } from "./dto/release-conversation.dto";
 import type { ReturnToKoralDto } from "./dto/return-to-koral.dto";
 import type { TransitionConversationDto } from "./dto/transition-conversation.dto";
-import type { ConversationRuntimeState, ConversationSummaryResponse, InboundReceipt, KoralOutboundCommitInput, MutationContext } from "./koral-conversations.types";
+import {
+  ConversationQueueView,
+  ConversationSlaState,
+  type ConversationRuntimeState,
+  type ConversationSummaryResponse,
+  type InboundReceipt,
+  type KoralOutboundCommitInput,
+  type MutationContext,
+} from "./koral-conversations.types";
 
 const GENERIC_NOT_FOUND = "No se encontró la conversación solicitada.";
 const CONCURRENT_CHANGE = "La conversación cambió mientras se procesaba la acción. Actualiza e intenta nuevamente.";
@@ -157,23 +166,31 @@ export class KoralConversationsService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 
-  async list(query: ListConversationsQueryDto): Promise<{ items: ConversationSummaryResponse[]; total: number; page: number; pageSize: number }> {
-    const where = query.status ? { status: query.status } : {};
+  async list(query: ListConversationsQueryDto, actorUserId: string): Promise<{ items: ConversationSummaryResponse[]; total: number; page: number; pageSize: number }> {
+    const where = inboxWhere(query, actorUserId);
     const [rows, total] = await Promise.all([
       this.prisma.conversation.findMany({
         where,
-        orderBy: { updatedAt: "desc" },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         include: {
-          assignments: { where: { releasedAt: null }, select: { assigneeUserId: true }, take: 1 },
+          assignments: { where: { releasedAt: null }, select: { assignee: { select: { id: true, fullName: true } } }, take: 1 },
           channelSessions: { select: { channel: true }, distinct: ["channel"] },
+          tags: { select: { tag: true } },
+          readStates: { where: { userId: actorUserId }, select: { lastReadAt: true }, take: 1 },
+          messages: {
+            where: { direction: ConversationMessageDirection.INBOUND },
+            orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+            select: { occurredAt: true },
+            take: 1,
+          },
         },
       }),
       this.prisma.conversation.count({ where }),
     ]);
     return {
-      items: rows.map((row) => ({
+      items: rows.map((row): ConversationSummaryResponse => ({
         id: row.id,
         status: row.status,
         priority: row.priority,
@@ -181,8 +198,12 @@ export class KoralConversationsService {
         subject: row.subject,
         lastMessageAt: row.lastMessageAt,
         slaDueAt: row.slaDueAt,
-        activeAssigneeUserId: row.assignments[0]?.assigneeUserId ?? null,
+        slaState: deriveSlaState(row.slaDueAt),
+        queue: deriveQueue(row.status, row.assignments[0]?.assignee.id ?? null, actorUserId),
+        activeAssignee: row.assignments[0] ? { id: row.assignments[0].assignee.id, displayName: row.assignments[0].assignee.fullName } : null,
         channels: row.channelSessions.map((session) => session.channel),
+        tags: row.tags.map(({ tag }) => tag),
+        unread: Boolean(row.messages[0] && (!row.readStates[0] || row.messages[0].occurredAt > row.readStates[0].lastReadAt)),
         updatedAt: row.updatedAt,
       })),
       total,
@@ -191,22 +212,69 @@ export class KoralConversationsService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string, actorUserId: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
-        participants: true,
-        messages: { orderBy: { occurredAt: "asc" }, include: { attachments: true } },
-        assignments: { orderBy: { assignedAt: "desc" } },
-        internalNotes: { orderBy: { createdAt: "asc" } },
+        participants: { select: { id: true, kind: true, channel: true, displayName: true, userId: true, createdAt: true } },
+        messages: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }], include: { attachments: { select: { id: true, mediaType: true, fileName: true, byteSize: true } } } },
+        assignments: { orderBy: { assignedAt: "desc" }, include: { assignee: { select: { id: true, fullName: true } }, assignedBy: { select: { id: true, fullName: true } } } },
+        internalNotes: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, fullName: true } } } },
         tags: true,
-        events: { orderBy: { createdAt: "asc" } },
-        identityBindings: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-        channelSessions: true,
+        events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, eventType: true, actorUserId: true, requestId: true, correlationId: true, previousStatus: true, newStatus: true, result: true, reason: true, createdAt: true } },
+        identityBindings: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, previousAssurance: true, newAssurance: true, reason: true, correlationId: true, createdAt: true } },
+        channelSessions: { select: { id: true, channel: true, adapterVersion: true, openedAt: true, lastSeenAt: true, closedAt: true } },
+        readStates: { where: { userId: actorUserId }, select: { lastReadAt: true }, take: 1 },
       },
     });
     if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
-    return conversation;
+    const active = conversation.assignments.find((assignment) => assignment.releasedAt === null) ?? null;
+    const latestInbound = [...conversation.messages].reverse().find((message) => message.direction === ConversationMessageDirection.INBOUND);
+    return {
+      id: conversation.id,
+      status: conversation.status,
+      priority: conversation.priority,
+      version: conversation.version,
+      subject: conversation.subject,
+      lastMessageAt: conversation.lastMessageAt,
+      slaDueAt: conversation.slaDueAt,
+      slaState: deriveSlaState(conversation.slaDueAt),
+      queue: deriveQueue(conversation.status, active?.assignee.id ?? null, actorUserId),
+      unread: Boolean(latestInbound && (!conversation.readStates[0] || latestInbound.occurredAt > conversation.readStates[0].lastReadAt)),
+      activeAssignee: active ? { id: active.assignee.id, displayName: active.assignee.fullName } : null,
+      participants: conversation.participants,
+      messages: conversation.messages.map(({ externalMessageId: _externalMessageId, ...message }) => message),
+      assignments: conversation.assignments.map((assignment) => ({
+        id: assignment.id,
+        assignee: { id: assignment.assignee.id, displayName: assignment.assignee.fullName },
+        assignedBy: { id: assignment.assignedBy.id, displayName: assignment.assignedBy.fullName },
+        priority: assignment.priority,
+        reason: assignment.reason,
+        assignedAt: assignment.assignedAt,
+        releasedAt: assignment.releasedAt,
+      })),
+      internalNotes: conversation.internalNotes.map((note) => ({ id: note.id, body: note.body, createdAt: note.createdAt, author: { id: note.author.id, displayName: note.author.fullName } })),
+      tags: conversation.tags.map(({ tag }) => tag),
+      events: conversation.events,
+      identityTimeline: conversation.identityBindings,
+      channelSessions: conversation.channelSessions,
+      resolvedAt: conversation.resolvedAt,
+      closedAt: conversation.closedAt,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+    };
+  }
+
+  async listEligibleAssignees() {
+    const users = await this.prisma.user.findMany({
+      where: {
+        status: UserStatus.ACTIVE,
+        roles: { some: { role: { permissions: { some: { permission: { key: "koral.conversations.manage" } } } } } },
+      },
+      select: { id: true, fullName: true },
+      orderBy: [{ fullName: "asc" }, { id: "asc" }],
+    });
+    return users.map((user) => ({ id: user.id, displayName: user.fullName }));
   }
 
   async getRuntimeState(id: string): Promise<ConversationRuntimeState> {
@@ -336,10 +404,17 @@ export class KoralConversationsService {
 
       const [conversation, assignee] = await Promise.all([
         tx.conversation.findUnique({ where: { id } }),
-        tx.user.findFirst({ where: { id: dto.assigneeUserId, status: UserStatus.ACTIVE }, select: { id: true } }),
+        tx.user.findFirst({
+          where: {
+            id: dto.assigneeUserId,
+            status: UserStatus.ACTIVE,
+            roles: { some: { role: { permissions: { some: { permission: { key: "koral.conversations.manage" } } } } } },
+          },
+          select: { id: true },
+        }),
       ]);
       if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
-      if (!assignee) throw new BadRequestException("El responsable debe ser un usuario activo.");
+      if (!assignee) throw new BadRequestException("El responsable debe ser un usuario activo autorizado para gestionar conversaciones.");
       assertTransition(conversation.status, ConversationStatus.HUMAN_ACTIVE);
 
       const active = await tx.conversationAssignment.findFirst({ where: { conversationId: id, releasedAt: null } });
@@ -399,6 +474,66 @@ export class KoralConversationsService {
         },
       });
       return this.findByIdWithClient(tx, id);
+    });
+  }
+
+  async changePriority(id: string, dto: ChangeConversationPriorityDto, context: MutationContext) {
+    const mutation = normalizeMutationContext(context);
+    const reason = requiredAuditText(dto.reason, "INVALID_REASON", 500);
+    return this.prisma.$transaction(async (tx) => {
+      await lockConversation(tx, id);
+      const replay = await tx.conversationEvent.findUnique({ where: { conversationId_idempotencyKey: { conversationId: id, idempotencyKey: dto.idempotencyKey } } });
+      if (replay) {
+        const metadata = jsonObject(replay.metadata);
+        if (
+          replay.eventType !== "CONVERSATION_PRIORITY_CHANGED"
+          || replay.reason !== reason
+          || metadata.priority !== dto.priority
+          || metadata.expectedVersion !== dto.expectedVersion
+        ) {
+          throw new ConflictException(IDEMPOTENCY_CONFLICT);
+        }
+        return this.findByIdWithClient(tx, id);
+      }
+      const conversation = await tx.conversation.findUnique({ where: { id } });
+      if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+      if (conversation.status === ConversationStatus.CLOSED) throw new ConflictException("Una conversación cerrada no puede cambiar de prioridad.");
+      if (conversation.priority === dto.priority) throw new ConflictException("CONVERSATION_PRIORITY_UNCHANGED");
+      const changed = await tx.conversation.updateMany({ where: { id, version: dto.expectedVersion }, data: { priority: dto.priority, version: { increment: 1 } } });
+      if (changed.count !== 1) throw new ConflictException(CONCURRENT_CHANGE);
+      await tx.conversationEvent.create({ data: {
+        conversationId: id,
+        eventType: "CONVERSATION_PRIORITY_CHANGED",
+        actorUserId: mutation.actorUserId,
+        requestId: mutation.requestId,
+        correlationId: mutation.correlationId,
+        idempotencyKey: dto.idempotencyKey,
+        previousStatus: conversation.status,
+        newStatus: conversation.status,
+        reason,
+        metadata: { previousPriority: conversation.priority, priority: dto.priority, expectedVersion: dto.expectedVersion },
+      } });
+      return this.findByIdWithClient(tx, id);
+    });
+  }
+
+  async markRead(id: string, actorUserId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockConversation(tx, id);
+      const conversation = await tx.conversation.findUnique({ where: { id }, select: { id: true } });
+      if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+      const latest = await tx.conversationMessage.findFirst({
+        where: { conversationId: id, direction: ConversationMessageDirection.INBOUND },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true, occurredAt: true },
+      });
+      if (!latest) return { conversationId: id, unread: false, lastReadAt: null };
+      const state = await tx.conversationReadState.upsert({
+        where: { conversationId_userId: { conversationId: id, userId: actorUserId } },
+        create: { conversationId: id, userId: actorUserId, lastReadMessageId: latest.id, lastReadAt: latest.occurredAt },
+        update: { lastReadMessageId: latest.id, lastReadAt: latest.occurredAt },
+      });
+      return { conversationId: id, unread: false, lastReadAt: state.lastReadAt };
     });
   }
 
@@ -649,11 +784,78 @@ export class KoralConversationsService {
   }
 
   private async findByIdWithClient(tx: Prisma.TransactionClient, id: string) {
-    return tx.conversation.findUniqueOrThrow({
+    const conversation = await tx.conversation.findUniqueOrThrow({
       where: { id },
-      include: { assignments: { orderBy: { assignedAt: "desc" } }, events: { orderBy: { createdAt: "asc" } } },
+      include: {
+        assignments: {
+          where: { releasedAt: null },
+          take: 1,
+          include: { assignee: { select: { id: true, fullName: true } } },
+        },
+      },
     });
+    return {
+      id: conversation.id,
+      status: conversation.status,
+      priority: conversation.priority,
+      version: conversation.version,
+      activeAssignee: conversation.assignments[0]
+        ? { id: conversation.assignments[0].assignee.id, displayName: conversation.assignments[0].assignee.fullName }
+        : null,
+      updatedAt: conversation.updatedAt,
+    };
   }
+
+}
+
+function inboxWhere(query: ListConversationsQueryDto, actorUserId: string): Prisma.ConversationWhereInput {
+  const now = new Date();
+  const dueSoon = new Date(now.getTime() + 30 * 60 * 1000);
+  const where: Prisma.ConversationWhereInput = {};
+  const and: Prisma.ConversationWhereInput[] = [];
+  if (query.status) where.status = query.status;
+  if (query.priority) where.priority = query.priority;
+  if (query.assigneeUserId) and.push({ assignments: { some: { assigneeUserId: query.assigneeUserId, releasedAt: null } } });
+  if (query.channel) where.channelSessions = { some: { channel: query.channel } };
+  const search = query.search?.trim();
+  if (search) {
+    where.OR = [
+      { subject: { contains: search, mode: "insensitive" } },
+      { participants: { some: { displayName: { contains: search, mode: "insensitive" } } } },
+      { tags: { some: { tag: { contains: search, mode: "insensitive" } } } },
+    ];
+  }
+  if (query.slaState === ConversationSlaState.NONE) where.slaDueAt = null;
+  if (query.slaState === ConversationSlaState.OVERDUE) where.slaDueAt = { lt: now };
+  if (query.slaState === ConversationSlaState.DUE_SOON) where.slaDueAt = { gte: now, lte: dueSoon };
+  if (query.slaState === ConversationSlaState.ON_TRACK) where.slaDueAt = { gt: dueSoon };
+
+  if (query.queue === ConversationQueueView.MINE) {
+    and.push({ assignments: { some: { assigneeUserId: actorUserId, releasedAt: null } } });
+  } else if (query.queue === ConversationQueueView.UNASSIGNED) {
+    and.push(
+      { status: ConversationStatus.HUMAN_REQUIRED },
+      { assignments: { none: { releasedAt: null } } },
+    );
+  } else if (query.queue === ConversationQueueView.HUMAN_REQUIRED) {
+    and.push({ status: ConversationStatus.HUMAN_REQUIRED });
+  }
+  if (and.length) where.AND = and;
+  return where;
+}
+
+function deriveSlaState(slaDueAt: Date | null, now = new Date()): ConversationSlaState {
+  if (!slaDueAt) return ConversationSlaState.NONE;
+  if (slaDueAt.getTime() < now.getTime()) return ConversationSlaState.OVERDUE;
+  if (slaDueAt.getTime() <= now.getTime() + 30 * 60 * 1000) return ConversationSlaState.DUE_SOON;
+  return ConversationSlaState.ON_TRACK;
+}
+
+function deriveQueue(status: ConversationStatus, assigneeUserId: string | null, actorUserId: string): ConversationQueueView {
+  if (assigneeUserId === actorUserId) return ConversationQueueView.MINE;
+  if (status === ConversationStatus.HUMAN_REQUIRED && !assigneeUserId) return ConversationQueueView.UNASSIGNED;
+  if (status === ConversationStatus.HUMAN_REQUIRED) return ConversationQueueView.HUMAN_REQUIRED;
+  return ConversationQueueView.ALL;
 }
 
 function jsonObject(value: Prisma.JsonValue | null): Prisma.JsonObject {

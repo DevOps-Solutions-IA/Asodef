@@ -86,6 +86,7 @@ model User {
   koralAssignmentsMade              ConversationAssignment[]   @relation("ConversationAssignmentActor")
   koralInternalNotes                ConversationInternalNote[]
   koralConversationEvents           ConversationEvent[]
+  koralConversationReadStates       ConversationReadState[]
 
   @@map("users")
 }
@@ -208,6 +209,7 @@ model Conversation {
   tags             ConversationTag[]
   events           ConversationEvent[]
   identityBindings ConversationIdentityBinding[]
+  readStates       ConversationReadState[]
 
   @@index([status, priority, updatedAt])
   @@index([slaDueAt])
@@ -301,8 +303,10 @@ model ConversationMessage {
   replyToMessage ConversationMessage?        @relation("ConversationMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
   replies        ConversationMessage[]       @relation("ConversationMessageReply")
   attachments    ConversationAttachment[]
+  readStates     ConversationReadState[]
 
   @@unique([channelSessionId, externalMessageId])
+  @@unique([conversationId, id], map: "conversation_messages_conversation_id_id_uq")
   @@index([conversationId, occurredAt])
   @@index([correlationId])
   @@map("conversation_messages")
@@ -358,6 +362,26 @@ model ConversationInternalNote {
   @@unique([conversationId, idempotencyKey])
   @@index([conversationId, createdAt])
   @@map("conversation_internal_notes")
+}
+
+// Per-operator read cursor. Queue membership remains a derived projection of
+// conversation status and active assignment; this table does not introduce a
+// second queue or delivery domain.
+model ConversationReadState {
+  conversationId    String   @map("conversation_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  lastReadMessageId String?  @map("last_read_message_id") @db.Uuid
+  lastReadAt        DateTime @map("last_read_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  conversation    Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessage ConversationMessage? @relation(fields: [conversationId, lastReadMessageId], references: [conversationId, id], onDelete: Restrict)
+
+  @@id([conversationId, userId])
+  @@index([userId, updatedAt])
+  @@index([lastReadMessageId])
+  @@map("conversation_read_states")
 }
 
 model ConversationTag {
