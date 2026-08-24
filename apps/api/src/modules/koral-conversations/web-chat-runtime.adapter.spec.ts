@@ -9,7 +9,7 @@ describe("KoralWebChatRuntimeAdapter", () => {
     getRuntimeState: jest.fn(),
   };
   const identities = { resolveAnonymous: jest.fn(), resolveAuthenticated: jest.fn() };
-  const bindings = { bind: jest.fn() };
+  const bindings = { bindEffective: jest.fn() };
   const rateLimiter = { checkAndIncrementStrict: jest.fn() };
   const orchestrator = { run: jest.fn() };
   const adapter = new KoralWebChatRuntimeAdapter(
@@ -44,7 +44,7 @@ describe("KoralWebChatRuntimeAdapter", () => {
     conversations.receiveInbound.mockResolvedValue({ conversationId: "conversation-1", messageId: "message-db-1", duplicate: false });
     conversations.getRuntimeState.mockResolvedValue({ status: ConversationStatus.AI_ACTIVE, version: 2, mayAutoReply: true });
     identities.resolveAnonymous.mockReturnValue(anonymous);
-    bindings.bind.mockResolvedValue({ replayed: false });
+    bindings.bindEffective.mockResolvedValue({ replayed: false });
     orchestrator.run.mockResolvedValue({ kind: "WAITING", conversationId: "conversation-1", completedSteps: [], reasonCodes: [] });
   });
 
@@ -52,8 +52,12 @@ describe("KoralWebChatRuntimeAdapter", () => {
     const result = await adapter.receive({ message, deadlineAt: "2026-08-22T12:00:20.000Z" }, now);
     expect(result.kind).toBe("ORCHESTRATED");
     expect(identities.resolveAnonymous).toHaveBeenCalled();
-    expect(bindings.bind).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1", identity: anonymous.identity }));
-    expect(orchestrator.run).toHaveBeenCalledWith(expect.objectContaining({ normalizedMessageId: "message-db-1", deadlineAt: "2026-08-22T12:00:20.000Z" }));
+    expect(bindings.bindEffective).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1", identity: anonymous.identity }));
+    expect(orchestrator.run).toHaveBeenCalledWith(expect.objectContaining({
+      normalizedMessageId: "message-db-1",
+      deadlineAt: "2026-08-22T12:00:20.000Z",
+      effectiveIdentity: anonymous.identity,
+    }));
   });
 
   it("never starts orchestration while a human owns the conversation", async () => {
@@ -78,5 +82,17 @@ describe("KoralWebChatRuntimeAdapter", () => {
     }, now);
     expect(identities.resolveAuthenticated).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", sessionId: "session-1" }), now);
     expect(identities.resolveAnonymous).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before message persistence when authenticated session evidence is invalid", async () => {
+    identities.resolveAuthenticated.mockRejectedValueOnce(new Error("AUTHENTICATION_EVIDENCE_INVALID"));
+    await expect(adapter.receive({
+      message,
+      principal: { userId: "user-1", sessionId: "revoked-session" },
+      deadlineAt: "2026-08-22T12:00:20.000Z",
+    }, now)).rejects.toThrow("AUTHENTICATION_EVIDENCE_INVALID");
+    expect(conversations.receiveInbound).not.toHaveBeenCalled();
+    expect(bindings.bindEffective).not.toHaveBeenCalled();
+    expect(orchestrator.run).not.toHaveBeenCalled();
   });
 });

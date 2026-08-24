@@ -18,6 +18,9 @@ export const KORAL_ORCHESTRATOR_CONTRACT_VERSION = "1.0.0" as const;
 export interface ConversationContext {
   version: typeof KORAL_ORCHESTRATOR_CONTRACT_VERSION;
   conversationId: string;
+  /** Exact optimistic version observed while building context. It must be
+   * supplied unchanged when committing an automated response. */
+  conversationVersion: number;
   status: ConversationStatus;
   participantSummary: Array<{ kind: string; channel?: string }>;
   recentMessages: Array<{ id: string; direction: string; contentType: string; body?: string; occurredAt: Date }>;
@@ -91,6 +94,9 @@ export interface KoralOrchestrationRunInput {
   normalizedMessageId: string;
   correlationId: string;
   deadlineAt: string;
+  /** Request-scoped assurance revalidated for this invocation. Historical
+   * ConversationIdentityBinding rows are evidence only and never authorize. */
+  effectiveIdentity: ResolvedIdentityContext;
 }
 
 export type KoralOrchestrationRunResult =
