@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PaymentOrderDetailPage } from "./PaymentOrderDetailPage";
 import { buildCurrentUser, mockAuthFetch, renderWithAuth } from "../../../test-utils/auth-test-helpers";
@@ -40,42 +39,18 @@ describe("PaymentOrderDetailPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("Example (AC): initiating then approving a refund updates the visible status to Reembolsado", async () => {
-    let order = buildOrder({ status: "APPROVED", statusLabel: "Aprobado" });
-    let refunds: Array<Record<string, unknown>> = [];
-
-    renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read", "payments.refund", "payments.refund.approve"] }), (url, init) => {
+  it("keeps sensitive refund actions disabled even when the actor has mutation permissions", async () => {
+    renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read", "payments.refund", "payments.refund.approve"] }), (url) => {
       if (url.includes("/admin/payment-orders/order-1/events")) return jsonResponse(200, []);
-      if (url.includes("/admin/refunds") && init?.method === "POST" && url.includes("approve")) {
-        refunds = refunds.map((r) => ({ ...r, status: "APPROVED" }));
-        order = buildOrder({ status: "REFUNDED", statusLabel: "Reembolsado" });
-        return jsonResponse(200, refunds[0]);
-      }
-      if (url.includes("/admin/refunds")) return jsonResponse(200, refunds);
-      if (url.includes("/payments/REF-0001/refund") && init?.method === "POST") {
-        const newRefund = { id: "refund-1", paymentOrderId: "order-1", amountCents: 500_000, reason: "Prueba", hasEvidence: false, status: "PENDING_APPROVAL", approvedByUserId: null, providerReference: null, createdAt: "2026-01-01T00:00:00.000Z" };
-        refunds = [newRefund];
-        return jsonResponse(201, newRefund);
-      }
-      if (url.includes("/admin/payment-orders/order-1")) return jsonResponse(200, order);
+      if (url.includes("/admin/refunds")) return jsonResponse(200, [{ id: "refund-1", paymentOrderId: "order-1", amountCents: 500_000, reason: "Dato sensible que no debe renderizarse", hasEvidence: false, status: "PENDING_APPROVAL", approvedByUserId: null, providerReference: null, createdAt: "2026-01-01T00:00:00.000Z" }]);
+      if (url.includes("/admin/payment-orders/order-1")) return jsonResponse(200, buildOrder());
       return undefined;
     });
 
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Iniciar reembolso" }));
-
-    await screen.findByRole("dialog");
-    await user.type(screen.getByLabelText("Monto (centavos COP)", { exact: false }), "500000");
-    await user.type(screen.getByLabelText("Motivo"), "Prueba de reembolso completo.");
-    await user.click(screen.getByRole("button", { name: "Solicitar reembolso" }));
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    const approveButton = await screen.findByRole("button", { name: "Aprobar" });
-    await user.click(approveButton);
-
-    await waitFor(async () => {
-      expect(await screen.findByText("Reembolsado")).toBeInTheDocument();
-    });
+    expect(await screen.findByRole("button", { name: "Iniciar reembolso" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Aprobar" })).toBeDisabled();
+    expect(screen.getByText("ACTION_DISABLED_BACKEND_GOVERNANCE_REQUIRED")).toBeInTheDocument();
+    expect(screen.queryByText("Dato sensible que no debe renderizarse")).not.toBeInTheDocument();
   });
 
   it("Negative case (AC): an actor with only payments.read sees the refund action disabled with an explanatory tooltip", async () => {
@@ -88,6 +63,19 @@ describe("PaymentOrderDetailPage", () => {
 
     const refundButton = await screen.findByRole("button", { name: "Iniciar reembolso" });
     expect(refundButton).toBeDisabled();
-    expect(refundButton).toHaveAttribute("title", "No tienes permiso para solicitar reembolsos.");
+    expect(refundButton).toHaveAttribute("title", "ACTION_DISABLED_BACKEND_GOVERNANCE_REQUIRED");
+  });
+
+  it("renders sanitized event observability without exposing provider payload", async () => {
+    renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.read"] }), (url) => {
+      if (url.includes("/admin/payment-orders/order-1/events")) return jsonResponse(200, [{ id: "event-1", source: "BOLD", eventType: "payment.approved", payload: { token: "never-render-this-value" }, receivedAt: "2026-01-01T00:00:00.000Z", processedAt: "2026-01-01T00:01:00.000Z" }]);
+      if (url.includes("/admin/refunds")) return jsonResponse(200, []);
+      if (url.includes("/admin/payment-orders/order-1")) return jsonResponse(200, buildOrder());
+      return undefined;
+    });
+
+    expect(await screen.findByText("BOLD · payment.approved")).toBeInTheDocument();
+    expect(screen.getByText("Procesado")).toBeInTheDocument();
+    expect(screen.queryByText("never-render-this-value")).not.toBeInTheDocument();
   });
 });
