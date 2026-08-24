@@ -1,13 +1,16 @@
-import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Dialog, EmptyState, ErrorState, FormField, Input, PageHeader, Skeleton, Textarea } from "@asodef/ui";
-import { approveRefund, getPaymentOrder, listPaymentEvents, listRefundsForOrder, requestRefund } from "../../../lib/admin/admin-payments-api";
+import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton } from "@asodef/ui";
+import { getPaymentOrder, listPaymentEvents, listRefundsForOrder } from "../../../lib/admin/admin-payments-api";
 import { getReceiptDownloadUrl } from "../../../lib/payments/payments-api";
 import { getAdminErrorMessage } from "../../../lib/admin/admin-error-messages";
 import { queryKeys } from "../../../lib/query-keys";
-import { useAuth } from "../../../lib/auth/auth-context";
 import { REFUND_STATUS_LABELS } from "../../../lib/admin/admin-payments-types";
+import {
+  GovernanceDisabledButton,
+  GovernanceRequirementDescription,
+  SensitiveActionUnavailable,
+} from "../operations/SensitiveActionUnavailable";
 
 function formatMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
@@ -19,20 +22,12 @@ function formatDateTime(value: string): string {
 
 /**
  * US-063 AC1/AC4/AC5: full PaymentEvent history, receipt download,
- * initiate/approve refunds with required reason. AC5's negative case:
- * a payments.read-only actor sees the refund action disabled with a
- * tooltip, not hidden.
+ * read-only refund and event observability. Sensitive mutations remain
+ * unavailable until their backend boundary supplies the complete governance
+ * contract; the browser never manufactures those guarantees.
  */
 export function PaymentOrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { hasPermission } = useAuth();
-  const canRequestRefund = hasPermission("payments.refund");
-  const canApproveRefund = hasPermission("payments.refund.approve");
-  const queryClient = useQueryClient();
-
-  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
-  const [refundAmount, setRefundAmount] = useState("");
-  const [refundReason, setRefundReason] = useState("");
 
   const orderQuery = useQuery({
     queryKey: queryKeys.admin.payments.order(orderId!),
@@ -48,26 +43,6 @@ export function PaymentOrderDetailPage() {
     queryKey: queryKeys.admin.payments.refunds(orderId!),
     queryFn: ({ signal }) => listRefundsForOrder(orderId!, signal),
     enabled: !!orderId,
-  });
-
-  function invalidate() {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.payments.order(orderId!) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.payments.refunds(orderId!) });
-  }
-
-  const requestRefundMutation = useMutation({
-    mutationFn: () => requestRefund(orderQuery.data!.publicReference, Number(refundAmount), refundReason),
-    onSuccess: () => {
-      invalidate();
-      setRefundDialogOpen(false);
-      setRefundAmount("");
-      setRefundReason("");
-    },
-  });
-
-  const approveRefundMutation = useMutation({
-    mutationFn: (refundId: string) => approveRefund(refundId),
-    onSuccess: invalidate,
   });
 
   if (orderQuery.isLoading) {
@@ -89,8 +64,6 @@ export function PaymentOrderDetailPage() {
   const order = orderQuery.data;
   if (!order) return null;
 
-  const canRequestNewRefund = canRequestRefund && order.status === "APPROVED";
-
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
@@ -104,6 +77,9 @@ export function PaymentOrderDetailPage() {
           </a>
         }
       />
+
+      <SensitiveActionUnavailable domain="Pagos y reembolsos" />
+      <GovernanceRequirementDescription />
 
       <section aria-labelledby="order-summary-heading" className="rounded-2xl border border-border-soft p-5">
         <h2 id="order-summary-heading" className="font-display text-lg font-semibold text-text-main">
@@ -129,20 +105,7 @@ export function PaymentOrderDetailPage() {
         </dl>
 
         <div className="mt-5">
-          <Button
-            type="button"
-            disabled={!canRequestNewRefund || requestRefundMutation.isPending}
-            title={
-              !canRequestRefund
-                ? "No tienes permiso para solicitar reembolsos."
-                : order.status !== "APPROVED"
-                  ? "Solo se pueden solicitar reembolsos para órdenes aprobadas."
-                  : undefined
-            }
-            onClick={() => setRefundDialogOpen(true)}
-          >
-            Iniciar reembolso
-          </Button>
+          <GovernanceDisabledButton label="Iniciar reembolso" />
         </div>
       </section>
 
@@ -161,27 +124,20 @@ export function PaymentOrderDetailPage() {
               <li key={refund.id} className="flex items-center justify-between gap-3 rounded-xl border border-border-soft p-3">
                 <div>
                   <p className="font-medium text-text-main">{formatMoney(refund.amountCents, order.currency)}</p>
-                  <p className="text-text-muted">{refund.reason}</p>
+                  <p className="text-text-muted">Motivo registrado · contenido restringido</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant={refund.status === "APPROVED" ? "success" : "neutral"}>{REFUND_STATUS_LABELS[refund.status] ?? refund.status}</Badge>
+                  <Badge variant={refund.status === "APPROVED" ? "success" : "neutral"}>
+                    {REFUND_STATUS_LABELS[refund.status] ?? `Estado no reconocido (${refund.status})`}
+                  </Badge>
                   {refund.status === "PENDING_APPROVAL" && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!canApproveRefund || approveRefundMutation.isPending}
-                      title={!canApproveRefund ? "No tienes permiso para aprobar reembolsos." : undefined}
-                      onClick={() => approveRefundMutation.mutate(refund.id)}
-                    >
-                      Aprobar
-                    </Button>
+                    <GovernanceDisabledButton label="Aprobar" />
                   )}
                 </div>
               </li>
             ))}
           </ul>
         )}
-        {approveRefundMutation.isError && <ErrorState description={getAdminErrorMessage(approveRefundMutation.error)} />}
       </section>
 
       <section aria-labelledby="events-heading" className="rounded-2xl border border-border-soft p-5">
@@ -201,40 +157,23 @@ export function PaymentOrderDetailPage() {
                   {event.source} · {event.eventType}
                 </p>
                 <p className="text-text-muted">{formatDateTime(event.receivedAt)}</p>
-                {!event.processedAt && <Badge variant="warning">Sin procesar</Badge>}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {event.processedAt ? (
+                    <Badge variant="success">Procesado</Badge>
+                  ) : (
+                    <Badge variant="warning">Pendiente de procesamiento</Badge>
+                  )}
+                  {event.processedAt && (
+                    <span className="text-xs text-text-muted">
+                      {formatDateTime(event.processedAt)}
+                    </span>
+                  )}
+                </div>
               </li>
             ))}
           </ol>
         )}
       </section>
-
-      <Dialog open={refundDialogOpen} onClose={() => setRefundDialogOpen(false)} title="Iniciar reembolso" description="El monto y el motivo son requeridos.">
-        <div className="flex flex-col gap-4">
-          <FormField label="Monto (centavos COP)" required>
-            {(controlProps) => <Input {...controlProps} type="number" min={1} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} />}
-          </FormField>
-          <div>
-            <label htmlFor="refund-reason" className="mb-1.5 block text-sm font-medium text-text-main">
-              Motivo
-            </label>
-            <Textarea id="refund-reason" required rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} />
-          </div>
-          {requestRefundMutation.isError && <ErrorState description={getAdminErrorMessage(requestRefundMutation.error)} />}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => setRefundDialogOpen(false)} disabled={requestRefundMutation.isPending}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              loading={requestRefundMutation.isPending}
-              disabled={!refundAmount || !refundReason.trim()}
-              onClick={() => requestRefundMutation.mutate()}
-            >
-              Solicitar reembolso
-            </Button>
-          </div>
-        </div>
-      </Dialog>
     </div>
   );
 }

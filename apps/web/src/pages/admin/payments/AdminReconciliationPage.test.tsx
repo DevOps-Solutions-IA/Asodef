@@ -64,7 +64,8 @@ describe("AdminReconciliationPage", () => {
 
     await screen.findByRole("heading", { name: "Diferencias" });
     expect(screen.getAllByText("Diferencia de monto").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "Resolver" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resolver" })).toBeDisabled();
+    expect(screen.getByText("ACTION_DISABLED_BACKEND_GOVERNANCE_REQUIRED")).toBeInTheDocument();
   });
 
   it("Negative case: the resolve action is disabled without payments.reconcile", async () => {
@@ -79,5 +80,19 @@ describe("AdminReconciliationPage", () => {
 
     expect(await screen.findByRole("button", { name: "Resolver" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Ejecutar conciliación" })).toBeDisabled();
+  });
+
+  it("does not render technical resolution notes", async () => {
+    renderPage(buildCurrentUser({ roles: ["FINANCE"], permissions: ["payments.reconcile"] }), (url) => {
+      if (url.includes("/admin/reconciliation/runs/run-1/differences")) return jsonResponse(200, [{ ...buildDifference({ resolutionStatus: "RESOLVED" }), resolutionNotes: "Detalle financiero reservado", resolvedAt: "2026-01-02T00:00:00.000Z" }]);
+      if (url.includes("/admin/reconciliation/runs")) return jsonResponse(200, [buildRun()]);
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByText(/1 diferencia/));
+
+    expect(await screen.findByText(/Resolución registrada/)).toBeInTheDocument();
+    expect(screen.queryByText("Detalle financiero reservado")).not.toBeInTheDocument();
   });
 });
