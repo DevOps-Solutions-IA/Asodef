@@ -4,9 +4,7 @@ export type ConnectContractVersion = typeof CONNECT_CONTRACT_VERSION;
 export type JsonSchema = Readonly<Record<string, unknown>>;
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
-  | JsonPrimitive
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
+  JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 export type JsonObject = { readonly [key: string]: JsonValue };
 
 export interface ContractError {
@@ -127,6 +125,27 @@ export interface GatewayPolicyContext {
   dataClassification: DataClassification;
 }
 
+export const GATEWAY_AUDIENCES = [
+  "PUBLIC",
+  "AUTHENTICATED_AFFILIATE",
+  "COMPANY_PARTNER",
+  "INTERNAL",
+  "ADMIN_ONLY",
+] as const;
+export type GatewayAudience = (typeof GATEWAY_AUDIENCES)[number];
+
+/** Effective data scope resolved by trusted server-side identity and
+ * membership services. Browser input, prompts, model output and tool
+ * arguments are never authorities for these fields. */
+export interface GatewayEffectiveScope {
+  authority: "SERVER_SIDE";
+  tenantKey: "ASODEF";
+  audience: GatewayAudience;
+  organizationIds: readonly string[];
+  affiliateSubjectId?: string;
+  maximumDataClassification: DataClassification;
+}
+
 /** Shared orchestrator boundary. It deliberately carries neither credentials
  * nor persistence clients. A Koral identity never replaces the effective
  * actor whose permissions and audit attribution are enforced. */
@@ -135,6 +154,9 @@ export interface GatewayRequestContext {
   identity: GatewayIdentityContext;
   audit: GatewayAuditContext;
   policy: GatewayPolicyContext;
+  /** Optional for compatibility with existing non-Knowledge gateways.
+   * Knowledge retrieval requires it and fails closed when absent. */
+  effectiveScope?: GatewayEffectiveScope;
   /** Immutable orchestration deadline. Adapters may shorten, never extend it. */
   deadlineAt: string;
 }
@@ -178,6 +200,30 @@ export const GATEWAY_CONTEXT_SCHEMA = Object.freeze({
         "piiPolicy",
         "dataClassification",
       ],
+    },
+    effectiveScope: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "authority",
+        "tenantKey",
+        "audience",
+        "organizationIds",
+        "maximumDataClassification",
+      ],
+      properties: {
+        authority: { const: "SERVER_SIDE" },
+        tenantKey: { const: "ASODEF" },
+        audience: { enum: GATEWAY_AUDIENCES },
+        organizationIds: {
+          type: "array",
+          maxItems: 100,
+          uniqueItems: true,
+          items: { type: "string", minLength: 1, maxLength: 100 },
+        },
+        affiliateSubjectId: { type: "string", minLength: 1, maxLength: 100 },
+        maximumDataClassification: { enum: DATA_CLASSIFICATIONS },
+      },
     },
     deadlineAt: { type: "string", format: "date-time" },
   },

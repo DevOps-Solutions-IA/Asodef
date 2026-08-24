@@ -58,35 +58,42 @@ model User {
   passwordResets                    PasswordReset[]
   passwordHistory                   PasswordHistoryEntry[]
   loginAttempts                     LoginAttempt[]
-  securityEvents                    SecurityEvent[]            @relation("SecurityEventLegacyUser")
-  securityEventsActed               SecurityEvent[]            @relation("SecurityEventActor")
-  securityEventsSubjected           SecurityEvent[]            @relation("SecurityEventSubject")
+  securityEvents                    SecurityEvent[]                @relation("SecurityEventLegacyUser")
+  securityEventsActed               SecurityEvent[]                @relation("SecurityEventActor")
+  securityEventsSubjected           SecurityEvent[]                @relation("SecurityEventSubject")
   notificationJobs                  NotificationJob[]
   adminMfaCredential                AdminMfaCredential?
   adminMfaLoginChallenges           AdminMfaLoginChallenge[]
-  approvedLegalDocumentVersions     LegalDocumentVersion[]     @relation("LegalDocumentVersionApprover")
-  auditLogActions                   AuditLog[]                 @relation("AuditLogActor")
+  approvedLegalDocumentVersions     LegalDocumentVersion[]         @relation("LegalDocumentVersionApprover")
+  auditLogActions                   AuditLog[]                     @relation("AuditLogActor")
   consentRecords                    ConsentRecord[]
-  assignedDataSubjectRequests       DataSubjectRequest[]       @relation("DataSubjectRequestAssignee")
+  assignedDataSubjectRequests       DataSubjectRequest[]           @relation("DataSubjectRequestAssignee")
   anonymizationLogActions           AnonymizationLog[]
-  assignedProspects                 Prospect[]                 @relation("ProspectAssignee")
-  assignedOpportunities             Opportunity[]              @relation("OpportunityAssignee")
-  opportunityStageChanges           OpportunityStatusHistory[] @relation("OpportunityStatusChangedBy")
-  assignedCommercialActivities      CommercialActivity[]       @relation("CommercialActivityAssignee")
-  uploadedContractVersions          ContractVersion[]          @relation("ContractVersionUploader")
-  issuedContractDownloadTokens      ContractDownloadToken[]    @relation("ContractDownloadTokenIssuer")
-  approvedRefunds                   Refund[]                   @relation("RefundApprover")
+  assignedProspects                 Prospect[]                     @relation("ProspectAssignee")
+  assignedOpportunities             Opportunity[]                  @relation("OpportunityAssignee")
+  opportunityStageChanges           OpportunityStatusHistory[]     @relation("OpportunityStatusChangedBy")
+  assignedCommercialActivities      CommercialActivity[]           @relation("CommercialActivityAssignee")
+  uploadedContractVersions          ContractVersion[]              @relation("ContractVersionUploader")
+  issuedContractDownloadTokens      ContractDownloadToken[]        @relation("ContractDownloadTokenIssuer")
+  approvedRefunds                   Refund[]                       @relation("RefundApprover")
   reconciliationRuns                Reconciliation[]
-  resolvedReconciliationDifferences ReconciliationDifference[] @relation("ReconciliationDifferenceResolver")
+  resolvedReconciliationDifferences ReconciliationDifference[]     @relation("ReconciliationDifferenceResolver")
   requestedExportJobs               ExportJob[]
   approvedApprovalGates             ApprovalGate[]
   adminIdempotencyRecords           AdminIdempotency[]
   koralParticipants                 ConversationParticipant[]
-  koralAssignments                  ConversationAssignment[]   @relation("ConversationAssignmentAssignee")
-  koralAssignmentsMade              ConversationAssignment[]   @relation("ConversationAssignmentActor")
+  koralAssignments                  ConversationAssignment[]       @relation("ConversationAssignmentAssignee")
+  koralAssignmentsMade              ConversationAssignment[]       @relation("ConversationAssignmentActor")
   koralInternalNotes                ConversationInternalNote[]
   koralConversationEvents           ConversationEvent[]
   koralConversationReadStates       ConversationReadState[]
+  knowledgeItemsCreated             KnowledgeItem[]                @relation("KnowledgeItemCreator")
+  knowledgeVersionsCreated          KnowledgeVersion[]             @relation("KnowledgeVersionCreator")
+  knowledgeVersionsReviewed         KnowledgeVersion[]             @relation("KnowledgeVersionReviewer")
+  knowledgeVersionsApproved         KnowledgeVersion[]             @relation("KnowledgeVersionApprover")
+  knowledgeVersionsPublished        KnowledgeVersion[]             @relation("KnowledgeVersionPublisher")
+  knowledgePublicationSnapshots     KnowledgePublicationSnapshot[] @relation("KnowledgeSnapshotPublisher")
+  knowledgeAuditEvents              KnowledgeAuditEvent[]          @relation("KnowledgeAuditActor")
 
   @@map("users")
 }
@@ -2770,6 +2777,236 @@ enum ExportJobStatus {
   FAILED
 
   @@map("export_job_status")
+}
+
+// ASODEF / Koral governed Knowledge V1. KnowledgeItem is the stable
+// identity; lifecycle belongs to immutable KnowledgeVersion records.
+enum KnowledgeLifecycleStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  RETIRED
+
+  @@map("knowledge_lifecycle_status")
+}
+
+enum KnowledgeSourceType {
+  MANUAL_AUTHORING
+  FILE_UPLOAD
+  OFFICIAL_WEB_IMPORT
+
+  @@map("knowledge_source_type")
+}
+
+enum KnowledgeDomain {
+  ASODEF_INSTITUCIONAL
+  SERVICIOS_Y_PROTECCION
+  AFILIACIONES
+  PLANES_Y_COBERTURAS
+  BENEFICIARIOS
+  REQUISITOS
+  BENEFICIOS_Y_CONVENIOS
+  AUXILIOS_Y_PROTECCIONES
+  SOLICITUD_DE_SERVICIO
+  PAGOS_ORIENTACION
+  PQR
+  ACTUALIZACION_DE_DATOS
+  CONTACTO_Y_CANALES
+  PREGUNTAS_FRECUENTES
+
+  @@map("knowledge_domain")
+}
+
+enum KnowledgeAudience {
+  PUBLIC
+  AUTHENTICATED_AFFILIATE
+  INTERNAL
+  ADMIN_ONLY
+
+  @@map("knowledge_audience")
+}
+
+enum KnowledgeDataClassification {
+  PUBLIC
+  INTERNAL
+  PERSONAL
+  SENSITIVE
+  HIGHLY_SENSITIVE
+
+  @@map("knowledge_data_classification")
+}
+
+model KnowledgeItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantKey   String   @map("tenant_key")
+  stableKey   String   @map("stable_key")
+  revision    Int      @default(0)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy            User                           @relation("KnowledgeItemCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  versions             KnowledgeVersion[]
+  publicationSnapshots KnowledgePublicationSnapshot[]
+  auditEvents           KnowledgeAuditEvent[]
+
+  @@unique([tenantKey, stableKey])
+  @@index([tenantKey])
+  @@map("knowledge_items")
+}
+
+model KnowledgeVersion {
+  id                     String                      @id @default(uuid()) @db.Uuid
+  knowledgeItemId        String                      @map("knowledge_item_id") @db.Uuid
+  version                Int
+  revision               Int                         @default(0)
+  title                  String
+  domain                 KnowledgeDomain
+  audience               KnowledgeAudience
+  classification         KnowledgeDataClassification
+  language               String
+  content                String
+  status                 KnowledgeLifecycleStatus    @default(DRAFT)
+  effectiveFrom          DateTime?                   @map("effective_from") @db.Timestamptz(3)
+  effectiveUntil         DateTime?                   @map("effective_until") @db.Timestamptz(3)
+  requiresRevalidationAt DateTime?                   @map("requires_revalidation_at") @db.Timestamptz(3)
+  changeReason           String                      @map("change_reason")
+  createdById            String                      @map("created_by_id") @db.Uuid
+  reviewedById           String?                     @map("reviewed_by_id") @db.Uuid
+  approvedById           String?                     @map("approved_by_id") @db.Uuid
+  publishedById          String?                     @map("published_by_id") @db.Uuid
+  createdAt              DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  reviewedAt             DateTime?                   @map("reviewed_at") @db.Timestamptz(3)
+  approvedAt             DateTime?                   @map("approved_at") @db.Timestamptz(3)
+  publishedAt            DateTime?                   @map("published_at") @db.Timestamptz(3)
+  retiredAt              DateTime?                   @map("retired_at") @db.Timestamptz(3)
+
+  knowledgeItem       KnowledgeItem                 @relation(fields: [knowledgeItemId], references: [id], onDelete: Restrict)
+  source              KnowledgeSource?
+  chunks              KnowledgeChunk[]
+  publicationSnapshot KnowledgePublicationSnapshot?
+  createdBy           User                          @relation("KnowledgeVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy          User?                         @relation("KnowledgeVersionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  approvedBy          User?                         @relation("KnowledgeVersionApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  publishedBy         User?                         @relation("KnowledgeVersionPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  auditEvents         KnowledgeAuditEvent[]
+
+  @@unique([knowledgeItemId, version])
+  @@index([status, domain, audience, language])
+  @@index([effectiveFrom, effectiveUntil])
+  @@map("knowledge_versions")
+}
+
+model KnowledgeSource {
+  id                 String              @id @default(uuid()) @db.Uuid
+  knowledgeVersionId String              @unique @map("knowledge_version_id") @db.Uuid
+  sourceType         KnowledgeSourceType @map("source_type")
+  sourceReference    String              @map("source_reference")
+  sourceOwner        String              @map("source_owner")
+  sourceChecksum     String              @map("source_checksum")
+  originalFileName   String?             @map("original_file_name")
+  mimeType           String?             @map("mime_type")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  knowledgeVersion KnowledgeVersion               @relation(fields: [knowledgeVersionId], references: [id], onDelete: Cascade)
+  snapshots        KnowledgePublicationSnapshot[]
+
+  @@index([sourceType, sourceChecksum])
+  @@map("knowledge_sources")
+}
+
+model KnowledgeChunk {
+  id                 String   @id @default(uuid()) @db.Uuid
+  knowledgeVersionId String   @map("knowledge_version_id") @db.Uuid
+  ordinal            Int
+  content            String
+  checksumSha256     String   @map("checksum_sha256")
+  tokenEstimate      Int      @map("token_estimate")
+  metadata           Json
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  knowledgeVersion KnowledgeVersion @relation(fields: [knowledgeVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeVersionId, ordinal])
+  @@index([knowledgeVersionId, ordinal])
+  @@map("knowledge_chunks")
+}
+
+model KnowledgePublicationSnapshot {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  knowledgeVersionId  String                      @unique @map("knowledge_version_id") @db.Uuid
+  knowledgeItemId     String                      @map("knowledge_item_id") @db.Uuid
+  sourceId            String                      @map("source_id") @db.Uuid
+  domain              KnowledgeDomain
+  audience            KnowledgeAudience
+  classification      KnowledgeDataClassification
+  language            String
+  sourceReference     String                      @map("source_reference")
+  sourceChecksum      String                      @map("source_checksum")
+  chunkSetChecksum    String                      @map("chunk_set_checksum")
+  publishedById       String                      @map("published_by_id") @db.Uuid
+  publishedAt         DateTime                    @map("published_at") @db.Timestamptz(3)
+  effectiveFrom       DateTime?                   @map("effective_from") @db.Timestamptz(3)
+  effectiveUntil      DateTime?                   @map("effective_until") @db.Timestamptz(3)
+
+  knowledgeVersion KnowledgeVersion @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
+  knowledgeItem    KnowledgeItem    @relation(fields: [knowledgeItemId], references: [id], onDelete: Restrict)
+  source           KnowledgeSource  @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  publishedBy      User             @relation("KnowledgeSnapshotPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+
+  @@index([domain, audience, language, publishedAt], map: "knowledge_snapshots_filter_published_idx")
+  @@index([knowledgeItemId, publishedAt], map: "knowledge_snapshots_item_published_at_idx")
+  @@map("knowledge_publication_snapshots")
+}
+
+// Knowledge governance has its own immutable, append-only audit stream. It is
+// merged into the central operator timeline without expanding the closed
+// entity union or constraint of historical AuditLog.
+model KnowledgeAuditEvent {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  knowledgeVersionId String                    @map("knowledge_version_id") @db.Uuid
+  knowledgeItemId    String                    @map("knowledge_item_id") @db.Uuid
+  actorUserId        String?                   @map("actor_user_id") @db.Uuid
+  tenantKey          String                    @map("tenant_key")
+  action             String
+  previousStatus     KnowledgeLifecycleStatus? @map("previous_status")
+  nextStatus         KnowledgeLifecycleStatus? @map("next_status")
+  result             AuditEventResult
+  correlationId      String?                   @map("correlation_id")
+  requestId          String?                   @map("request_id")
+  changeReason       String?                   @map("change_reason")
+  sanitizedMetadata  Json                      @map("sanitized_metadata")
+  createdAt          DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  knowledgeVersion KnowledgeVersion @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
+  knowledgeItem    KnowledgeItem    @relation(fields: [knowledgeItemId], references: [id], onDelete: Restrict)
+  actorUser        User?            @relation("KnowledgeAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([knowledgeItemId, createdAt])
+  @@index([knowledgeVersionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([correlationId])
+  @@map("knowledge_audit_events")
+}
+
+model KnowledgeRetrievalAudit {
+  id               String            @id @default(uuid()) @db.Uuid
+  effectiveActorId String            @map("effective_actor_id")
+  principalType    String            @map("principal_type")
+  tenantKey        String            @map("tenant_key")
+  audience         KnowledgeAudience
+  queryDigest      String            @map("query_digest")
+  result           String
+  reasonCode       String?           @map("reason_code")
+  correlationId    String            @map("correlation_id")
+  citationCount    Int               @map("citation_count")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([correlationId])
+  @@index([tenantKey, audience, createdAt])
+  @@map("knowledge_retrieval_audits")
 }
 
 // US-064 AC2: "large exports (>1000 rows) run via a background job with

@@ -5,6 +5,7 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 export enum AuditTimelineSourceFilter {
   ALL = "ALL",
   AUDIT = "AUDIT",
+  KNOWLEDGE = "KNOWLEDGE",
   SECURITY = "SECURITY",
 }
 

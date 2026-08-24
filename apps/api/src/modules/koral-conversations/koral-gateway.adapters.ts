@@ -274,10 +274,21 @@ export class CanonicalKoralKnowledgeGatewayAdapter
     }
     return {
       kind: "FOUND",
+      outcome: result.response.outcome,
       passages: result.response.citations.map((citation) => ({
         reference: `${citation.publicationId}:${citation.knowledgeVersionId}`,
         content: citation.excerpt,
         classification: citation.dataClassification,
+        score: citation.score,
+        trace: {
+          publicationSnapshotId: citation.publicationId,
+          knowledgeItemId: citation.knowledgeItemId,
+          knowledgeVersionId: citation.knowledgeVersionId,
+          knowledgeChunkId: citation.knowledgeChunkId,
+          knowledgeSourceId: citation.knowledgeSourceId,
+          sourceReference: citation.sourceReference,
+          sourceChecksumSha256: citation.sourceChecksumSha256,
+        },
       })),
       correlationId: result.response.correlationId,
     };

@@ -172,15 +172,24 @@ describe("canonical Connect gateway reconciliation", () => {
         ok: true,
         response: {
           version: "v1",
+          outcome: "SUFFICIENT_EVIDENCE",
           correlationId: "correlation-1",
           citations: [
             {
               publicationId: "publication-1",
+              knowledgeItemId: "item-1",
               knowledgeVersionId: "version-1",
-              documentId: "document-1",
+              knowledgeChunkId: "chunk-1",
+              knowledgeSourceId: "source-1",
               title: "Approved",
               excerpt: "Approved excerpt",
               dataClassification: "INTERNAL",
+              audience: "INTERNAL",
+              language: "es",
+              sourceReference: "https://asodef.com.co/conocimiento",
+              sourceChecksumSha256:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              score: 1,
             },
           ],
         },
@@ -198,12 +207,17 @@ describe("canonical Connect gateway reconciliation", () => {
     ).resolves.toMatchObject({ kind: "SUCCEEDED", replayed: false });
     await expect(
       new CanonicalKoralKnowledgeGatewayAdapter({ search }).search(
-        { query: "approved", collectionIds: ["collection-1"], limit: 1 },
+        {
+          query: "approved",
+          domainKeys: ["ASODEF_INSTITUCIONAL"],
+          limit: 1,
+        },
         context,
       ),
     ).resolves.toMatchObject({
       kind: "FOUND",
-      passages: [{ classification: "INTERNAL" }],
+      outcome: "SUFFICIENT_EVIDENCE",
+      passages: [{ classification: "INTERNAL", trace: { knowledgeItemId: "item-1" } }],
     });
   });
 
