@@ -74,6 +74,16 @@ describe("KoralWebChatWidget", () => {
     expect(screen.queryByText(/stream/iu)).not.toBeInTheDocument();
   });
 
+  it("describes HUMAN_REQUIRED honestly without claiming active advisor progress", async () => {
+    const api = client(snapshot({ status: "HUMAN_REQUIRED", aiAutoReplyAllowed: false }));
+    render(<KoralWebChatWidget client={api} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abrir chat con Koral" }));
+
+    expect(await screen.findByText("Se requiere atención de un asesor")).toBeVisible();
+    expect(screen.getByText(/Koral no puede continuar automáticamente/iu)).toBeVisible();
+    expect(screen.queryByText("Buscando un asesor")).not.toBeInTheDocument();
+  });
+
   it("keeps the mutation cooldown after a successful reconnect refresh", async () => {
     const api = client();
     vi.mocked(api.sendMessage).mockRejectedValueOnce(new ApiError({

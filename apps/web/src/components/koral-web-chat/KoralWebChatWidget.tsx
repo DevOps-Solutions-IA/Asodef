@@ -7,7 +7,7 @@ import type { WebChatConversationStatus, WebChatMessage } from "../../lib/koral-
 const STATUS_COPY: Readonly<Record<WebChatConversationStatus, string>> = {
   AI_ACTIVE: "Koral disponible",
   WAITING_USER: "Koral espera tu respuesta",
-  HUMAN_REQUIRED: "Buscando un asesor",
+  HUMAN_REQUIRED: "Se requiere atención de un asesor",
   HUMAN_ACTIVE: "Un asesor atiende esta conversación",
   WAITING_INTERNAL: "Procesando tu solicitud",
   RESOLVED: "Conversación resuelta",
@@ -94,6 +94,16 @@ export function KoralWebChatWidget({ client }: KoralWebChatWidgetProps) {
             aiAutoReplyAllowed={chat.snapshot?.conversation.aiAutoReplyAllowed}
             offline={chat.offline}
           />
+
+          {chat.snapshot?.conversation.status === "HUMAN_REQUIRED" && (
+            <div
+              className="border-b border-warning/20 bg-brand-orange-50 px-4 py-2 text-xs leading-5 text-brand-orange-900"
+              role="status"
+              aria-live="polite"
+            >
+              Koral no puede continuar automáticamente con esta solicitud. Se requiere atención humana.
+            </div>
+          )}
 
           <div
             ref={transcriptRef}

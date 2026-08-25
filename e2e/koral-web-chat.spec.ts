@@ -108,7 +108,7 @@ test.describe
     const firstClientMessageId = clientMessageIdOf(firstPayload);
 
     await expect(
-      dialog.getByText("Buscando un asesor", { exact: true }),
+      dialog.getByText("Se requiere atención de un asesor", { exact: true }),
     ).toBeVisible();
     await expect(dialog.getByText(knowledgeQuestion, { exact: true })).toBeVisible();
     await assertCapabilityIsNotProjected(
@@ -192,7 +192,7 @@ test.describe
     );
     await expect(dialog.getByText(followUp, { exact: true })).toBeVisible();
     await expect(
-      dialog.getByText("Buscando un asesor", { exact: true }),
+      dialog.getByText("Se requiere atención de un asesor", { exact: true }),
     ).toBeVisible();
 
     await expect
@@ -262,7 +262,7 @@ test.describe
       resumedDialog.getByText(followUp, { exact: true }),
     ).toBeVisible();
     await expect(
-      resumedDialog.getByText("Buscando un asesor", { exact: true }),
+      resumedDialog.getByText("Se requiere atención de un asesor", { exact: true }),
     ).toBeVisible();
     await expect(
       resumedDialog.getByText("¿En qué podemos ayudarte?", { exact: true }),
@@ -304,7 +304,7 @@ test.describe
     const question = `¿Cuáles son los beneficios de ASODEF sobre inexistente${randomUUID().replaceAll("-", "")}?`;
     const result = await sendPublicQuestion(page, question);
     expect(result.response.status()).toBe(200);
-    await expect(result.dialog.getByText("Buscando un asesor", { exact: true })).toBeVisible();
+    await expect(result.dialog.getByText("Se requiere atención de un asesor", { exact: true })).toBeVisible();
 
     const persisted = await persistedInbound(result.clientMessageId);
     expect(persisted.webChatProcessing).toMatchObject({
@@ -328,7 +328,7 @@ test.describe
     const question = `¿Cuáles son los beneficios de ASODEF sobre ${CONFLICT_MARKER}?`;
     const result = await sendPublicQuestion(page, question);
     expect(result.response.status()).toBe(200);
-    await expect(result.dialog.getByText("Buscando un asesor", { exact: true })).toBeVisible();
+    await expect(result.dialog.getByText("Se requiere atención de un asesor", { exact: true })).toBeVisible();
 
     const persisted = await persistedInbound(result.clientMessageId);
     expect(persisted.conversation.status).toBe("HUMAN_REQUIRED");
