@@ -47,6 +47,43 @@ Servicios predeterminados:
 
 Comprueba la API en `http://localhost:3200/api/v1/health`.
 
+### Local Preview para revisión funcional
+
+Para revisar el producto integrado sobre el último `origin/main` certificado,
+usa un único comando:
+
+```bash
+scripts/local-preview-start.sh
+```
+
+El comando valida o crea
+`${XDG_RUNTIME_DIR:-/tmp}/asodef-local-preview-${UID}/runtime.env`, selecciona
+puertos locales aislados, construye Web con el destino API correcto y levanta
+PostgreSQL, Redis, API y Web reales. También aplica exactamente 51 migraciones,
+comprueba cero drift, ejecuta tres veces el seed idempotente y prepara datos
+sintéticos para la revisión administrativa.
+
+Los servicios se publican exclusivamente sobre la dirección de red
+`127.0.0.1`, mientras que las URLs canónicas consumidas por el navegador usan
+`localhost`. `runtime.env` conserva ambas URLs como fuente única para el build,
+la API, CORS y el harness de navegador; el comando de inicio las imprime sin
+exponer credenciales.
+
+El archivo `runtime.env` debe ser un archivo regular (no symlink), pertenecer al
+usuario actual y tener modo `0600`. Puede habilitar el runtime de IA con
+`AI_RUNTIME_ENABLED` y la configuración `OPENROUTER_*`; sus valores nunca se
+imprimen ni se incluyen en las imágenes. SMTP, Meta, WhatsApp, Firebird y pagos
+productivos permanecen deshabilitados en Local Preview.
+
+Para detener exclusivamente este stack y eliminar sus volúmenes locales:
+
+```bash
+scripts/local-preview-stop.sh
+```
+
+`stop` es idempotente y conserva `runtime.env`, incluidas las credenciales
+locales, para próximas revisiones. Ninguno de estos comandos toca producción.
+
 ## Desarrollo y calidad
 
 ```bash

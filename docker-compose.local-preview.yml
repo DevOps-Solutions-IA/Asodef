@@ -1,0 +1,151 @@
+x-api-environment: &api-environment
+  NODE_ENV: development
+  API_PORT: "3000"
+  APP_NAME: ASODEF_LOCAL_PREVIEW
+  APP_DOMAIN: localhost
+  APP_TIMEZONE: America/Bogota
+  PUBLIC_APP_URL: ${LOCAL_PREVIEW_WEB_URL:?LOCAL_PREVIEW_WEB_URL is required}
+  PUBLIC_API_URL: ${LOCAL_PREVIEW_API_URL:?LOCAL_PREVIEW_API_URL is required}
+  CORS_ORIGIN: ${LOCAL_PREVIEW_WEB_URL:?LOCAL_PREVIEW_WEB_URL is required}
+  DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  PASSWORD_RESET_TOKEN_SECRET: ${PASSWORD_RESET_TOKEN_SECRET:?PASSWORD_RESET_TOKEN_SECRET is required}
+  CONTRACT_DOWNLOAD_TOKEN_SECRET: ${CONTRACT_DOWNLOAD_TOKEN_SECRET:?CONTRACT_DOWNLOAD_TOKEN_SECRET is required}
+  ADMIN_ACCOUNT_EMAIL: ${ADMIN_ACCOUNT_EMAIL:?ADMIN_ACCOUNT_EMAIL is required}
+  ADMIN_RECOVERY_EMAIL: ${ADMIN_RECOVERY_EMAIL:?ADMIN_RECOVERY_EMAIL is required}
+  ADMIN_MFA_REQUIRED: ${ADMIN_MFA_REQUIRED:-true}
+  ASODEF_E2E_ADMIN_PASSWORD: ${ASODEF_E2E_ADMIN_PASSWORD:?ASODEF_E2E_ADMIN_PASSWORD is required}
+  ASODEF_E2E_ADMIN_MFA_SECRET: ${ASODEF_E2E_ADMIN_MFA_SECRET:?ASODEF_E2E_ADMIN_MFA_SECRET is required}
+  ASODEF_E2E_ADMIN_RECOVERY_CODES: ${ASODEF_E2E_ADMIN_RECOVERY_CODES:?ASODEF_E2E_ADMIN_RECOVERY_CODES is required}
+  AI_RUNTIME_ENABLED: ${AI_RUNTIME_ENABLED:-false}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+  OPENROUTER_TIMEOUT_MS: ${OPENROUTER_TIMEOUT_MS:-10000}
+  OPENROUTER_MAX_ATTEMPTS: ${OPENROUTER_MAX_ATTEMPTS:-2}
+  OPENROUTER_CIRCUIT_FAILURE_THRESHOLD: ${OPENROUTER_CIRCUIT_FAILURE_THRESHOLD:-3}
+  OPENROUTER_CIRCUIT_RESET_MS: ${OPENROUTER_CIRCUIT_RESET_MS:-30000}
+  BOLD_MODE: mock
+  PRODUCTION_PAYMENTS_ENABLED: "false"
+  SMTP_HOST: ""
+  SMTP_CONNECT_HOST: ""
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+  SMTP_FROM: ""
+  MASTER_FIREBIRD_ENABLED: "false"
+  EXTERNAL_CORE_PROVIDER: not_configured
+  SELF_SERVICE_MESSAGE_PROVIDER: not_configured
+  WHATSAPP_ENABLED: "false"
+  MESSENGER_ENABLED: "false"
+  INSTAGRAM_ENABLED: "false"
+  TRUST_PROXY: "false"
+  CORPORATE_EMAIL: preview@example.com
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${LOCAL_PREVIEW_POSTGRES_PORT:?LOCAL_PREVIEW_POSTGRES_PORT is required}:5432"
+    volumes:
+      - preview_postgres_data:/var/lib/postgresql/data
+    labels:
+      com.asodef.purpose: local-preview
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${LOCAL_PREVIEW_REDIS_PORT:?LOCAL_PREVIEW_REDIS_PORT is required}:6379"
+    volumes:
+      - preview_redis_data:/data
+    labels:
+      com.asodef.purpose: local-preview
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
+  initialize:
+    image: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}-api:local
+    environment:
+      <<: *api-environment
+      LOCAL_PREVIEW: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "/app/scripts/local-preview-init.sh"]
+    labels:
+      com.asodef.purpose: local-preview
+    restart: "no"
+
+  api:
+    image: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      <<: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${LOCAL_PREVIEW_API_PORT:?LOCAL_PREVIEW_API_PORT is required}:3000"
+    labels:
+      com.asodef.purpose: local-preview
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/api/v1/health/ready',(res)=>process.exit(res.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    image: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}-web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${LOCAL_PREVIEW_API_URL:?LOCAL_PREVIEW_API_URL is required}
+        VITE_APP_URL: ${LOCAL_PREVIEW_WEB_URL:?LOCAL_PREVIEW_WEB_URL is required}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${LOCAL_PREVIEW_WEB_PORT:?LOCAL_PREVIEW_WEB_PORT is required}:80"
+    labels:
+      com.asodef.purpose: local-preview
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  preview_postgres_data:
+  preview_redis_data:
