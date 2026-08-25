@@ -68,4 +68,33 @@ export interface KoralOutboundCommitInput {
   correlationId: string;
   contentType: string;
   body: string;
+  gatewayReferences?: readonly string[];
+}
+
+export interface KoralContextSnapshot {
+  conversationId: string;
+  conversationVersion: number;
+  status: ConversationStatus;
+  sourceMessageId: string;
+  channel: ConversationChannel;
+  externalSessionId: string;
+  participantSummary: Array<{ kind: string; channel?: string }>;
+  recentMessages: Array<{
+    id: string;
+    direction: string;
+    contentType: string;
+    body?: string;
+    occurredAt: Date;
+  }>;
+  tags: string[];
+  activeAssignmentUserId?: string;
+}
+
+export interface KoralHandoffInput {
+  conversationId: string;
+  expectedVersion: number;
+  sourceMessageId: string;
+  correlationId: string;
+  reasonCodes: readonly string[];
+  gatewayReferences?: readonly string[];
 }

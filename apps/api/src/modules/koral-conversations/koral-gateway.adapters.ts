@@ -46,6 +46,57 @@ export interface KoralGatewayContextInput {
   deadlineAt: string;
 }
 
+export interface KoralServiceGatewayContextInput {
+  visitorIdentity: ResolvedIdentityContext;
+  correlationId: string;
+  conversationId: string;
+  requestId?: string;
+  causationId?: string;
+  purpose: string;
+  piiPolicy: GatewayPiiPolicy;
+  dataClassification: DataClassification;
+  deadlineAt: string;
+}
+
+const KORAL_SERVICE_PRINCIPAL = Object.freeze({
+  principalType: "KORAL" as const,
+  principalId: "service:koral-orchestrator",
+  effectiveActorId: "service:koral-orchestrator",
+  identityLevel: "AUTHENTICATED" as const,
+  permissions: ["koral.ai.infer"] as const,
+});
+
+/** The gateway actor is a server-owned service principal. Visitor assurance
+ * remains policy evidence only and is never elevated into gateway authority. */
+export function buildKoralServiceGatewayRequestContext(
+  input: KoralServiceGatewayContextInput,
+): GatewayRequestContext {
+  if (!Number.isFinite(Date.parse(input.deadlineAt))) {
+    throw new Error("INVALID_GATEWAY_DEADLINE");
+  }
+  const consentVerified =
+    input.visitorIdentity.consentState.status === "GRANTED"
+    && input.visitorIdentity.consentState.purposeKeys.includes(input.purpose);
+  return {
+    version: CONNECT_CONTRACT_VERSION,
+    identity: KORAL_SERVICE_PRINCIPAL,
+    audit: {
+      correlationId: input.correlationId,
+      conversationId: input.conversationId,
+      requestId: input.requestId,
+      causationId: input.causationId,
+    },
+    policy: {
+      purpose: input.purpose,
+      consentPurposeKeys: input.visitorIdentity.consentState.purposeKeys,
+      consentVerified,
+      piiPolicy: input.piiPolicy,
+      dataClassification: input.dataClassification,
+    },
+    deadlineAt: input.deadlineAt,
+  };
+}
+
 export function buildCanonicalGatewayRequestContext(
   input: KoralGatewayContextInput,
 ): GatewayRequestContext {

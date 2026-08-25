@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { AiGateway } from "@asodef/connect-contracts";
+import type { EnvConfig } from "../../config/env.validation";
 import {
   AI_GATEWAY,
   AI_MODEL_REGISTRY,
@@ -9,6 +11,7 @@ import type { ModelRegistry } from "../ai-gateway/model-registry";
 import { APPROVED_AGENT_MODEL_BINDINGS } from "../ai-gateway/runtime-model-catalog";
 import { AuthModule } from "../auth/auth.module";
 import { ConversationIdentityBindingService } from "./conversation-identity-binding.service";
+import { KORAL_ORCHESTRATION_PIPELINE } from "./contracts/orchestrator.contract";
 import { KoralIdentityResolutionService } from "./identity-resolution.service";
 import { KoralConversationsController } from "./koral-conversations.controller";
 import { KoralConversationsService } from "./koral-conversations.service";
@@ -16,6 +19,7 @@ import {
   CanonicalKoralAiGatewayAdapter,
   PublishedModelProfileResolver,
 } from "./koral-gateway.adapters";
+import { GovernedKoralOrchestrationPipeline } from "./koral-orchestration.pipeline";
 import { KoralWebChatRuntimeAdapter } from "./web-chat-runtime.adapter";
 import { WebChatController } from "./web-chat.controller";
 import { WebChatCryptoService } from "./web-chat-crypto.service";
@@ -41,6 +45,15 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
         ),
     },
     {
+      provide: KORAL_ORCHESTRATION_PIPELINE,
+      inject: [KoralConversationsService, KORAL_AI_GATEWAY_ADAPTER, ConfigService],
+      useFactory: (
+        conversations: KoralConversationsService,
+        gateway: CanonicalKoralAiGatewayAdapter,
+        config: ConfigService<EnvConfig, true>,
+      ) => new GovernedKoralOrchestrationPipeline(conversations, gateway, config),
+    },
+    {
       provide: KORAL_AI_GATEWAY_ADAPTER,
       inject: [AI_GATEWAY, PublishedModelProfileResolver],
       useFactory: (
@@ -60,6 +73,7 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
   exports: [
     KoralConversationsService,
     KORAL_AI_GATEWAY_ADAPTER,
+    KORAL_ORCHESTRATION_PIPELINE,
     KoralIdentityResolutionService,
     ConversationIdentityBindingService,
   ],

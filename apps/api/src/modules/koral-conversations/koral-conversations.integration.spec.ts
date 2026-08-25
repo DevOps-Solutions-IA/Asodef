@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { ConversationChannel, ConversationPriority, ConversationStatus, PrismaClient } from "@prisma/client";
 import { createTestPrismaClient } from "../../database/test-db-client";
 import { KORAL_CHANNEL_CONTRACT_VERSION, type InboundMessage } from "./contracts/channel.contract";
+import { IDENTITY_RESOLUTION_CONTRACT_VERSION } from "./contracts/identity-resolution.contract";
+import { KORAL_ORCHESTRATOR_CONTRACT_VERSION } from "./contracts/orchestrator.contract";
 import { KoralConversationsService } from "./koral-conversations.service";
+import { GovernedKoralOrchestrationPipeline } from "./koral-orchestration.pipeline";
 
 describe("Koral conversation foundation (integration, real Postgres)", () => {
   let prisma: PrismaClient;
@@ -306,7 +309,7 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     })).resolves.toMatchObject({ committed: false, reason: "CONVERSATION_NOT_AI_ACTIVE" });
   });
 
-  it("queues an AI response once and rejects idempotency-key reuse with different content", async () => {
+  it("makes a Web AI response locally available once and rejects idempotency-key reuse with different content", async () => {
     const externalSessionId = randomUUID();
     const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID()));
     conversationIds.push(receipt.conversationId);
@@ -328,7 +331,91 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     expect(replay).toMatchObject({ committed: true, replayed: true, messageId: first.messageId });
     await expect(service.commitKoralOutbound({ ...request, body: "Contenido diferente" })).rejects.toThrow("idempotencia");
     expect(await prisma.conversationMessage.count({ where: { conversationId: receipt.conversationId, direction: "OUTBOUND" } })).toBe(1);
-    expect(await prisma.conversationEvent.count({ where: { conversationId: receipt.conversationId, eventType: "KORAL_RESPONSE_QUEUED" } })).toBe(1);
+    expect(await prisma.conversationMessage.findUniqueOrThrow({ where: { id: first.messageId } })).toMatchObject({ status: "SENT" });
+    expect(await prisma.conversationEvent.count({ where: { conversationId: receipt.conversationId, eventType: "KORAL_RESPONSE_SENT" } })).toBe(1);
+  });
+
+  it("runs the governed public Web path through CAS persistence and sanitized audit", async () => {
+    const externalSessionId = randomUUID();
+    const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID(), "Hola"));
+    conversationIds.push(receipt.conversationId);
+    const gateway = {
+      infer: jest.fn().mockResolvedValue({
+        kind: "ASSISTANT_RESPONSE",
+        content: "ignored provider prose",
+        structuredOutput: { response: "¡Hola! ¿En qué puedo ayudarte?" },
+        gatewayCorrelationId: "gateway-public-greeting",
+      }),
+    };
+    const pipeline = new GovernedKoralOrchestrationPipeline(
+      service,
+      gateway as never,
+      { get: jest.fn().mockReturnValue(true) } as never,
+    );
+    const outcome = await pipeline.run({
+      version: KORAL_ORCHESTRATOR_CONTRACT_VERSION,
+      normalizedMessageId: receipt.messageId,
+      correlationId: randomUUID(),
+      deadlineAt: new Date(Date.now() + 20_000).toISOString(),
+      effectiveIdentity: {
+        version: IDENTITY_RESOLUTION_CONTRACT_VERSION,
+        identityId: "anonymous:integration",
+        channelIdentities: [{ channel: ConversationChannel.WEB, externalIdentityId: "visitor", verified: false }],
+        assuranceLevel: "ANONYMOUS",
+        authenticationEvidence: { authenticated: false, mfaVerified: false, stepUpVerified: false },
+        consentState: { status: "UNKNOWN", purposeKeys: [] },
+        verifiedAttributes: [],
+      },
+    });
+    expect(outcome).toMatchObject({ kind: "RESPONDED", conversationId: receipt.conversationId });
+    const outbound = await prisma.conversationMessage.findFirstOrThrow({
+      where: { conversationId: receipt.conversationId, direction: "OUTBOUND" },
+    });
+    expect(outbound).toMatchObject({ status: "SENT", body: "¡Hola! ¿En qué puedo ayudarte?" });
+    const audit = await prisma.conversationEvent.findFirstOrThrow({
+      where: { conversationId: receipt.conversationId, eventType: "KORAL_RESPONSE_SENT" },
+    });
+    expect(audit.metadata).toMatchObject({ gatewayReferences: ["gateway-public-greeting"] });
+    expect(JSON.stringify(audit.metadata)).not.toContain("ignored provider prose");
+  });
+
+  it("linearizes a Koral handoff against concurrent human assignment and audits only the winner", async () => {
+    const actor = await createActiveUser("koral-handoff-race");
+    const externalSessionId = randomUUID();
+    const receipt = await service.receiveInbound(inbound(externalSessionId, randomUUID()));
+    conversationIds.push(receipt.conversationId);
+    const state = await service.getRuntimeState(receipt.conversationId);
+    const results = await Promise.allSettled([
+      service.requestKoralHandoff({
+        conversationId: receipt.conversationId,
+        expectedVersion: state.version,
+        sourceMessageId: receipt.messageId,
+        correlationId: randomUUID(),
+        reasonCodes: ["PROVIDER_UNAVAILABLE"],
+      }),
+      service.assign(receipt.conversationId, {
+        assigneeUserId: actor.id,
+        priority: ConversationPriority.HIGH,
+        expectedVersion: state.version,
+        idempotencyKey: randomUUID(),
+        reason: "Concurrent human takeover",
+      }, { actorUserId: actor.id }),
+    ]);
+
+    const handoff = results[0];
+    const assignment = results[1];
+    const handoffWon = handoff.status === "fulfilled" && handoff.value.transitioned;
+    const assignmentWon = assignment.status === "fulfilled";
+    expect(Number(handoffWon) + Number(assignmentWon)).toBe(1);
+    const events = await prisma.conversationEvent.findMany({
+      where: {
+        conversationId: receipt.conversationId,
+        eventType: { in: ["KORAL_HANDOFF_REQUIRED", "ASSIGNMENT_CREATED"] },
+      },
+      select: { eventType: true, metadata: true },
+    });
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain("contenido privado");
   });
 
   it("replays only an identical idempotent mutation and rejects key reuse with a different payload", async () => {

@@ -13,7 +13,7 @@ describe("KoralWebChatRuntimeAdapter", () => {
   const bindings = { bindInTransaction: jest.fn() };
   const processing = { claim: jest.fn(), complete: jest.fn(), suppress: jest.fn(), markUnknown: jest.fn() };
   const rateLimiter = { checkAndIncrementStrict: jest.fn() };
-  const orchestrator = { run: jest.fn() };
+  const orchestrator = { available: true, run: jest.fn() };
   const adapter = new KoralWebChatRuntimeAdapter(
     conversations as never,
     identities as never,

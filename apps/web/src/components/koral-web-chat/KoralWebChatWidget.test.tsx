@@ -10,7 +10,6 @@ function snapshot(overrides: Partial<WebChatSnapshot["conversation"]> = {}): Web
   return {
     version: WEB_CHAT_CONTRACT_VERSION,
     conversation: {
-      id: "28dce9a7-2822-4ac1-9eb2-b52f714699f3",
       status: "AI_ACTIVE",
       aiAutoReplyAllowed: true,
       assuranceLevel: "ANONYMOUS",
@@ -26,6 +25,7 @@ function client(initial = snapshot()): KoralWebChatClient {
     bootstrap: vi.fn().mockResolvedValue(initial),
     history: vi.fn().mockResolvedValue(initial),
     sendMessage: vi.fn().mockResolvedValue(initial),
+    claimIdentity: vi.fn().mockResolvedValue(initial),
   };
 }
 
@@ -42,7 +42,7 @@ describe("KoralWebChatWidget", () => {
     await userEvent.click(screen.getByRole("button", { name: "Abrir chat con Koral" }));
     expect(await screen.findByText("¿En qué podemos ayudarte?")).toBeVisible();
     expect(api.bootstrap).toHaveBeenCalledOnce();
-    expect(api.history).toHaveBeenCalledOnce();
+    expect(api.history).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Cerrar chat" })).toHaveFocus();
   });
 
@@ -74,7 +74,7 @@ describe("KoralWebChatWidget", () => {
     expect(screen.queryByText(/stream/iu)).not.toBeInTheDocument();
   });
 
-  it("shows rate-limit guidance, an offline state, and keeps identity claims disabled", async () => {
+  it("keeps the mutation cooldown after a successful reconnect refresh", async () => {
     const api = client();
     vi.mocked(api.sendMessage).mockRejectedValueOnce(new ApiError({
       kind: "rate_limited",
@@ -87,14 +87,68 @@ describe("KoralWebChatWidget", () => {
     await screen.findByText("¿En qué podemos ayudarte?");
     await userEvent.type(screen.getByLabelText("Escribe tu mensaje"), "Hola");
     await userEvent.click(screen.getByRole("button", { name: "Enviar mensaje" }));
-    expect(await screen.findByText(/demasiados mensajes/iu)).toBeVisible();
-    expect(screen.getByText(/12 s/u)).toBeVisible();
-    expect(screen.getByRole("button", { name: /Identificarme/u })).toBeDisabled();
+    expect(await screen.findByText(/demasiadas solicitudes/iu)).toBeVisible();
+    expect(screen.getByText(/Puedes reintentar en \d+ s/iu)).toBeVisible();
 
     Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false });
     fireEvent(window, new Event("offline"));
     expect(await screen.findByText("Sin conexión", { exact: true })).toBeVisible();
     expect(screen.getByText(/no se reenviará automáticamente/iu)).toBeVisible();
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
+    fireEvent(window, new Event("online"));
+    await waitFor(() => expect(api.history).toHaveBeenCalledOnce());
+    expect(screen.getByRole("button", { name: "Enviar mensaje" })).toBeDisabled();
+    expect(screen.getByText(/Puedes reintentar en/iu)).toBeVisible();
+  });
+
+  it("claims only a display name and reuses clientClaimId on an explicit retry", async () => {
+    const api = client();
+    vi.mocked(api.claimIdentity)
+      .mockRejectedValueOnce(new ApiError({ kind: "network", status: null, envelope: null }))
+      .mockResolvedValueOnce(snapshot({ assuranceLevel: "CLAIMED" }));
+    render(<KoralWebChatWidget client={api} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abrir chat con Koral" }));
+    await screen.findByText("¿En qué podemos ayudarte?");
+    await userEvent.click(screen.getByRole("button", { name: "Declarar mi nombre" }));
+    expect(screen.getByText(/No verifica tu identidad ni inicia sesión/iu)).toBeVisible();
+    await userEvent.type(screen.getByLabelText("¿Cómo quieres que te llamemos?"), "Visitante ASODEF");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(await screen.findByRole("button", { name: "Reintentar" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => expect(api.claimIdentity).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.claimIdentity).mock.calls[1]?.[0].clientClaimId)
+      .toBe(vi.mocked(api.claimIdentity).mock.calls[0]?.[0].clientClaimId);
+    expect(await screen.findByText("Nombre declarado")).toBeVisible();
+  });
+
+  it("requires an explicit action before replacing an expired cookie session", async () => {
+    const api = client();
+    vi.mocked(api.bootstrap)
+      .mockRejectedValueOnce(new ApiError({ kind: "unauthorized", status: 401, envelope: null }))
+      .mockResolvedValueOnce(snapshot());
+    render(<KoralWebChatWidget client={api} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abrir chat con Koral" }));
+    const restart = await screen.findByRole("button", { name: "Iniciar una nueva conversación" });
+    expect(api.bootstrap).toHaveBeenCalledOnce();
+    await userEvent.click(restart);
+    expect(await screen.findByText("¿En qué podemos ayudarte?")).toBeVisible();
+    expect(api.bootstrap).toHaveBeenCalledTimes(2);
+  });
+
+  it("serializes older-history requests for the same opaque cursor", async () => {
+    const initial = { ...snapshot(), nextCursor: "opaque-cursor-value" };
+    const api = client(initial);
+    let resolveHistory!: (value: WebChatSnapshot) => void;
+    vi.mocked(api.history).mockReturnValueOnce(new Promise((resolve) => { resolveHistory = resolve; }));
+    render(<KoralWebChatWidget client={api} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abrir chat con Koral" }));
+    const older = await screen.findByRole("button", { name: "Cargar mensajes anteriores" });
+    await userEvent.click(older);
+    expect(await screen.findByRole("button", { name: "Cargando mensajes…" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Cargando mensajes…" }));
+    expect(api.history).toHaveBeenCalledOnce();
+    resolveHistory(snapshot());
+    await waitFor(() => expect(screen.queryByText("Cargando mensajes…")).not.toBeInTheDocument());
   });
 
   it("closes on Escape, restores launcher focus, and disables the composer when closed", async () => {

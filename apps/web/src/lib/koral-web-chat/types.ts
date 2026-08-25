@@ -44,7 +44,6 @@ const webChatMessageSchema = z.object({
 }).strict();
 
 const webChatConversationSchema = z.object({
-  id: z.string().uuid(),
   status: z.enum(webChatConversationStatuses),
   /** Server-authoritative projection. The client never derives this from
    * status because an active assignment also disables AI auto-response. */
@@ -78,6 +77,11 @@ export type WebChatSnapshot = z.infer<typeof webChatSnapshotSchema>;
 export interface SendWebChatMessageInput {
   clientMessageId: string;
   body: string;
+}
+
+export interface ClaimWebChatIdentityInput {
+  clientClaimId: string;
+  displayName: string;
 }
 
 export interface LocalWebChatMessage {

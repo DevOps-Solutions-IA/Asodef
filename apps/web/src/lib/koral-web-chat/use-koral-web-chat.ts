@@ -5,11 +5,11 @@ import { nextWebChatPollDelay } from "./polling";
 import type { LocalWebChatMessage, WebChatSnapshot } from "./types";
 
 type LoadState = "IDLE" | "BOOTSTRAPPING" | "READY" | "ERROR";
+type ClaimState = "IDLE" | "PENDING" | "RETRYABLE";
 
 export interface WebChatVisibleError {
-  kind: "OFFLINE" | "RATE_LIMITED" | "NETWORK" | "CONTRACT" | "UNAVAILABLE";
+  kind: "OFFLINE" | "SESSION_EXPIRED" | "RATE_LIMITED" | "NETWORK" | "CONTRACT" | "CONFLICT" | "UNAVAILABLE";
   message: string;
-  retryAfterSeconds?: number;
 }
 
 export interface UseKoralWebChatResult {
@@ -18,11 +18,22 @@ export interface UseKoralWebChatResult {
   localMessages: LocalWebChatMessage[];
   error: WebChatVisibleError | null;
   offline: boolean;
+  loadingOlder: boolean;
+  claimState: ClaimState;
+  mutationCooldownUntil: number | null;
   bootstrap(): Promise<void>;
+  restartSession(): Promise<void>;
   refresh(): Promise<void>;
   loadOlder(): Promise<void>;
   send(body: string): Promise<void>;
   retry(clientMessageId: string): Promise<void>;
+  claim(displayName: string): Promise<void>;
+}
+
+interface PendingClaim {
+  clientClaimId: string;
+  displayName: string;
+  state: Exclude<ClaimState, "IDLE">;
 }
 
 export function useKoralWebChat(
@@ -34,7 +45,11 @@ export function useKoralWebChat(
   const [localMessages, setLocalMessages] = useState<LocalWebChatMessage[]>([]);
   const [error, setError] = useState<WebChatVisibleError | null>(null);
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [pendingClaim, setPendingClaim] = useState<PendingClaim | null>(null);
+  const [mutationCooldownUntil, setMutationCooldownUntil] = useState<number | null>(null);
   const controllers = useRef(new Set<AbortController>());
+  const loadingOlderRef = useRef(false);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
 
@@ -48,30 +63,59 @@ export function useKoralWebChat(
     }
   }, []);
 
+  const applyRequestError = useCallback((caught: unknown): WebChatVisibleError | null => {
+    if (isAbort(caught)) return null;
+    const visible = toVisibleError(caught);
+    if (visible.kind === "SESSION_EXPIRED") setLoadState("ERROR");
+    setError(visible);
+    return visible;
+  }, []);
+
+  const applyMutationError = useCallback((caught: unknown): WebChatVisibleError | null => {
+    if (isAbort(caught)) return {
+      kind: "NETWORK",
+      message: "No pudimos confirmar la operación. Reintenta explícitamente cuando estés listo.",
+    };
+    if (caught instanceof ApiError && caught.kind === "rate_limited") {
+      const retryAfterSeconds = Math.max(1, caught.retryAfterSeconds ?? 30);
+      setMutationCooldownUntil(Date.now() + retryAfterSeconds * 1_000);
+      const visible: WebChatVisibleError = {
+        kind: "RATE_LIMITED",
+        message: "Has realizado demasiadas solicitudes. Espera antes de intentar nuevamente.",
+      };
+      setError(visible);
+      return visible;
+    }
+    return applyRequestError(caught);
+  }, [applyRequestError]);
+
   const refresh = useCallback(async () => {
     if (!open || !snapshotRef.current) return;
     try {
       const result = await runRequest((signal) => client.history(signal));
-      setSnapshot(mergeSnapshots(snapshotRef.current, result));
+      setSnapshot(mergeSnapshots(snapshotRef.current, result, "PRESERVE_CURSOR"));
       setError(null);
     } catch (caught) {
-      if (isAbort(caught)) return;
-      setError(toVisibleError(caught));
+      applyRequestError(caught);
     }
-  }, [client, open, runRequest]);
+  }, [applyRequestError, client, open, runRequest]);
 
   const loadOlder = useCallback(async () => {
     const cursor = snapshotRef.current?.nextCursor;
-    if (!open || offline || !cursor) return;
+    if (!open || offline || !cursor || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
     try {
       const result = await runRequest((signal) => client.history(signal, cursor));
-      setSnapshot(mergeSnapshots(snapshotRef.current, result));
+      setSnapshot(mergeSnapshots(snapshotRef.current, result, "ADVANCE_CURSOR"));
       setError(null);
     } catch (caught) {
-      if (isAbort(caught)) return;
-      setError(toVisibleError(caught));
+      applyRequestError(caught);
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
     }
-  }, [client, offline, open, runRequest]);
+  }, [applyRequestError, client, offline, open, runRequest]);
 
   const bootstrap = useCallback(async () => {
     if (!open || offline) {
@@ -81,21 +125,43 @@ export function useKoralWebChat(
     setLoadState("BOOTSTRAPPING");
     setError(null);
     try {
+      // Bootstrap rotates/resumes the cookie-bound session and already returns
+      // its current history. A redundant history request would only increase
+      // rate-limit and partial-failure surface.
       const initial = await runRequest((signal) => client.bootstrap(signal));
       setSnapshot(initial);
       setLoadState("READY");
-      try {
-        const history = await runRequest((signal) => client.history(signal));
-        setSnapshot(mergeSnapshots(initial, history));
-      } catch (caught) {
-        if (!isAbort(caught)) setError(toVisibleError(caught));
-      }
     } catch (caught) {
-      if (isAbort(caught)) return;
-      setError(toVisibleError(caught));
+      applyRequestError(caught);
       setLoadState("ERROR");
     }
-  }, [client, offline, open, runRequest]);
+  }, [applyRequestError, client, offline, open, runRequest]);
+
+  const restartSession = useCallback(async () => {
+    // The server clears an invalid capability on 401. Starting a replacement
+    // conversation is deliberately user initiated; stale transcript and
+    // mutation identifiers are never carried into the new session.
+    setSnapshot(null);
+    snapshotRef.current = null;
+    setLocalMessages([]);
+    setPendingClaim(null);
+    setMutationCooldownUntil(null);
+    setError(null);
+    setLoadState("IDLE");
+    if (!open || offline) {
+      if (offline) setError(offlineError());
+      return;
+    }
+    setLoadState("BOOTSTRAPPING");
+    try {
+      const initial = await runRequest((signal) => client.bootstrap(signal));
+      setSnapshot(initial);
+      setLoadState("READY");
+    } catch (caught) {
+      applyRequestError(caught);
+      setLoadState("ERROR");
+    }
+  }, [applyRequestError, client, offline, open, runRequest]);
 
   const sendExisting = useCallback(async (message: LocalWebChatMessage) => {
     if (offline) {
@@ -114,21 +180,20 @@ export function useKoralWebChat(
         clientMessageId: message.clientMessageId,
         body: message.body,
       }, signal));
-      setSnapshot(mergeSnapshots(snapshotRef.current, next));
+      setSnapshot(mergeSnapshots(snapshotRef.current, next, "PRESERVE_CURSOR"));
       setLocalMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
     } catch (caught) {
       setLocalMessages((current) => current.map((item) => item.clientMessageId === message.clientMessageId
         ? { ...item, state: "RETRYABLE" }
         : item));
-      setError(isAbort(caught)
-        ? { kind: "NETWORK", message: "No pudimos confirmar el envío. Reintenta con la misma solicitud cuando estés listo." }
-        : toVisibleError(caught));
+      const visible = applyMutationError(caught);
+      if (visible) setError(visible);
     }
-  }, [client, offline, runRequest]);
+  }, [applyMutationError, client, offline, runRequest]);
 
   const send = useCallback(async (body: string) => {
     const normalized = body.trim();
-    if (!normalized || normalized.length > 4_000) return;
+    if (!normalized || normalized.length > 4_000 || cooldownActive(mutationCooldownUntil)) return;
     const message: LocalWebChatMessage = {
       clientMessageId: crypto.randomUUID(),
       body: normalized,
@@ -136,12 +201,35 @@ export function useKoralWebChat(
     };
     setLocalMessages((current) => [...current, message]);
     await sendExisting(message);
-  }, [sendExisting]);
+  }, [mutationCooldownUntil, sendExisting]);
 
   const retry = useCallback(async (clientMessageId: string) => {
+    if (cooldownActive(mutationCooldownUntil)) return;
     const message = localMessages.find((item) => item.clientMessageId === clientMessageId);
     if (message) await sendExisting(message);
-  }, [localMessages, sendExisting]);
+  }, [localMessages, mutationCooldownUntil, sendExisting]);
+
+  const claim = useCallback(async (displayName: string) => {
+    const normalized = displayName.trim().replace(/\s+/gu, " ");
+    if (!normalized || normalized.length > 120 || cooldownActive(mutationCooldownUntil)) return;
+    const existing = pendingClaim?.state === "RETRYABLE" && pendingClaim.displayName === normalized
+      ? pendingClaim
+      : { clientClaimId: crypto.randomUUID(), displayName: normalized, state: "PENDING" as const };
+    setPendingClaim({ ...existing, state: "PENDING" });
+    setError(null);
+    try {
+      const next = await runRequest((signal) => client.claimIdentity({
+        clientClaimId: existing.clientClaimId,
+        displayName: existing.displayName,
+      }, signal));
+      setSnapshot(mergeSnapshots(snapshotRef.current, next, "PRESERVE_CURSOR"));
+      setPendingClaim(null);
+    } catch (caught) {
+      setPendingClaim({ ...existing, state: "RETRYABLE" });
+      const visible = applyMutationError(caught);
+      if (visible) setError(visible);
+    }
+  }, [applyMutationError, client, mutationCooldownUntil, pendingClaim, runRequest]);
 
   useEffect(() => {
     if (!open || loadState !== "IDLE") return;
@@ -172,14 +260,24 @@ export function useKoralWebChat(
   }, [loadState, offline, open, refresh, snapshot]);
 
   useEffect(() => {
+    if (mutationCooldownUntil === null) return;
+    const delay = Math.max(0, mutationCooldownUntil - Date.now());
+    const timeout = window.setTimeout(() => {
+      setMutationCooldownUntil(null);
+      setError((current) => current?.kind === "RATE_LIMITED" ? null : current);
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [mutationCooldownUntil]);
+
+  useEffect(() => {
     const onOffline = () => {
       setOffline(true);
       setError(offlineError());
     };
     const onOnline = () => {
       setOffline(false);
-      setError(null);
-      if (open && snapshotRef.current) void refresh();
+      setError((current) => current?.kind === "SESSION_EXPIRED" ? current : null);
+      if (open && loadState === "READY" && snapshotRef.current) void refresh();
     };
     window.addEventListener("offline", onOffline);
     window.addEventListener("online", onOnline);
@@ -187,7 +285,7 @@ export function useKoralWebChat(
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("online", onOnline);
     };
-  }, [open, refresh]);
+  }, [loadState, open, refresh]);
 
   useEffect(() => () => {
     for (const controller of controllers.current) controller.abort();
@@ -200,12 +298,33 @@ export function useKoralWebChat(
     localMessages,
     error,
     offline,
+    loadingOlder,
+    claimState: pendingClaim?.state ?? "IDLE",
+    mutationCooldownUntil,
     bootstrap,
+    restartSession,
     refresh,
     loadOlder,
     send,
     retry,
-  }), [bootstrap, error, loadOlder, loadState, localMessages, offline, refresh, retry, send, snapshot]);
+    claim,
+  }), [
+    bootstrap,
+    claim,
+    error,
+    loadOlder,
+    loadState,
+    loadingOlder,
+    localMessages,
+    mutationCooldownUntil,
+    offline,
+    pendingClaim?.state,
+    refresh,
+    restartSession,
+    retry,
+    send,
+    snapshot,
+  ]);
 }
 
 function toVisibleError(error: unknown): WebChatVisibleError {
@@ -213,14 +332,13 @@ function toVisibleError(error: unknown): WebChatVisibleError {
     return { kind: "CONTRACT", message: "El chat recibió una respuesta no compatible y se detuvo de forma segura." };
   }
   if (error instanceof ApiError) {
-    if (error.kind === "rate_limited") {
-      return {
-        kind: "RATE_LIMITED",
-        message: "Has enviado demasiados mensajes. Espera antes de intentar nuevamente.",
-        retryAfterSeconds: error.retryAfterSeconds,
-      };
+    if (error.kind === "unauthorized") {
+      return { kind: "SESSION_EXPIRED", message: "La sesión del chat finalizó. Puedes iniciar una conversación nueva de forma explícita." };
     }
     if (error.kind === "network") return { kind: "NETWORK", message: error.message };
+    if (error.status === 409) {
+      return { kind: "CONFLICT", message: "La conversación cambió mientras realizabas la operación. Actualiza antes de reintentar." };
+    }
   }
   return { kind: "UNAVAILABLE", message: "El chat no está disponible en este momento. Intenta nuevamente más tarde." };
 }
@@ -233,15 +351,30 @@ function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-function mergeSnapshots(current: WebChatSnapshot | null, incoming: WebChatSnapshot): WebChatSnapshot {
+function cooldownActive(until: number | null): boolean {
+  return until !== null && until > Date.now();
+}
+
+function mergeSnapshots(
+  current: WebChatSnapshot | null,
+  incoming: WebChatSnapshot,
+  cursorMode: "PRESERVE_CURSOR" | "ADVANCE_CURSOR",
+): WebChatSnapshot {
   if (!current) return incoming;
-  if (current.conversation.id !== incoming.conversation.id) {
-    throw new Error("WEB_CHAT_CONVERSATION_CHANGED");
-  }
   const messages = new Map(current.messages.map((message) => [message.id, message]));
   for (const message of incoming.messages) messages.set(message.id, message);
-  return {
+  const nextCursor = cursorMode === "ADVANCE_CURSOR"
+    ? incoming.nextCursor
+    : current.nextCursor ?? incoming.nextCursor;
+  const merged = {
     ...incoming,
-    messages: [...messages.values()].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt)),
+    messages: [...messages.values()].sort((left, right) => {
+      const timeOrder = left.occurredAt.localeCompare(right.occurredAt);
+      return timeOrder === 0 ? left.id.localeCompare(right.id) : timeOrder;
+    }),
   };
+  if (nextCursor) return { ...merged, nextCursor };
+  const withoutCursor = { ...merged };
+  delete withoutCursor.nextCursor;
+  return withoutCursor;
 }

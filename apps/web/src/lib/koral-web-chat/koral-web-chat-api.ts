@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiClient } from "../api-client";
 import {
   WEB_CHAT_CONTRACT_VERSION,
+  type ClaimWebChatIdentityInput,
   type SendWebChatMessageInput,
   type WebChatSnapshot,
   webChatSnapshotSchema,
@@ -13,6 +14,7 @@ export interface KoralWebChatClient {
   bootstrap(signal?: AbortSignal): Promise<WebChatSnapshot>;
   history(signal?: AbortSignal, cursor?: string): Promise<WebChatSnapshot>;
   sendMessage(input: SendWebChatMessageInput, signal?: AbortSignal): Promise<WebChatSnapshot>;
+  claimIdentity(input: ClaimWebChatIdentityInput, signal?: AbortSignal): Promise<WebChatSnapshot>;
 }
 
 function parseSnapshot(value: unknown): WebChatSnapshot {
@@ -45,6 +47,19 @@ export const koralWebChatClient: KoralWebChatClient = {
       version: WEB_CHAT_CONTRACT_VERSION,
       clientMessageId: request.clientMessageId,
       content: { type: "text/plain", body: request.body },
+    }, { signal, skipAuthRefresh: true });
+    return parseSnapshot(response);
+  },
+
+  async claimIdentity(input, signal) {
+    const request = z.object({
+      clientClaimId: z.string().uuid(),
+      displayName: z.string().trim().min(1).max(120),
+    }).strict().parse(input);
+    const response = await apiClient.post<unknown>(`${WEB_CHAT_BASE_PATH}/identity/claim`, {
+      version: WEB_CHAT_CONTRACT_VERSION,
+      clientClaimId: request.clientClaimId,
+      displayName: request.displayName,
     }, { signal, skipAuthRefresh: true });
     return parseSnapshot(response);
   },

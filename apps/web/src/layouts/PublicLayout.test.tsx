@@ -22,6 +22,8 @@ describe("premium public navigation", () => {
     const pagar=screen.getByRole("link",{name:"Pagar"});
     expect(pagar).toHaveAttribute("href","/pagos");
     expect(screen.getByRole("link",{name:"Recibir orientación"})).toHaveAttribute("href","/comenzar");
+    expect(screen.getByRole("button", { name: "Abrir chat con Koral" })).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("separates affiliate, company and administrative access", async()=>{

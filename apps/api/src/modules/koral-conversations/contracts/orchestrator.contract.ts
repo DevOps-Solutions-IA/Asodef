@@ -1,4 +1,4 @@
-import type { ConversationStatus } from "@prisma/client";
+import type { ConversationChannel, ConversationStatus } from "@prisma/client";
 import type {
   DataClassification,
   GatewayRequestContext,
@@ -27,6 +27,9 @@ export interface ConversationContext {
   recentMessages: Array<{ id: string; direction: string; contentType: string; body?: string; occurredAt: Date }>;
   tags: string[];
   activeAssignmentUserId?: string;
+  sourceMessageId: string;
+  channel: ConversationChannel;
+  externalSessionId: string;
 }
 
 export interface SafeConversationContext extends ConversationContext {
@@ -109,9 +112,18 @@ export type KoralOrchestrationRunResult =
 /** Execution contract only. Implementations must keep every business/data
  * access behind the canonical gateways and existing application services. */
 export interface KoralOrchestrationPipeline {
+  /** Provider availability is advisory for UI projection only. `run` remains
+   * authoritative and records deterministic unavailable outcomes. */
+  readonly available: boolean;
   receiveNormalizedMessage(input: KoralOrchestrationRunInput): Promise<string>;
   resolveConversation(normalizedMessageId: string, correlationId: string): Promise<string>;
-  buildSafeContext(conversationId: string, correlationId: string, deadlineAt: string): Promise<SafeConversationContext>;
+  buildSafeContext(
+    conversationId: string,
+    normalizedMessageId: string,
+    correlationId: string,
+    deadlineAt: string,
+    effectiveIdentity: ResolvedIdentityContext,
+  ): Promise<SafeConversationContext>;
   evaluateAiPolicy(context: SafeConversationContext): Promise<OrchestrationDecision>;
   invokeAiGateway(context: SafeConversationContext, decision: OrchestrationDecision): Promise<KoralInferenceOutcome>;
   receiveToolRequest(outcome: KoralInferenceOutcome): Promise<readonly string[]>;
