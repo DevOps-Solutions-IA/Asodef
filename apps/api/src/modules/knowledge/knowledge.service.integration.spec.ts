@@ -121,6 +121,24 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
     expect(result.response.citations[0]!.publicationId).toBe(
       published.publicationSnapshot!.id,
     );
+    const listed = await service.listItems({
+      search: marker,
+      page: 1,
+      pageSize: 30,
+    });
+    expect(listed.total).toBe(1);
+    expect(listed.items[0]?.id).toBe(draft.knowledgeItemId);
+    expect(listed.items[0]?.versions[0]).not.toHaveProperty("content");
+    const detail = await service.getItem(draft.knowledgeItemId);
+    expect(detail.versions[0]?.source?.sourceReference).toBe(`manual://${marker}`);
+    expect(detail.versions[0]).not.toHaveProperty("content");
+    expect(detail.versions[0]).not.toHaveProperty("chunks");
+    const diff = await service.getVersionDiff(
+      draft.id,
+      mutationContext("diff"),
+    );
+    expect(diff.current.content).toContain(marker);
+    expect(diff.previous).toBeNull();
     const auditEvents = await prisma.knowledgeAuditEvent.findMany({
       where: { knowledgeVersionId: draft.id },
       orderBy: { createdAt: "asc" },
@@ -130,6 +148,7 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
       "knowledge.version.review",
       "knowledge.version.approved",
       "knowledge.version.published",
+      "knowledge.version.diff_viewed",
     ]);
     expect(auditEvents.every((event) => event.knowledgeItemId === draft.knowledgeItemId)).toBe(true);
     expect(JSON.stringify(auditEvents)).not.toContain(

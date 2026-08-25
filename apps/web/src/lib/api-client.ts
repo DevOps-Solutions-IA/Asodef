@@ -68,6 +68,7 @@ async function safeParseJson(response: Response): Promise<ApiErrorEnvelope | nul
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const requestId = createRequestId();
   let response: Response;
+  const formBody = typeof FormData !== "undefined" && options.body instanceof FormData;
 
   try {
     response = await fetch(`${API_ORIGIN}${API_PREFIX}${path}`, {
@@ -75,12 +76,16 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       credentials: "include",
       signal: options.signal,
       headers: {
-        "Content-Type": "application/json",
+        ...(formBody ? {} : { "Content-Type": "application/json" }),
         Accept: "application/json",
         "X-Request-Id": requestId,
         ...options.headers,
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.body !== undefined
+        ? formBody
+          ? (options.body as FormData)
+          : JSON.stringify(options.body)
+        : undefined,
     });
   } catch (cause) {
     // fetch() itself throws for network failures/CORS/abort - AbortError

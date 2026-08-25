@@ -1,12 +1,15 @@
+import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseInterceptors,
@@ -25,6 +28,8 @@ import {
   CreateManualKnowledgeDto,
   KnowledgeLifecycleCommandDto,
   KnowledgePreviewDto,
+  KnowledgeRetrievalTestDto,
+  ListKnowledgeItemsQueryDto,
   OfficialWebImportDto,
 } from "./knowledge.dto";
 import {
@@ -44,6 +49,74 @@ const MAX_KNOWLEDGE_FILE_BYTES = 10 * 1024 * 1024;
 @Controller("admin/knowledge")
 export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
+
+  @RequirePermissions("knowledge.read")
+  @Get("items")
+  listItems(@Query() query: ListKnowledgeItemsQueryDto) {
+    return this.knowledge.listItems(query);
+  }
+
+  @RequirePermissions("knowledge.read")
+  @Get("items/:id")
+  getItem(@Param("id", ParseUUIDPipe) id: string) {
+    return this.knowledge.getItem(id);
+  }
+
+  @RequirePermissions("knowledge.manage")
+  @RequireStepUp()
+  @Post("versions/:id/diff")
+  @HttpCode(HttpStatus.OK)
+  getVersionDiff(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.knowledge.getVersionDiff(id, mutationContext(actor, request));
+  }
+
+  @RequirePermissions("knowledge.read")
+  @Post("retrieval")
+  @HttpCode(HttpStatus.OK)
+  testPublishedRetrieval(
+    @Body() dto: KnowledgeRetrievalTestDto,
+    @CurrentUser() actor: RequestUser,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const contextual = request as AuthenticatedRequest & {
+      requestId?: string;
+      correlationId?: string;
+    };
+    const correlationId = contextual.correlationId ?? contextual.requestId ?? randomUUID();
+    return this.knowledge.search(
+      { version: "v1", query: dto.query, domainKeys: dto.domainKeys, limit: dto.limit },
+      {
+        version: "v1",
+        identity: {
+          principalType: "HUMAN_AGENT",
+          principalId: actor.id,
+          effectiveActorId: actor.id,
+          identityLevel: "AUTHENTICATED",
+          permissions: actor.permissions,
+        },
+        audit: { correlationId, ...(contextual.requestId ? { requestId: contextual.requestId } : {}) },
+        policy: {
+          purpose: "ADMIN_KNOWLEDGE_RETRIEVAL_TEST",
+          consentPurposeKeys: [],
+          consentVerified: false,
+          piiPolicy: "MINIMIZE",
+          dataClassification: "SENSITIVE",
+        },
+        effectiveScope: {
+          authority: "SERVER_SIDE",
+          tenantKey: "ASODEF",
+          audience: "ADMIN_ONLY",
+          organizationIds: [],
+          maximumDataClassification: "SENSITIVE",
+        },
+        deadlineAt: new Date(Date.now() + 5_000).toISOString(),
+      },
+    );
+  }
 
   @RequirePermissions("knowledge.manage")
   @RequireStepUp()

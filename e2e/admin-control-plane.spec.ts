@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { adminRecoveryCode, loginPrivilegedAdmin } from "./support/admin-auth";
+import { adminRecoveryCode, currentPrivilegedSessionId, loginPrivilegedAdmin } from "./support/admin-auth";
 import {
   PRIVILEGED_TEST_EMAIL,
   createRevokablePrivilegedTestSession,
@@ -21,7 +21,11 @@ test.describe("single-admin control plane (real E2E)", () => {
   test("completes MFA login, reads the four administrative surfaces, and performs real step-up", async ({ page }) => {
     const revokableSessionId = await createRevokablePrivilegedTestSession();
     await loginPrivilegedAdmin(page, { kind: "totp" });
-    expect(await expirePrivilegedTestStepUpAssurance()).toBeGreaterThan(0);
+    expect(
+      await expirePrivilegedTestStepUpAssurance(
+        await currentPrivilegedSessionId(page),
+      ),
+    ).toBe(1);
 
     await page.goto("/admin/sesiones");
     await expect(page.getByRole("heading", { name: "Sesiones de mi cuenta" })).toBeVisible();

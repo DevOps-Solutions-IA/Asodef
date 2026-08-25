@@ -95,6 +95,7 @@ const AdminReportsPage = lazy(() => import("../pages/admin/reports/AdminReportsP
 const PlansAdminPage = lazy(() => import("../pages/admin/control-plane/PlansAdminPage").then((m) => ({ default: m.PlansAdminPage })));
 const ControlPlaneSectionPage = lazy(() => import("../pages/admin/control-plane/ControlPlaneSectionPage").then((m) => ({ default: m.ControlPlaneSectionPage })));
 const KoralHumanInboxPage = lazy(() => import("../features/koral-inbox/KoralHumanInboxPage").then((m) => ({ default: m.KoralHumanInboxPage })));
+const KnowledgeAdminPage = lazy(() => import("../features/knowledge/KnowledgeAdminPage").then((m) => ({ default: m.KnowledgeAdminPage })));
 
 /**
  * Exported separately (not just the built router) so tests can build a
@@ -222,6 +223,10 @@ export const routeConfig: RouteObject[] = [
                   { path: "koral/conversaciones", element: <ControlPlaneSectionPage area="koral" section="conversaciones" /> },
                   { path: "koral/inbox", element: <KoralHumanInboxPage /> },
                 ],
+              },
+              {
+                element: <PermissionRoute permissions={["knowledge.read"]} />,
+                children: [{ path: "koral/conocimiento", element: <KnowledgeAdminPage /> }],
               },
               {
                 // Foundation routes intentionally reuse the existing

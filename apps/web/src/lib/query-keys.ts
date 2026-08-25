@@ -107,5 +107,11 @@ export const queryKeys = {
       run: (key: string, filters: unknown) => ["admin", "reports", "run", key, filters] as const,
       job: (jobId: string) => ["admin", "reports", "job", jobId] as const,
     },
+    knowledge: {
+      all: () => ["admin", "knowledge"] as const,
+      list: (filters: unknown) => ["admin", "knowledge", "list", filters] as const,
+      item: (id: string) => ["admin", "knowledge", "item", id] as const,
+      diff: (versionId: string) => ["admin", "knowledge", "diff", versionId] as const,
+    },
   },
 } as const;

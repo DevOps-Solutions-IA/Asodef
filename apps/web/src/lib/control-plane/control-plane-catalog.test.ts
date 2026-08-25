@@ -22,6 +22,7 @@ describe("Control Plane consumer catalog", () => {
       ({ slug }) =>
         slug !== "conversaciones" &&
         slug !== "inbox" &&
+        slug !== "conocimiento" &&
         slug !== "recomendaciones",
     )) {
       expect(getControlPlanePermission("koral", section.slug)).toBe(
@@ -34,6 +35,8 @@ describe("Control Plane consumer catalog", () => {
     expect(getContractClassification("koral", "recomendaciones")).toBe(
       "BACKEND_RUNTIME_MISSING",
     );
+    expect(getControlPlanePermission("koral", "conocimiento")).toBe("knowledge.read");
+    expect(getContractClassification("koral", "conocimiento")).toBe("MATCHES_CANONICAL");
     for (const section of COMMUNICATION_SECTIONS) {
       expect(getControlPlanePermission("comunicaciones", section.slug)).toBe(
         "settings.manage",

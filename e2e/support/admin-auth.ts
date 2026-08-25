@@ -60,3 +60,26 @@ export async function loginPrivilegedAdmin(
   await page.getByRole("button", { name: "Verificar e ingresar" }).click();
   await expect(page).not.toHaveURL(/\/iniciar-sesion/u);
 }
+
+/** Resolves the opaque browser session identifier from the already verified
+ * access token without logging or returning the token itself. Used only to
+ * scope isolated E2E database setup to the exact authenticated session. */
+export async function currentPrivilegedSessionId(page: Page): Promise<string> {
+  const accessCookie = (await page.context().cookies()).find(
+    ({ name }) => name === "asodef_at",
+  );
+  const encodedPayload = accessCookie?.value.split(".")[1];
+  if (!encodedPayload)
+    throw new Error("The authenticated E2E session cookie is unavailable.");
+  const payload = JSON.parse(
+    Buffer.from(encodedPayload, "base64url").toString("utf8"),
+  ) as { sid?: unknown };
+  if (
+    typeof payload.sid !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      payload.sid,
+    )
+  )
+    throw new Error("The authenticated E2E session identifier is invalid.");
+  return payload.sid;
+}

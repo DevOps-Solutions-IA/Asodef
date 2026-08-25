@@ -36,6 +36,7 @@ import type {
   KnowledgeDraftMetadataDto,
   KnowledgeLifecycleCommandDto,
   KnowledgePreviewDto,
+  ListKnowledgeItemsQueryDto,
   OfficialWebImportDto,
 } from "./knowledge.dto";
 import {
@@ -99,6 +100,142 @@ export class KnowledgeService implements KnowledgeGateway {
     @Inject(KNOWLEDGE_RETRIEVAL_CONFIG)
     private readonly retrievalConfig: KnowledgeRuntimeRetrievalConfig,
   ) {}
+
+  async listItems(query: ListKnowledgeItemsQueryDto) {
+    const where: Prisma.KnowledgeItemWhereInput = {
+      tenantKey: "ASODEF",
+      ...(query.search
+        ? {
+            OR: [
+              { stableKey: { contains: query.search, mode: "insensitive" as const } },
+              {
+                versions: {
+                  some: {
+                    title: { contains: query.search, mode: "insensitive" as const },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(query.domain || query.audience || query.classification
+        ? {
+            versions: {
+              some: {
+                ...(query.domain ? { domain: query.domain as KnowledgeDomain } : {}),
+                ...(query.audience
+                  ? { audience: query.audience as KnowledgeAudience }
+                  : {}),
+                ...(query.classification
+                  ? {
+                      classification:
+                        query.classification as KnowledgeDataClassification,
+                    }
+                  : {}),
+              },
+            },
+          }
+        : {}),
+    };
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.knowledgeItem.count({ where }),
+      this.prisma.knowledgeItem.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        include: {
+          versions: {
+            orderBy: { version: "desc" },
+            include: { source: true, publicationSnapshot: true },
+          },
+        },
+      }),
+    ]);
+    return {
+      items: items.map((item) => ({
+        ...item,
+        versions: item.versions.map(stripKnowledgeContent),
+      })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  async getItem(id: string) {
+    const item = await this.prisma.knowledgeItem.findFirst({
+      where: { id, tenantKey: "ASODEF" },
+      include: {
+        versions: {
+          orderBy: { version: "desc" },
+          include: {
+            source: true,
+            chunks: { orderBy: { ordinal: "asc" } },
+            publicationSnapshot: true,
+            auditEvents: { orderBy: { createdAt: "desc" } },
+          },
+        },
+      },
+    });
+    if (!item) throw new NotFoundException("KnowledgeItem no encontrado.");
+    return {
+      ...item,
+      versions: item.versions.map(stripKnowledgeContent),
+    };
+  }
+
+  async getVersionDiff(id: string, context: KnowledgeMutationContext) {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.knowledgeVersion.findFirst({
+        where: { id, knowledgeItem: { tenantKey: "ASODEF" } },
+        include: { source: true },
+      });
+      if (!current)
+        throw new NotFoundException("Versión de conocimiento no encontrada.");
+      const previous = await tx.knowledgeVersion.findFirst({
+        where: {
+          knowledgeItemId: current.knowledgeItemId,
+          knowledgeItem: { tenantKey: "ASODEF" },
+          version: { lt: current.version },
+        },
+        orderBy: { version: "desc" },
+        include: { source: true },
+      });
+      await this.recordAudit(
+        tx,
+        current.id,
+        current.knowledgeItemId,
+        context,
+        "knowledge.version.diff_viewed",
+        current.status,
+        current.status,
+        "Consulta de diff administrativo gobernado",
+        current.revision,
+        current.revision,
+        { previousVersionId: previous?.id ?? null },
+      );
+      return {
+        knowledgeItemId: current.knowledgeItemId,
+        current: {
+          id: current.id,
+          version: current.version,
+          title: current.title,
+          content: current.content,
+          sourceChecksum: current.source?.sourceChecksum ?? null,
+        },
+        previous: previous
+          ? {
+              id: previous.id,
+              version: previous.version,
+              title: previous.title,
+              content: previous.content,
+              sourceChecksum: previous.source?.sourceChecksum ?? null,
+            }
+          : null,
+      };
+    });
+  }
 
   async createManualDraft(
     dto: CreateManualKnowledgeDto,
@@ -899,6 +1036,15 @@ export class KnowledgeService implements KnowledgeGateway {
       },
     });
   }
+}
+
+function stripKnowledgeContent<T extends { content: string; chunks?: unknown }>(
+  version: T,
+): Omit<T, "content" | "chunks"> {
+  const metadata = { ...version } as Partial<T>;
+  delete metadata.content;
+  delete metadata.chunks;
+  return metadata as Omit<T, "content" | "chunks">;
 }
 
 function validateDraftSemantics(dto: KnowledgeDraftMetadataDto): void {

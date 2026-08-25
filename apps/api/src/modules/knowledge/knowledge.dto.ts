@@ -4,6 +4,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
+  IsArray,
   IsString,
   IsUUID,
   Matches,
@@ -11,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+import { Type } from "class-transformer";
 import {
   DATA_CLASSIFICATIONS,
   KNOWLEDGE_AUDIENCES,
@@ -31,6 +33,7 @@ export class KnowledgeDraftMetadataDto {
   knowledgeItemId?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   expectedItemRevision?: number;
@@ -119,4 +122,51 @@ export class OfficialWebImportDto extends KnowledgeDraftMetadataDto {
   @IsNotEmpty()
   @MaxLength(2_000)
   url!: string;
+}
+
+export class ListKnowledgeItemsQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(KNOWLEDGE_DOMAINS)
+  domain?: KnowledgeDomain;
+
+  @IsOptional()
+  @IsEnum(KNOWLEDGE_AUDIENCES)
+  audience?: KnowledgeAudience;
+
+  @IsOptional()
+  @IsEnum(DATA_CLASSIFICATIONS)
+  classification?: DataClassification;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page: number = 1;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 30;
+}
+
+export class KnowledgeRetrievalTestDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2_000)
+  query!: string;
+
+  @IsArray()
+  @IsEnum(KNOWLEDGE_DOMAINS, { each: true })
+  domainKeys!: KnowledgeDomain[];
+
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit!: number;
 }

@@ -10,12 +10,18 @@ describe("KnowledgeController governance metadata", () => {
     "registerOfficialWebImport",
     "submitReview",
     "returnToDraft",
+    "getVersionDiff",
   ] as const;
   const publishOperations = [
     "approve",
     "publish",
     "retire",
     "preview",
+  ] as const;
+  const readOperations = [
+    "listItems",
+    "getItem",
+    "testPublishedRetrieval",
   ] as const;
 
   it("keeps the entire administrative surface authenticated and non-public", () => {
@@ -48,6 +54,15 @@ describe("KnowledgeController governance metadata", () => {
       expect(Reflect.getMetadata(REQUIRE_STEP_UP_KEY, handler)).toBe(true);
     },
   );
+
+  it.each(readOperations)("%s requires knowledge.read", (operation) => {
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        KnowledgeController.prototype[operation],
+      ),
+    ).toEqual(["knowledge.read"]);
+  });
 
   it("keeps preview governed and separate from publication", () => {
     const previewPath = Reflect.getMetadata(

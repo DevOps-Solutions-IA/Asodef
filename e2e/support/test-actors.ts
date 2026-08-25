@@ -96,12 +96,15 @@ export async function createRevokablePrivilegedTestSession(): Promise<string> {
 /** Expires only the server-side assurance markers in the isolated E2E
  * database. The authenticated session remains usable so the browser can prove
  * the real protected-action -> STEP_UP_REQUIRED -> retry contract. */
-export async function expirePrivilegedTestStepUpAssurance(): Promise<number> {
+export async function expirePrivilegedTestStepUpAssurance(
+  sessionId: string,
+): Promise<number> {
   const user = await prisma.user.findUniqueOrThrow({ where: { email: PRIVILEGED_TEST_EMAIL } });
   const staleAt = new Date(Date.now() - 60 * 60 * 1000);
   const result = await prisma.session.updateMany({
     where: {
       userId: user.id,
+      id: sessionId,
       revokedAt: null,
       rotatedAt: null,
       expiresAt: { gt: new Date() },
