@@ -1,4 +1,5 @@
 import {
+  qualifyGroundingEvidence,
   retrievePublishedKnowledge,
   type HybridRetrievalConfig,
   type KnowledgeRetrievalCandidate,
@@ -182,5 +183,86 @@ describe("retrievePublishedKnowledge", () => {
         { ...config, keywordWeight: 0, semanticWeight: 0 },
       ),
     ).toThrow("INVALID_HYBRID_RETRIEVAL_CONFIG");
+  });
+});
+
+describe("qualifyGroundingEvidence", () => {
+  function ranked(
+    itemId: string,
+    keywordScore: number,
+    claims: KnowledgeRetrievalCandidate["claims"] = undefined,
+  ) {
+    return {
+      ...candidate({
+        trace: {
+          itemId,
+          versionId: `version-${itemId}`,
+          chunkId: `chunk-${itemId}`,
+          sourceId: `source-${itemId}`,
+        },
+        claims,
+      }),
+      keywordScore,
+      semanticScore: 0,
+      fusedScore: keywordScore,
+      rank: 1,
+    };
+  }
+
+  it("selects relevant evidence and rejects an incidental conflicting match", () => {
+    const relevant = ranked("relevant", 1);
+    const incidental = ranked("incidental", 2 / 3, [
+      { key: "coverage", value: "No disponible" },
+    ]);
+
+    const result = qualifyGroundingEvidence([relevant, incidental]);
+
+    expect(result.evidence).toEqual([relevant]);
+    expect(result).toMatchObject({
+      candidateCount: 2,
+      selectedCount: 1,
+      rejectedCount: 1,
+    });
+    expect(result.decisions[1]).toMatchObject({
+      selectedForGrounding: false,
+      reason: "INCOMPLETE_QUERY_TERM_COVERAGE",
+    });
+  });
+
+  it("preserves genuinely relevant conflicting sources for grounding", () => {
+    const first = ranked("first", 1, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+    const second = ranked("second", 1, [
+      { key: "coverage", value: "No disponible" },
+    ]);
+
+    const result = qualifyGroundingEvidence([first, second]);
+
+    expect(result.evidence).toEqual([first, second]);
+    expect(result.rejectedCount).toBe(0);
+  });
+
+  it("returns no grounding evidence for generic-only partial matches", () => {
+    const generic = ranked("generic", 2 / 3);
+
+    const result = qualifyGroundingEvidence([generic]);
+
+    expect(result.evidence).toEqual([]);
+    expect(result).toMatchObject({ selectedCount: 0, rejectedCount: 1 });
+  });
+
+  it("keeps multiple fully relevant compatible sources", () => {
+    const first = ranked("first-compatible", 1, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+    const second = ranked("second-compatible", 1, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+
+    const result = qualifyGroundingEvidence([first, second]);
+
+    expect(result.evidence).toEqual([first, second]);
+    expect(result.selectedCount).toBe(2);
   });
 });

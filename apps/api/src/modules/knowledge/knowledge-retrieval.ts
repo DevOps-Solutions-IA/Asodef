@@ -78,6 +78,23 @@ export interface HybridRetrievalResult {
   };
 }
 
+export type KnowledgeRelevanceDecisionReason =
+  "FULL_QUERY_TERM_COVERAGE" | "INCOMPLETE_QUERY_TERM_COVERAGE";
+
+export interface KnowledgeRelevanceDecision {
+  evidence: RankedKnowledgeEvidence;
+  selectedForGrounding: boolean;
+  reason: KnowledgeRelevanceDecisionReason;
+}
+
+export interface KnowledgeGroundingEvidenceSelection {
+  evidence: readonly RankedKnowledgeEvidence[];
+  decisions: readonly KnowledgeRelevanceDecision[];
+  candidateCount: number;
+  selectedCount: number;
+  rejectedCount: number;
+}
+
 const CLASSIFICATION_RANK: Readonly<Record<DataClassification, number>> = {
   PUBLIC: 0,
   INTERNAL: 1,
@@ -145,6 +162,42 @@ export function retrievePublishedKnowledge(
       effectiveAt: request.serverScope.effectiveAt,
       language: request.serverScope.language,
     },
+  };
+}
+
+/**
+ * Separates retrieval recall from factual grounding authority. Keyword scores
+ * are query-term coverage ratios produced by the owning search implementation;
+ * only candidates covering the complete normalized query may establish or
+ * contradict a factual claim. Partial matches remain observable retrieval
+ * candidates, but cannot contaminate grounding through generic shared terms.
+ *
+ * This is intentionally deterministic and fail-closed. A future semantic
+ * channel must define its own governed qualification contract before semantic
+ * candidates can become grounding evidence.
+ */
+export function qualifyGroundingEvidence(
+  candidates: readonly RankedKnowledgeEvidence[],
+): KnowledgeGroundingEvidenceSelection {
+  const decisions = candidates.map((evidence): KnowledgeRelevanceDecision => {
+    const selectedForGrounding = evidence.keywordScore === 1;
+    return {
+      evidence,
+      selectedForGrounding,
+      reason: selectedForGrounding
+        ? "FULL_QUERY_TERM_COVERAGE"
+        : "INCOMPLETE_QUERY_TERM_COVERAGE",
+    };
+  });
+  const evidence = decisions
+    .filter(({ selectedForGrounding }) => selectedForGrounding)
+    .map((decision) => decision.evidence);
+  return {
+    evidence,
+    decisions,
+    candidateCount: decisions.length,
+    selectedCount: evidence.length,
+    rejectedCount: decisions.length - evidence.length,
   };
 }
 

@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ConflictException } from "@nestjs/common";
-import {
-  KnowledgeLifecycleStatus,
-  PrismaClient,
-} from "@prisma/client";
+import { KnowledgeLifecycleStatus, PrismaClient } from "@prisma/client";
 import type {
   GatewayRequestContext,
   KnowledgeGatewayRequest,
@@ -130,7 +127,9 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
     expect(listed.items[0]?.id).toBe(draft.knowledgeItemId);
     expect(listed.items[0]?.versions[0]).not.toHaveProperty("content");
     const detail = await service.getItem(draft.knowledgeItemId);
-    expect(detail.versions[0]?.source?.sourceReference).toBe(`manual://${marker}`);
+    expect(detail.versions[0]?.source?.sourceReference).toBe(
+      `manual://${marker}`,
+    );
     expect(detail.versions[0]).not.toHaveProperty("content");
     expect(detail.versions[0]).not.toHaveProperty("chunks");
     const diff = await service.getVersionDiff(
@@ -150,7 +149,11 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
       "knowledge.version.published",
       "knowledge.version.diff_viewed",
     ]);
-    expect(auditEvents.every((event) => event.knowledgeItemId === draft.knowledgeItemId)).toBe(true);
+    expect(
+      auditEvents.every(
+        (event) => event.knowledgeItemId === draft.knowledgeItemId,
+      ),
+    ).toBe(true);
     expect(JSON.stringify(auditEvents)).not.toContain(
       `${marker} información institucional verificable`,
     );
@@ -235,6 +238,127 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
     expect(conflict.response.citations).toHaveLength(2);
   });
 
+  it("qualifies grounding relevance without weakening true source conflicts", async () => {
+    const relevantMarker = uniqueMarker("relevance-primary");
+    const relevant = await createAndPublish(relevantMarker, {
+      content: `${relevantMarker} beneficios ASODEF con orientación institucional verificable`,
+    });
+    const incidentalMarker = uniqueMarker("relevance-incidental");
+    const incidentalFirst = await createAndPublish(`${incidentalMarker}-a`, {
+      content: `beneficios ASODEF sobre una materia incidental diferente`,
+    });
+    const incidentalSecond = await createAndPublish(`${incidentalMarker}-b`, {
+      content: `beneficios ASODEF sobre otra materia incidental diferente`,
+    });
+    await setClaims(incidentalFirst.id, [
+      { key: "incidental.coverage", value: "Disponible" },
+    ]);
+    await setClaims(incidentalSecond.id, [
+      { key: "incidental.coverage", value: "No disponible" },
+    ]);
+
+    const relevantQuery = `${relevantMarker} beneficios ASODEF`;
+    const relevantResult = await search(relevantQuery);
+    expect(relevantResult).toMatchObject({
+      ok: true,
+      response: { outcome: "SUFFICIENT_EVIDENCE" },
+    });
+    if (!relevantResult.ok) throw new Error(relevantResult.error.code);
+    expect(relevantResult.response.citations).toHaveLength(1);
+    expect(relevantResult.response.citations[0]?.knowledgeVersionId).toBe(
+      relevant.id,
+    );
+    expect(
+      relevantResult.response.citations.map(
+        ({ knowledgeVersionId }) => knowledgeVersionId,
+      ),
+    ).not.toEqual(
+      expect.arrayContaining([incidentalFirst.id, incidentalSecond.id]),
+    );
+    const relevanceAudit =
+      await prisma.knowledgeRetrievalAudit.findFirstOrThrow({
+        where: {
+          correlationId: `${correlationPrefix}-search-${relevantQuery}`,
+        },
+      });
+    expect(relevanceAudit).toMatchObject({
+      result: "SUFFICIENT_EVIDENCE",
+      citationCount: 1,
+    });
+    const relevanceCounts = relevanceAudit.reasonCode?.match(
+      /^FULL_QUERY_TERM_COVERAGE:CANDIDATES_(\d+):SELECTED_(\d+):REJECTED_(\d+)$/u,
+    );
+    expect(relevanceCounts).not.toBeNull();
+    const candidateCount = Number(relevanceCounts![1]);
+    const selectedCount = Number(relevanceCounts![2]);
+    const rejectedCount = Number(relevanceCounts![3]);
+    expect(candidateCount).toBeGreaterThanOrEqual(selectedCount);
+    expect(selectedCount).toBe(1);
+    expect(rejectedCount).toBe(candidateCount - selectedCount);
+    expect(rejectedCount).toBeGreaterThanOrEqual(2);
+
+    const absentQuery = `${uniqueMarker("absent")} beneficios ASODEF`;
+    await expect(search(absentQuery)).resolves.toMatchObject({
+      ok: true,
+      response: { outcome: "NO_EVIDENCE", citations: [] },
+    });
+    await expect(
+      prisma.knowledgeRetrievalAudit.findFirstOrThrow({
+        where: {
+          correlationId: `${correlationPrefix}-search-${absentQuery}`,
+        },
+      }),
+    ).resolves.toMatchObject({
+      result: "NO_EVIDENCE",
+      citationCount: 0,
+      reasonCode: expect.stringMatching(
+        /^NO_FULL_QUERY_TERM_COVERAGE:CANDIDATES_[1-9][0-9]*:SELECTED_0:REJECTED_[1-9][0-9]*$/u,
+      ),
+    });
+
+    const conflictMarker = uniqueMarker("relevance-conflict");
+    const conflictFirst = await createAndPublish(`${conflictMarker}-a`, {
+      content: `${conflictMarker} beneficios ASODEF con cobertura definida`,
+    });
+    const conflictSecond = await createAndPublish(`${conflictMarker}-b`, {
+      content: `${conflictMarker} beneficios ASODEF con cobertura definida`,
+    });
+    await setClaims(conflictFirst.id, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+    await setClaims(conflictSecond.id, [
+      { key: "coverage", value: "No disponible" },
+    ]);
+    const conflict = await search(`${conflictMarker} beneficios ASODEF`);
+    expect(conflict).toMatchObject({
+      ok: true,
+      response: { outcome: "SOURCE_CONFLICT" },
+    });
+    if (!conflict.ok) throw new Error(conflict.error.code);
+    expect(conflict.response.citations).toHaveLength(2);
+
+    const compatibleMarker = uniqueMarker("relevance-compatible");
+    const compatibleFirst = await createAndPublish(`${compatibleMarker}-a`, {
+      content: `${compatibleMarker} beneficios ASODEF con cobertura coincidente`,
+    });
+    const compatibleSecond = await createAndPublish(`${compatibleMarker}-b`, {
+      content: `${compatibleMarker} beneficios ASODEF con cobertura coincidente`,
+    });
+    await setClaims(compatibleFirst.id, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+    await setClaims(compatibleSecond.id, [
+      { key: "coverage", value: "Disponible" },
+    ]);
+    const compatible = await search(`${compatibleMarker} beneficios ASODEF`);
+    expect(compatible).toMatchObject({
+      ok: true,
+      response: { outcome: "SUFFICIENT_EVIDENCE" },
+    });
+    if (!compatible.ok) throw new Error(compatible.error.code);
+    expect(compatible.response.citations).toHaveLength(2);
+  });
+
   it("fails stale CAS writes and forbids mutating a published version through lifecycle transitions", async () => {
     const marker = uniqueMarker("cas");
     const draft = await createDraft(marker);
@@ -289,9 +413,10 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
   it("publishes V2 atomically, retires V1, and preserves the immutable V1 publication evidence", async () => {
     const marker = uniqueMarker("versioning");
     const v1 = await createAndPublish(marker);
-    const v1SnapshotBefore = await prisma.knowledgePublicationSnapshot.findUniqueOrThrow(
-      { where: { knowledgeVersionId: v1.id } },
-    );
+    const v1SnapshotBefore =
+      await prisma.knowledgePublicationSnapshot.findUniqueOrThrow({
+        where: { knowledgeVersionId: v1.id },
+      });
     const v1SourceBefore = await prisma.knowledgeSource.findUniqueOrThrow({
       where: { knowledgeVersionId: v1.id },
     });
@@ -331,9 +456,10 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
       { id: v2.id, version: 2, status: KnowledgeLifecycleStatus.PUBLISHED },
     ]);
 
-    const v1SnapshotAfter = await prisma.knowledgePublicationSnapshot.findUniqueOrThrow(
-      { where: { knowledgeVersionId: v1.id } },
-    );
+    const v1SnapshotAfter =
+      await prisma.knowledgePublicationSnapshot.findUniqueOrThrow({
+        where: { knowledgeVersionId: v1.id },
+      });
     const v1SourceAfter = await prisma.knowledgeSource.findUniqueOrThrow({
       where: { knowledgeVersionId: v1.id },
     });
@@ -443,6 +569,18 @@ describe("KnowledgeService governed lifecycle (integration)", () => {
       command(approved.revision, "Publicar"),
       mutationContext(`publish-${marker}`),
     );
+  }
+
+  async function setClaims(
+    knowledgeVersionId: string,
+    claims: readonly { key: string; value: string }[],
+  ) {
+    await prisma.knowledgeChunk.update({
+      where: {
+        knowledgeVersionId_ordinal: { knowledgeVersionId, ordinal: 0 },
+      },
+      data: { metadata: { claims: [...claims] } },
+    });
   }
 
   function search(query: string) {

@@ -60,6 +60,7 @@ import {
 } from "./knowledge-parser";
 import {
   retrievePublishedKnowledge,
+  qualifyGroundingEvidence,
   type KnowledgeClaim,
   type RankedKnowledgeEvidence,
   type ScoredKnowledgeCandidate,
@@ -107,11 +108,19 @@ export class KnowledgeService implements KnowledgeGateway {
       ...(query.search
         ? {
             OR: [
-              { stableKey: { contains: query.search, mode: "insensitive" as const } },
+              {
+                stableKey: {
+                  contains: query.search,
+                  mode: "insensitive" as const,
+                },
+              },
               {
                 versions: {
                   some: {
-                    title: { contains: query.search, mode: "insensitive" as const },
+                    title: {
+                      contains: query.search,
+                      mode: "insensitive" as const,
+                    },
                   },
                 },
               },
@@ -122,7 +131,9 @@ export class KnowledgeService implements KnowledgeGateway {
         ? {
             versions: {
               some: {
-                ...(query.domain ? { domain: query.domain as KnowledgeDomain } : {}),
+                ...(query.domain
+                  ? { domain: query.domain as KnowledgeDomain }
+                  : {}),
                 ...(query.audience
                   ? { audience: query.audience as KnowledgeAudience }
                   : {}),
@@ -572,6 +583,15 @@ export class KnowledgeService implements KnowledgeGateway {
         "INVALID_KNOWLEDGE_REQUEST",
         scope.scope,
       );
+    const tokens = queryTokens(request.query);
+    if (tokens.length === 0)
+      return this.rejectSearch(
+        request,
+        context,
+        "INVALID_REQUEST",
+        "KNOWLEDGE_QUERY_TERMS_REQUIRED",
+        scope.scope,
+      );
 
     const now = new Date();
     const allowedAudiences = audiencesFor(scope.scope.audience);
@@ -598,10 +618,9 @@ export class KnowledgeService implements KnowledgeGateway {
           include: {
             chunks: {
               where: {
-                content: {
-                  contains: request.query.trim(),
-                  mode: "insensitive",
-                },
+                OR: tokens.map((token) => ({
+                  content: { contains: token, mode: "insensitive" },
+                })),
               },
               orderBy: { ordinal: "asc" },
               take: this.retrievalConfig.candidateLimit,
@@ -634,10 +653,16 @@ export class KnowledgeService implements KnowledgeGateway {
         dataClassification: snapshot.knowledgeVersion.classification,
         language: "es",
         ...(snapshot.knowledgeVersion.effectiveFrom
-          ? { effectiveFrom: snapshot.knowledgeVersion.effectiveFrom.toISOString() }
+          ? {
+              effectiveFrom:
+                snapshot.knowledgeVersion.effectiveFrom.toISOString(),
+            }
           : {}),
         ...(snapshot.knowledgeVersion.effectiveUntil
-          ? { effectiveUntil: snapshot.knowledgeVersion.effectiveUntil.toISOString() }
+          ? {
+              effectiveUntil:
+                snapshot.knowledgeVersion.effectiveUntil.toISOString(),
+            }
           : {}),
         ...(snapshot.knowledgeVersion.requiresRevalidationAt
           ? {
@@ -682,9 +707,8 @@ export class KnowledgeService implements KnowledgeGateway {
       }
     });
 
-    const tokens = queryTokens(request.query);
-    const keywordCandidates: ScoredKnowledgeCandidate[] = readableSnapshots.flatMap(
-      (snapshot) =>
+    const keywordCandidates: ScoredKnowledgeCandidate[] =
+      readableSnapshots.flatMap((snapshot) =>
         snapshot.knowledgeVersion.chunks.map((chunk) => ({
           score: keywordScore(tokens, chunk.content),
           candidate: {
@@ -705,7 +729,7 @@ export class KnowledgeService implements KnowledgeGateway {
             claims: parseClaims(chunk.metadata),
           },
         })),
-    );
+      );
     const ranked = retrievePublishedKnowledge(
       {
         query: request.query,
@@ -721,10 +745,18 @@ export class KnowledgeService implements KnowledgeGateway {
       },
       { ...this.retrievalConfig, limit: request.limit },
     );
-    const snapshotByVersion = new Map(
-      readableSnapshots.map((snapshot) => [snapshot.knowledgeVersionId, snapshot]),
+    const relevance = qualifyGroundingEvidence(ranked.evidence);
+    const grounding = groundRuntimeEvidence(
+      relevance.evidence,
+      this.retrievalConfig.sufficientEvidenceScore,
     );
-    const citations = ranked.evidence.map((evidence) => {
+    const snapshotByVersion = new Map(
+      readableSnapshots.map((snapshot) => [
+        snapshot.knowledgeVersionId,
+        snapshot,
+      ]),
+    );
+    const citations = grounding.evidence.map((evidence) => {
       const snapshot = snapshotByVersion.get(evidence.trace.versionId)!;
       return {
         publicationId: snapshot.id,
@@ -742,10 +774,6 @@ export class KnowledgeService implements KnowledgeGateway {
         score: evidence.fusedScore,
       };
     });
-    const grounding = groundRuntimeEvidence(
-      ranked.evidence,
-      this.retrievalConfig.sufficientEvidenceScore,
-    );
     const outcome = grounding.outcome;
     await this.recordRetrieval(
       context,
@@ -753,6 +781,7 @@ export class KnowledgeService implements KnowledgeGateway {
       request.query,
       outcome,
       citations.length,
+      relevanceAuditReason(relevance),
     );
     return {
       ok: true,
@@ -1087,12 +1116,7 @@ function audiencesFor(audience: string): KnowledgeAudience[] {
 
 function candidateAudiences(audience: KnowledgeAudience): string[] {
   if (audience === KnowledgeAudience.PUBLIC) {
-    return [
-      "PUBLIC",
-      "AUTHENTICATED_AFFILIATE",
-      "INTERNAL",
-      "ADMIN_ONLY",
-    ];
+    return ["PUBLIC", "AUTHENTICATED_AFFILIATE", "INTERNAL", "ADMIN_ONLY"];
   }
   if (audience === KnowledgeAudience.AUTHENTICATED_AFFILIATE) {
     return ["AUTHENTICATED_AFFILIATE", "ADMIN_ONLY"];
@@ -1167,16 +1191,65 @@ function groundRuntimeEvidence(
   };
 }
 
+function relevanceAuditReason(selection: {
+  candidateCount: number;
+  selectedCount: number;
+  rejectedCount: number;
+}): string {
+  const outcome =
+    selection.candidateCount === 0
+      ? "NO_RETRIEVAL_CANDIDATES"
+      : selection.selectedCount === 0
+        ? "NO_FULL_QUERY_TERM_COVERAGE"
+        : "FULL_QUERY_TERM_COVERAGE";
+  return [
+    outcome,
+    `CANDIDATES_${selection.candidateCount}`,
+    `SELECTED_${selection.selectedCount}`,
+    `REJECTED_${selection.rejectedCount}`,
+  ].join(":");
+}
+
 function queryTokens(query: string): string[] {
   return [
     ...new Set(
       query
         .toLocaleLowerCase("es")
         .split(/[^\p{L}\p{N}]+/u)
-        .filter((token) => token.length > 1),
+        .filter(
+          (token) =>
+            token.length > 1 && !SPANISH_RETRIEVAL_STOP_WORDS.has(token),
+        ),
     ),
   ];
 }
+
+const SPANISH_RETRIEVAL_STOP_WORDS = new Set([
+  "a",
+  "al",
+  "como",
+  "con",
+  "cuál",
+  "cuáles",
+  "de",
+  "del",
+  "el",
+  "en",
+  "es",
+  "la",
+  "las",
+  "los",
+  "para",
+  "por",
+  "qué",
+  "que",
+  "se",
+  "sobre",
+  "son",
+  "un",
+  "una",
+  "y",
+]);
 
 function keywordScore(tokens: readonly string[], content: string): number {
   if (tokens.length === 0) return 0;

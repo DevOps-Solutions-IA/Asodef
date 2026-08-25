@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { AiGateway } from "@asodef/connect-contracts";
+import type { AiGateway, KnowledgeGateway } from "@asodef/connect-contracts";
 import type { EnvConfig } from "../../config/env.validation";
 import {
   AI_GATEWAY,
@@ -10,6 +10,10 @@ import {
 import type { ModelRegistry } from "../ai-gateway/model-registry";
 import { APPROVED_AGENT_MODEL_BINDINGS } from "../ai-gateway/runtime-model-catalog";
 import { AuthModule } from "../auth/auth.module";
+import {
+  KNOWLEDGE_GATEWAY,
+  KnowledgeModule,
+} from "../knowledge/knowledge.module";
 import { ConversationIdentityBindingService } from "./conversation-identity-binding.service";
 import { KORAL_ORCHESTRATION_PIPELINE } from "./contracts/orchestrator.contract";
 import { KoralIdentityResolutionService } from "./identity-resolution.service";
@@ -17,6 +21,7 @@ import { KoralConversationsController } from "./koral-conversations.controller";
 import { KoralConversationsService } from "./koral-conversations.service";
 import {
   CanonicalKoralAiGatewayAdapter,
+  CanonicalKoralKnowledgeGatewayAdapter,
   PublishedModelProfileResolver,
 } from "./koral-gateway.adapters";
 import { GovernedKoralOrchestrationPipeline } from "./koral-orchestration.pipeline";
@@ -29,9 +34,12 @@ import { WebChatServerService } from "./web-chat-server.service";
 import { WebChatSessionService } from "./web-chat-session.service";
 
 export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
+export const KORAL_KNOWLEDGE_GATEWAY_ADAPTER = Symbol(
+  "KORAL_KNOWLEDGE_GATEWAY_ADAPTER",
+);
 
 @Module({
-  imports: [AiGatewayModule, AuthModule],
+  imports: [AiGatewayModule, AuthModule, KnowledgeModule],
   controllers: [KoralConversationsController, WebChatController],
   providers: [
     KoralConversationsService,
@@ -46,12 +54,24 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
     },
     {
       provide: KORAL_ORCHESTRATION_PIPELINE,
-      inject: [KoralConversationsService, KORAL_AI_GATEWAY_ADAPTER, ConfigService],
+      inject: [
+        KoralConversationsService,
+        KORAL_AI_GATEWAY_ADAPTER,
+        KORAL_KNOWLEDGE_GATEWAY_ADAPTER,
+        ConfigService,
+      ],
       useFactory: (
         conversations: KoralConversationsService,
-        gateway: CanonicalKoralAiGatewayAdapter,
+        aiGateway: CanonicalKoralAiGatewayAdapter,
+        knowledgeGateway: CanonicalKoralKnowledgeGatewayAdapter,
         config: ConfigService<EnvConfig, true>,
-      ) => new GovernedKoralOrchestrationPipeline(conversations, gateway, config),
+      ) =>
+        new GovernedKoralOrchestrationPipeline(
+          conversations,
+          aiGateway,
+          knowledgeGateway,
+          config,
+        ),
     },
     {
       provide: KORAL_AI_GATEWAY_ADAPTER,
@@ -60,6 +80,12 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
         gateway: AiGateway,
         profiles: PublishedModelProfileResolver,
       ) => new CanonicalKoralAiGatewayAdapter(gateway, profiles),
+    },
+    {
+      provide: KORAL_KNOWLEDGE_GATEWAY_ADAPTER,
+      inject: [KNOWLEDGE_GATEWAY],
+      useFactory: (gateway: KnowledgeGateway) =>
+        new CanonicalKoralKnowledgeGatewayAdapter(gateway),
     },
     KoralIdentityResolutionService,
     ConversationIdentityBindingService,
@@ -73,6 +99,7 @@ export const KORAL_AI_GATEWAY_ADAPTER = Symbol("KORAL_AI_GATEWAY_ADAPTER");
   exports: [
     KoralConversationsService,
     KORAL_AI_GATEWAY_ADAPTER,
+    KORAL_KNOWLEDGE_GATEWAY_ADAPTER,
     KORAL_ORCHESTRATION_PIPELINE,
     KoralIdentityResolutionService,
     ConversationIdentityBindingService,

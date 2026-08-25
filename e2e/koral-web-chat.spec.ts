@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import {
   expect,
@@ -15,10 +15,56 @@ const BOOTSTRAP_PATH = "/api/v1/koral/web-chat/bootstrap";
 const MESSAGES_PATH = "/api/v1/koral/web-chat/messages";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const KNOWLEDGE_MARKER = `beneficio-koral-${randomUUID()
+  .replaceAll("-", "")
+  .replaceAll(/[0-9]/gu, "a")}`;
+const CONFLICT_MARKER = `conflicto-koral-${randomUUID()
+  .replaceAll("-", "")
+  .replaceAll(/[0-9]/gu, "b")}`;
+const knowledgeItemIds: string[] = [];
 
 test.describe
   .serial("Koral public Web Chat — real browser/server boundary", () => {
+  test.beforeAll(async () => {
+    const content = `${KNOWLEDGE_MARKER} beneficios ASODEF publicados y verificables ${KNOWLEDGE_MARKER}`;
+    knowledgeItemIds.push(
+      await createPublishedKnowledgeFixture(KNOWLEDGE_MARKER, content),
+      await createPublishedKnowledgeFixture(
+        `${CONFLICT_MARKER}-a`,
+        `${CONFLICT_MARKER} beneficios ASODEF con cobertura disponible`,
+        [{ key: "cobertura-conflictiva", value: "Disponible" }],
+      ),
+      await createPublishedKnowledgeFixture(
+        `${CONFLICT_MARKER}-b`,
+        `${CONFLICT_MARKER} beneficios ASODEF con cobertura no disponible`,
+        [{ key: "cobertura-conflictiva", value: "No disponible" }],
+      ),
+    );
+  });
+
   test.afterAll(async () => {
+    if (knowledgeItemIds.length > 0) {
+      const versions = await prisma.knowledgeVersion.findMany({
+        where: { knowledgeItemId: { in: knowledgeItemIds } },
+        select: { id: true },
+      });
+      const versionIds = versions.map(({ id }) => id);
+      await prisma.knowledgePublicationSnapshot.deleteMany({
+        where: { knowledgeItemId: { in: knowledgeItemIds } },
+      });
+      await prisma.knowledgeChunk.deleteMany({
+        where: { knowledgeVersionId: { in: versionIds } },
+      });
+      await prisma.knowledgeSource.deleteMany({
+        where: { knowledgeVersionId: { in: versionIds } },
+      });
+      await prisma.knowledgeVersion.deleteMany({
+        where: { id: { in: versionIds } },
+      });
+      await prisma.knowledgeItem.deleteMany({
+        where: { id: { in: knowledgeItemIds } },
+      });
+    }
     await prisma.$disconnect();
   });
 
@@ -51,7 +97,8 @@ test.describe
         request.method() === "POST" &&
         new URL(request.url()).pathname === MESSAGES_PATH,
     );
-    await dialog.getByLabel("Escribe tu mensaje").fill("Hola");
+    const knowledgeQuestion = `¿Cuáles son los beneficios de ASODEF sobre ${KNOWLEDGE_MARKER}?`;
+    await dialog.getByLabel("Escribe tu mensaje").fill(knowledgeQuestion);
     await dialog.getByRole("button", { name: "Enviar mensaje" }).click();
     const firstRequest = await firstRequestPromise;
     const firstResponse = await firstRequest.response();
@@ -63,7 +110,7 @@ test.describe
     await expect(
       dialog.getByText("Buscando un asesor", { exact: true }),
     ).toBeVisible();
-    await expect(dialog.getByText("Hola", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(knowledgeQuestion, { exact: true })).toBeVisible();
     await assertCapabilityIsNotProjected(
       page,
       firstResponse!,
@@ -89,7 +136,7 @@ test.describe
       },
     });
     expect(firstInbound.direction).toBe("INBOUND");
-    expect(firstInbound.body).toBe("Hola");
+    expect(firstInbound.body).toBe(knowledgeQuestion);
     expect(firstInbound.channelSession?.channel).toBe("WEB");
     expect(firstInbound.webChatProcessing).toMatchObject({
       status: "COMPLETED",
@@ -114,6 +161,18 @@ test.describe
       "PROVIDER_UNAVAILABLE",
       "MODEL_NOT_AVAILABLE",
     ]);
+    await expect(
+      prisma.knowledgeRetrievalAudit.findFirstOrThrow({
+        where: { correlationId: handoff.correlationId ?? "" },
+      }),
+    ).resolves.toMatchObject({
+      result: "SUFFICIENT_EVIDENCE",
+      citationCount: 1,
+    });
+    const evidenceReference = gatewayReferencesOf(handoff.metadata)[0];
+    expect(evidenceReference).toMatch(
+      /^knowledge-evidence:v1:[0-9a-f-]{36}:[0-9a-f-]{36}:ai:[0-9a-f-]{36}$/u,
+    );
     expect(await outboundCount(firstInbound.conversationId)).toBe(0);
 
     const secondRequestPromise = page.waitForRequest(
@@ -197,7 +256,7 @@ test.describe
 
     const resumedDialog = page.getByRole("dialog", { name: "Habla con Koral" });
     await expect(
-      resumedDialog.getByText("Hola", { exact: true }),
+      resumedDialog.getByText(knowledgeQuestion, { exact: true }),
     ).toBeVisible();
     await expect(
       resumedDialog.getByText(followUp, { exact: true }),
@@ -205,6 +264,9 @@ test.describe
     await expect(
       resumedDialog.getByText("Buscando un asesor", { exact: true }),
     ).toBeVisible();
+    await expect(
+      resumedDialog.getByText("¿En qué podemos ayudarte?", { exact: true }),
+    ).not.toBeVisible();
     expect(
       await prisma.webChatSession.count({
         where: {
@@ -231,9 +293,58 @@ test.describe
 
     await assertSecondBrowserIsIsolated(
       browser,
-      ["Hola", followUp],
+      [knowledgeQuestion, followUp],
       digest(rotatedCookie.value),
     );
+  });
+
+  test("propagates NO_EVIDENCE without inventing an outbound answer", async ({
+    page,
+  }) => {
+    const question = `¿Cuáles son los beneficios de ASODEF sobre inexistente${randomUUID().replaceAll("-", "")}?`;
+    const result = await sendPublicQuestion(page, question);
+    expect(result.response.status()).toBe(200);
+    await expect(result.dialog.getByText("Buscando un asesor", { exact: true })).toBeVisible();
+
+    const persisted = await persistedInbound(result.clientMessageId);
+    expect(persisted.webChatProcessing).toMatchObject({
+      status: "COMPLETED",
+      outcomeClass: "ORCHESTRATED",
+    });
+    expect(persisted.conversation.status).toBe("HUMAN_REQUIRED");
+    const handoff = await handoffEvent(persisted.conversationId);
+    expect(reasonCodesOf(handoff.metadata)).toEqual(["NO_EVIDENCE"]);
+    await expect(retrievalAudit(handoff.correlationId)).resolves.toMatchObject({
+      result: "NO_EVIDENCE",
+      citationCount: 0,
+    });
+    expect(await outboundCount(persisted.conversationId)).toBe(0);
+    expect(gatewayReferencesOf(handoff.metadata)).toEqual([]);
+  });
+
+  test("propagates SOURCE_CONFLICT without asking AI to choose a source", async ({
+    page,
+  }) => {
+    const question = `¿Cuáles son los beneficios de ASODEF sobre ${CONFLICT_MARKER}?`;
+    const result = await sendPublicQuestion(page, question);
+    expect(result.response.status()).toBe(200);
+    await expect(result.dialog.getByText("Buscando un asesor", { exact: true })).toBeVisible();
+
+    const persisted = await persistedInbound(result.clientMessageId);
+    expect(persisted.conversation.status).toBe("HUMAN_REQUIRED");
+    const handoff = await handoffEvent(persisted.conversationId);
+    expect(reasonCodesOf(handoff.metadata)).toEqual(["SOURCE_CONFLICT"]);
+    await expect(retrievalAudit(handoff.correlationId)).resolves.toMatchObject({
+      result: "SOURCE_CONFLICT",
+      citationCount: 2,
+    });
+    expect(await outboundCount(persisted.conversationId)).toBe(0);
+    expect(gatewayReferencesOf(handoff.metadata)).toHaveLength(2);
+    for (const reference of gatewayReferencesOf(handoff.metadata)) {
+      expect(reference).toMatch(
+        /^knowledge-evidence:v1:[0-9a-f-]{36}:[0-9a-f-]{36}$/u,
+      );
+    }
   });
 });
 
@@ -304,6 +415,149 @@ function reasonCodesOf(metadata: unknown): unknown {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
     return null;
   return (metadata as Record<string, unknown>).reasonCodes;
+}
+
+function gatewayReferencesOf(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+    return [];
+  const references = (metadata as Record<string, unknown>).gatewayReferences;
+  return Array.isArray(references)
+    ? references.filter((reference): reference is string => typeof reference === "string")
+    : [];
+}
+
+async function createPublishedKnowledgeFixture(
+  marker: string,
+  content: string,
+  claims: readonly { key: string; value: string }[] = [],
+): Promise<string> {
+  const publisher = await prisma.user.findFirstOrThrow({
+    where: {
+      status: "ACTIVE",
+      roles: { some: { role: { name: "SUPER_ADMIN" } } },
+    },
+    select: { id: true },
+  });
+  const sourceChecksum = digest(content);
+  const chunkChecksum = digest(content);
+  const item = await prisma.knowledgeItem.create({
+    data: {
+      tenantKey: "ASODEF",
+      stableKey: marker,
+      createdById: publisher.id,
+    },
+  });
+  const now = new Date();
+  const version = await prisma.knowledgeVersion.create({
+    data: {
+      knowledgeItemId: item.id,
+      version: 1,
+      revision: 3,
+      title: `Beneficios ASODEF ${marker}`,
+      domain: "BENEFICIOS_Y_CONVENIOS",
+      audience: "PUBLIC",
+      classification: "PUBLIC",
+      language: "es",
+      content,
+      status: "PUBLISHED",
+      changeReason: "Fixture E2E publicado mediante estado canónico",
+      createdById: publisher.id,
+      reviewedById: publisher.id,
+      approvedById: publisher.id,
+      publishedById: publisher.id,
+      reviewedAt: now,
+      approvedAt: now,
+      publishedAt: now,
+    },
+  });
+  const source = await prisma.knowledgeSource.create({
+    data: {
+      knowledgeVersionId: version.id,
+      sourceType: "MANUAL_AUTHORING",
+      sourceReference: `manual://${marker}`,
+      sourceOwner: "Equipo ASODEF",
+      sourceChecksum,
+    },
+  });
+  await prisma.knowledgeChunk.create({
+    data: {
+      knowledgeVersionId: version.id,
+      ordinal: 0,
+      content,
+      checksumSha256: chunkChecksum,
+      tokenEstimate: content.split(/\s+/u).length,
+      metadata: { parser: "e2e-fixture", language: "es", claims },
+    },
+  });
+  await prisma.knowledgePublicationSnapshot.create({
+    data: {
+      knowledgeVersionId: version.id,
+      knowledgeItemId: item.id,
+      sourceId: source.id,
+      domain: "BENEFICIOS_Y_CONVENIOS",
+      audience: "PUBLIC",
+      classification: "PUBLIC",
+      language: "es",
+      sourceReference: source.sourceReference,
+      sourceChecksum,
+      chunkSetChecksum: digest(chunkChecksum),
+      publishedById: publisher.id,
+      publishedAt: now,
+    },
+  });
+  return item.id;
+}
+
+async function sendPublicQuestion(page: Page, question: string) {
+  const bootstrap = page.waitForResponse((response) =>
+    isApiResponse(response, "POST", BOOTSTRAP_PATH),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Abrir chat con Koral" }).click();
+  expect((await bootstrap).status()).toBe(200);
+  const dialog = page.getByRole("dialog", { name: "Habla con Koral" });
+  const requestPromise = page.waitForRequest(
+    (request) =>
+      request.method() === "POST"
+      && new URL(request.url()).pathname === MESSAGES_PATH,
+  );
+  await dialog.getByLabel("Escribe tu mensaje").fill(question);
+  await dialog.getByRole("button", { name: "Enviar mensaje" }).click();
+  const request = await requestPromise;
+  const response = await request.response();
+  expect(response).not.toBeNull();
+  return {
+    dialog,
+    response: response!,
+    clientMessageId: clientMessageIdOf(request.postDataJSON() as unknown),
+  };
+}
+
+async function persistedInbound(clientMessageId: string) {
+  await expect
+    .poll(async () =>
+      prisma.conversationMessage.count({
+        where: { externalMessageId: clientMessageId },
+      }),
+    )
+    .toBe(1);
+  return prisma.conversationMessage.findFirstOrThrow({
+    where: { externalMessageId: clientMessageId },
+    include: { webChatProcessing: true, conversation: true },
+  });
+}
+
+function handoffEvent(conversationId: string) {
+  return prisma.conversationEvent.findFirstOrThrow({
+    where: { conversationId, eventType: "KORAL_HANDOFF_REQUIRED" },
+  });
+}
+
+function retrievalAudit(correlationId: string | null) {
+  expect(correlationId).not.toBeNull();
+  return prisma.knowledgeRetrievalAudit.findFirstOrThrow({
+    where: { correlationId: correlationId! },
+  });
 }
 
 function outboundCount(conversationId: string): Promise<number> {

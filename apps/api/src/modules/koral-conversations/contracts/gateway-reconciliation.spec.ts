@@ -235,6 +235,21 @@ describe("canonical Connect gateway reconciliation", () => {
     expect(KORAL_GATEWAY_ADAPTER_SEMANTICS.idempotency).toContain(
       "never retry",
     );
-    expect(KORAL_ORCHESTRATION_STEPS).toHaveLength(12);
+    expect(KORAL_ORCHESTRATION_STEPS).toEqual([
+      "RECEIVE_NORMALIZED_MESSAGE",
+      "RESOLVE_CONVERSATION",
+      "BUILD_SAFE_CONTEXT",
+      "EVALUATE_AI_POLICY",
+      "INVOKE_KNOWLEDGE_GATEWAY",
+      "GROUND_KNOWLEDGE",
+      "INVOKE_AI_GATEWAY",
+      "RECEIVE_TOOL_REQUEST",
+      "INVOKE_TOOL_GATEWAY",
+      "RETURN_TOOL_RESULT",
+      "CONTINUE_INFERENCE_IF_ALLOWED",
+      "VALIDATE_OUTBOUND_RESPONSE",
+      "HANDOFF_IF_REQUIRED",
+      "APPEND_AUDIT_AND_CONVERSATION_EVENTS",
+    ]);
   });
 });

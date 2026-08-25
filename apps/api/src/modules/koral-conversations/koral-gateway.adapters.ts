@@ -63,7 +63,7 @@ const KORAL_SERVICE_PRINCIPAL = Object.freeze({
   principalId: "service:koral-orchestrator",
   effectiveActorId: "service:koral-orchestrator",
   identityLevel: "AUTHENTICATED" as const,
-  permissions: ["koral.ai.infer"] as const,
+  permissions: ["koral.ai.infer", "knowledge.read"] as const,
 });
 
 /** The gateway actor is a server-owned service principal. Visitor assurance
@@ -92,6 +92,13 @@ export function buildKoralServiceGatewayRequestContext(
       consentVerified,
       piiPolicy: input.piiPolicy,
       dataClassification: input.dataClassification,
+    },
+    effectiveScope: {
+      authority: "SERVER_SIDE",
+      tenantKey: "ASODEF",
+      audience: "PUBLIC",
+      organizationIds: [],
+      maximumDataClassification: "PUBLIC",
     },
     deadlineAt: input.deadlineAt,
   };

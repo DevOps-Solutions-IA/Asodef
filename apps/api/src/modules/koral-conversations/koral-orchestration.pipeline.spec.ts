@@ -30,7 +30,16 @@ function identity(
   };
 }
 
-function createHarness(body: string, gatewayOutcome: unknown) {
+function createHarness(
+  body: string,
+  gatewayOutcome: unknown,
+  knowledgeOutcome: unknown = {
+    kind: "FOUND",
+    outcome: "NO_EVIDENCE",
+    passages: [],
+    correlationId: "knowledge-1",
+  },
+) {
   const snapshot = {
     conversationId: "conversation-1",
     conversationVersion: 4,
@@ -48,12 +57,16 @@ function createHarness(body: string, gatewayOutcome: unknown) {
     commitKoralOutbound: jest.fn().mockResolvedValue({ committed: true, replayed: false, messageId: "outbound-1" }),
   };
   const gateway = { infer: jest.fn().mockResolvedValue(gatewayOutcome) };
+  const knowledgeGateway = {
+    search: jest.fn().mockResolvedValue(knowledgeOutcome),
+  };
   const pipeline = new GovernedKoralOrchestrationPipeline(
     conversations as never,
     gateway as never,
+    knowledgeGateway as never,
     { get: jest.fn().mockReturnValue(true) } as never,
   );
-  return { pipeline, conversations, gateway };
+  return { pipeline, conversations, gateway, knowledgeGateway };
 }
 
 function runInput(effectiveIdentity = identity()) {
@@ -75,7 +88,7 @@ describe("GovernedKoralOrchestrationPipeline", () => {
   });
 
   it("projects provider-disabled state while preserving a deterministic handoff result", async () => {
-    const { conversations, gateway } = createHarness("Hola", {});
+    const { conversations, gateway, knowledgeGateway } = createHarness("Hola", {});
     gateway.infer.mockResolvedValueOnce({
       kind: "REJECTED",
       reasonCode: "MODEL_NOT_AVAILABLE",
@@ -85,6 +98,7 @@ describe("GovernedKoralOrchestrationPipeline", () => {
     const pipeline = new GovernedKoralOrchestrationPipeline(
       conversations as never,
       gateway as never,
+      knowledgeGateway as never,
       { get: jest.fn().mockReturnValue(false) } as never,
     );
     expect(pipeline.available).toBe(false);
@@ -95,16 +109,198 @@ describe("GovernedKoralOrchestrationPipeline", () => {
   });
 
   it("hands arbitrary anonymous content to humans without external inference", async () => {
-    const { pipeline, conversations, gateway } = createHarness("Mi número de contrato es 123", {});
+    const { pipeline, conversations, gateway, knowledgeGateway } = createHarness("Mi número de contrato es 123456", {});
+    await expect(pipeline.run(runInput())).resolves.toMatchObject({
+      kind: "HANDED_OFF",
+      reasonCodes: ["PERSONAL_OR_UNSUPPORTED_REQUEST"],
+    });
+    expect(gateway.infer).not.toHaveBeenCalled();
+    expect(knowledgeGateway.search).not.toHaveBeenCalled();
+    expect(conversations.requestKoralHandoff).toHaveBeenCalledWith(expect.objectContaining({
+      reasonCodes: ["PERSONAL_OR_UNSUPPORTED_REQUEST"],
+      correlationId: "correlation-1",
+    }));
+  });
+
+  it("retrieves published evidence before inference and preserves its trace", async () => {
+    const { pipeline, conversations, gateway, knowledgeGateway } = createHarness(
+      "¿Cuáles son los beneficios de ASODEF?",
+      {
+        kind: "ASSISTANT_RESPONSE",
+        content: "ignored",
+        structuredOutput: { response: "ASODEF ofrece beneficios publicados." },
+        gatewayCorrelationId: "ai-grounded",
+      },
+      {
+        kind: "FOUND",
+        outcome: "SUFFICIENT_EVIDENCE",
+        passages: [
+          {
+            reference: "publication-1:version-1",
+            content: "ASODEF ofrece beneficios publicados.",
+            classification: "PUBLIC",
+            score: 1,
+            trace: {
+              publicationSnapshotId: "publication-1",
+              knowledgeItemId: "item-1",
+              knowledgeVersionId: "version-1",
+              knowledgeChunkId: "chunk-1",
+              knowledgeSourceId: "source-1",
+              sourceReference: "manual://beneficios",
+              sourceChecksumSha256: "a".repeat(64),
+            },
+          },
+        ],
+        correlationId: "knowledge-grounded",
+      },
+    );
+
+    await expect(pipeline.run(runInput())).resolves.toMatchObject({
+      kind: "RESPONDED",
+    });
+    expect(knowledgeGateway.search).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "¿Cuáles son los beneficios de ASODEF?" }),
+      expect.objectContaining({
+        identity: expect.objectContaining({
+          principalType: "KORAL",
+          permissions: expect.arrayContaining(["knowledge.read"]),
+        }),
+        effectiveScope: {
+          authority: "SERVER_SIDE",
+          tenantKey: "ASODEF",
+          audience: "PUBLIC",
+          organizationIds: [],
+          maximumDataClassification: "PUBLIC",
+        },
+      }),
+    );
+    expect(gateway.infer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: expect.stringContaining("published evidence"),
+        messages: expect.arrayContaining([
+          expect.objectContaining({ content: expect.stringContaining("ASODEF ofrece beneficios publicados") }),
+        ]),
+      }),
+      expect.any(Object),
+    );
+    expect(conversations.commitKoralOutbound).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gatewayReferences: [
+          "knowledge-evidence:v1:publication-1:chunk-1:ai:ai-grounded",
+        ],
+      }),
+    );
+  });
+
+  it.each([
+    { returned: 1, persisted: 1 },
+    { returned: 2, persisted: 2 },
+    { returned: 4, persisted: 4 },
+    { returned: 6, persisted: 4 },
+  ])(
+    "bounds $returned ranked evidence passages to $persisted canonical references",
+    async ({ returned, persisted }) => {
+      const passages = Array.from({ length: returned }, (_, index) => ({
+        reference: `publication-${index}:version-${index}`,
+        content: `Beneficio ASODEF publicado ${index}`,
+        classification: "PUBLIC",
+        score: 1 - index / 100,
+        trace: {
+          publicationSnapshotId: `publication-${index}`,
+          knowledgeItemId: `item-${index}`,
+          knowledgeVersionId: `version-${index}`,
+          knowledgeChunkId: `chunk-${index}`,
+          knowledgeSourceId: `source-${index}`,
+          sourceReference: `manual://beneficio-${index}`,
+          sourceChecksumSha256: String(index).padStart(64, "0"),
+        },
+      }));
+      const { pipeline, conversations } = createHarness(
+        "¿Cuáles son los beneficios de ASODEF?",
+        {
+          kind: "ASSISTANT_RESPONSE",
+          content: "ignored",
+          structuredOutput: { response: "Respuesta respaldada." },
+          gatewayCorrelationId: "ai-cardinality",
+        },
+        {
+          kind: "FOUND",
+          outcome: "SUFFICIENT_EVIDENCE",
+          passages,
+          correlationId: "knowledge-cardinality",
+        },
+      );
+
+      await expect(pipeline.run(runInput())).resolves.toMatchObject({
+        kind: "RESPONDED",
+      });
+      const commit = conversations.commitKoralOutbound.mock.calls[0]![0];
+      expect(commit.gatewayReferences).toHaveLength(persisted);
+      expect(commit.gatewayReferences).toEqual(
+        passages.slice(0, persisted).map(
+          ({ trace }) =>
+            `knowledge-evidence:v1:${trace.publicationSnapshotId}:${trace.knowledgeChunkId}:ai:ai-cardinality`,
+        ),
+      );
+    },
+  );
+
+  it.each(["NO_EVIDENCE", "SOURCE_CONFLICT"] as const)(
+    "fails closed for grounded outcome %s without invoking AI",
+    async (outcome) => {
+      const { pipeline, conversations, gateway } = createHarness(
+        "¿Cuáles son los beneficios de ASODEF?",
+        {},
+        {
+          kind: "FOUND",
+          outcome,
+          passages: outcome === "SOURCE_CONFLICT" ? [
+            {
+              reference: "publication-1:version-1",
+              content: "Fuentes en conflicto",
+              classification: "PUBLIC",
+              trace: {
+                publicationSnapshotId: "publication-1",
+                knowledgeItemId: "item-1",
+                knowledgeVersionId: "version-1",
+                knowledgeChunkId: "chunk-1",
+                knowledgeSourceId: "source-1",
+                sourceReference: "manual://conflict",
+                sourceChecksumSha256: "b".repeat(64),
+              },
+            },
+          ] : [],
+          correlationId: `knowledge-${outcome.toLowerCase()}`,
+        },
+      );
+      await expect(pipeline.run(runInput())).resolves.toMatchObject({
+        kind: "HANDED_OFF",
+        reasonCodes: [outcome],
+      });
+      expect(gateway.infer).not.toHaveBeenCalled();
+      expect(conversations.requestKoralHandoff).toHaveBeenCalledWith(
+        expect.objectContaining({ reasonCodes: [outcome] }),
+      );
+    },
+  );
+
+  it("fails closed when the Knowledge provider throws", async () => {
+    const { pipeline, conversations, gateway, knowledgeGateway } = createHarness(
+      "¿Cuáles son los beneficios de ASODEF?",
+      {},
+    );
+    knowledgeGateway.search.mockRejectedValueOnce(new Error("database detail"));
     await expect(pipeline.run(runInput())).resolves.toMatchObject({
       kind: "HANDED_OFF",
       reasonCodes: ["KNOWLEDGE_PROVIDER_UNAVAILABLE"],
     });
     expect(gateway.infer).not.toHaveBeenCalled();
-    expect(conversations.requestKoralHandoff).toHaveBeenCalledWith(expect.objectContaining({
-      reasonCodes: ["KNOWLEDGE_PROVIDER_UNAVAILABLE"],
-      correlationId: "correlation-1",
-    }));
+    expect(conversations.requestKoralHandoff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonCodes: ["KNOWLEDGE_PROVIDER_UNAVAILABLE"],
+        gatewayReferences: [],
+      }),
+    );
   });
 
   it("does not treat visitor assurance as the authenticated gateway actor", async () => {
@@ -203,7 +399,7 @@ describe("GovernedKoralOrchestrationPipeline", () => {
   });
 
   it("reports WAITING instead of claiming handoff when a concurrent AI-active change wins", async () => {
-    const { pipeline, conversations, gateway } = createHarness("Necesito información", {});
+    const { pipeline, conversations, gateway } = createHarness("Necesito información sobre mi contrato", {});
     conversations.requestKoralHandoff.mockResolvedValueOnce({
       transitioned: false,
       replayed: false,
