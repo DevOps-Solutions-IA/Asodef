@@ -72,7 +72,7 @@ describe("Koral Web Chat security boundary (integration, real Postgres + Redis)"
       bindings,
       processing,
       limiter,
-      { run: orchestratorRun } as never,
+      { available: true, run: orchestratorRun } as never,
     );
     server = new WebChatServerService(
       prisma as never,

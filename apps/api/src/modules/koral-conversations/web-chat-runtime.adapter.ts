@@ -49,7 +49,7 @@ export class KoralWebChatRuntimeAdapter {
   ) {}
 
   get orchestrationAvailable(): boolean {
-    return this.orchestrator !== undefined;
+    return this.orchestrator?.available === true;
   }
 
   async receive(input: WebChatRuntimeInput, now = new Date()): Promise<WebChatRuntimeResult> {

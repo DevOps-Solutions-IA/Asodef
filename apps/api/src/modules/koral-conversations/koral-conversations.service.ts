@@ -28,6 +28,8 @@ import {
   type ConversationRuntimeState,
   type ConversationSummaryResponse,
   type InboundReceipt,
+  type KoralContextSnapshot,
+  type KoralHandoffInput,
   type KoralOutboundCommitInput,
   type MutationContext,
 } from "./koral-conversations.types";
@@ -357,6 +359,212 @@ export class KoralConversationsService {
     };
   }
 
+  /** Builds a bounded application-owned snapshot for orchestration. The AI
+   * provider receives neither Prisma nor internal notes/credentials. */
+  async buildKoralContextSnapshot(
+    sourceMessageId: string,
+  ): Promise<KoralContextSnapshot> {
+    const source = await this.prisma.conversationMessage.findUnique({
+      where: { id: sourceMessageId },
+      select: {
+        id: true,
+        conversationId: true,
+        direction: true,
+        contentType: true,
+        body: true,
+        occurredAt: true,
+        channelSession: {
+          select: { channel: true, externalSessionId: true },
+        },
+      },
+    });
+    if (
+      !source
+      || source.direction !== ConversationMessageDirection.INBOUND
+      || !source.channelSession
+    ) {
+      throw new NotFoundException("KORAL_SOURCE_MESSAGE_UNAVAILABLE");
+    }
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: source.conversationId },
+      select: {
+        id: true,
+        version: true,
+        status: true,
+        participants: {
+          select: { kind: true, channel: true },
+          orderBy: { createdAt: "asc" },
+          take: 20,
+        },
+        messages: {
+          where: {
+            direction: {
+              in: [
+                ConversationMessageDirection.INBOUND,
+                ConversationMessageDirection.OUTBOUND,
+              ],
+            },
+          },
+          select: {
+            id: true,
+            direction: true,
+            contentType: true,
+            body: true,
+            occurredAt: true,
+          },
+          orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+          take: 12,
+        },
+        tags: { select: { tag: true }, orderBy: { tag: "asc" }, take: 30 },
+        assignments: {
+          where: { releasedAt: null },
+          select: { assigneeUserId: true },
+          take: 1,
+        },
+      },
+    });
+    if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+    const recentMessages = conversation.messages.reverse().map((message) => ({
+      id: message.id,
+      direction: message.direction,
+      contentType: message.contentType,
+      ...(message.body ? { body: message.body.slice(0, 4_000) } : {}),
+      occurredAt: message.occurredAt,
+    }));
+    if (!recentMessages.some(({ id }) => id === source.id)) {
+      recentMessages.push({
+        id: source.id,
+        direction: source.direction,
+        contentType: source.contentType,
+        ...(source.body ? { body: source.body.slice(0, 4_000) } : {}),
+        occurredAt: source.occurredAt,
+      });
+    }
+    return {
+      conversationId: conversation.id,
+      conversationVersion: conversation.version,
+      status: conversation.status,
+      sourceMessageId: source.id,
+      channel: source.channelSession.channel,
+      externalSessionId: source.channelSession.externalSessionId,
+      participantSummary: conversation.participants.map((participant) => ({
+        kind: participant.kind,
+        ...(participant.channel ? { channel: participant.channel } : {}),
+      })),
+      recentMessages,
+      tags: conversation.tags.map(({ tag }) => tag),
+      ...(conversation.assignments[0]
+        ? { activeAssignmentUserId: conversation.assignments[0].assigneeUserId }
+        : {}),
+    };
+  }
+
+  /** Fail-closed system handoff. It is version-CAS protected and stores only
+   * bounded reason codes, never prompt/provider payloads. */
+  async requestKoralHandoff(input: KoralHandoffInput) {
+    const correlationId = requiredRuntimeText(
+      input.correlationId,
+      "INVALID_CORRELATION_ID",
+      200,
+    );
+    const sourceMessageId = requiredRuntimeText(
+      input.sourceMessageId,
+      "INVALID_SOURCE_MESSAGE_ID",
+      100,
+    );
+    const reasonCodes = [...new Set(input.reasonCodes)].map((reason) =>
+      requiredRuntimeText(reason, "INVALID_HANDOFF_REASON", 100),
+    );
+    if (reasonCodes.length === 0 || reasonCodes.length > 12) {
+      throw new BadRequestException("INVALID_HANDOFF_REASONS");
+    }
+    const gatewayReferences = (input.gatewayReferences ?? []).map((reference) =>
+      requiredRuntimeText(reference, "INVALID_GATEWAY_REFERENCE", 200),
+    );
+    if (gatewayReferences.length > 4) {
+      throw new BadRequestException("INVALID_GATEWAY_REFERENCES");
+    }
+    const reasonHash = createHash("sha256")
+      .update(reasonCodes.join("\0"))
+      .digest("hex");
+    return this.prisma.$transaction(async (tx) => {
+      await lockConversation(tx, input.conversationId);
+      const idempotencyKey = `koral-handoff:${sourceMessageId}`;
+      const replay = await tx.conversationEvent.findUnique({
+        where: {
+          conversationId_idempotencyKey: {
+            conversationId: input.conversationId,
+            idempotencyKey,
+          },
+        },
+      });
+      if (replay) {
+        const metadata = jsonObject(replay.metadata);
+        if (metadata.reasonHash !== reasonHash) {
+          throw new ConflictException(IDEMPOTENCY_CONFLICT);
+        }
+        return { transitioned: true as const, replayed: true as const };
+      }
+      const conversation = await tx.conversation.findUnique({
+        where: { id: input.conversationId },
+        include: {
+          assignments: {
+            where: { releasedAt: null },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+      if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+      if (
+        conversation.version !== input.expectedVersion
+        || !mayKoralAutoReply(
+          conversation.status,
+          conversation.assignments.length > 0,
+        )
+      ) {
+        const mayAutoReply = mayKoralAutoReply(
+          conversation.status,
+          conversation.assignments.length > 0,
+        );
+        return {
+          transitioned: false as const,
+          replayed: false as const,
+          reason: "CONVERSATION_NOT_AI_ACTIVE" as const,
+          currentStatus: conversation.status,
+          mayAutoReply,
+        };
+      }
+      assertTransition(conversation.status, ConversationStatus.HUMAN_REQUIRED);
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: ConversationStatus.HUMAN_REQUIRED,
+          version: { increment: 1 },
+        },
+      });
+      await tx.conversationEvent.create({
+        data: {
+          conversationId: conversation.id,
+          eventType: "KORAL_HANDOFF_REQUIRED",
+          correlationId,
+          idempotencyKey,
+          previousStatus: conversation.status,
+          newStatus: ConversationStatus.HUMAN_REQUIRED,
+          result: AuditEventResult.SUCCESS,
+          reason: reasonCodes.join(","),
+          metadata: {
+            sourceMessageId,
+            reasonCodes,
+            reasonHash,
+            gatewayReferences,
+          },
+        },
+      });
+      return { transitioned: true as const, replayed: false as const };
+    });
+  }
+
   /** Commits an AI response only if the exact conversation version remains
    * auto-replyable. A concurrent human takeover therefore wins and no AI
    * message is persisted or delivered while HUMAN_ACTIVE. */
@@ -364,6 +572,10 @@ export class KoralConversationsService {
     const idempotencyKey = requiredRuntimeText(input.idempotencyKey, "INVALID_IDEMPOTENCY_KEY", 180);
     const correlationId = requiredRuntimeText(input.correlationId, "INVALID_CORRELATION_ID", 200);
     const contentType = requiredRuntimeText(input.contentType, "INVALID_CONTENT_TYPE", 128).toLowerCase();
+    const gatewayReferences = (input.gatewayReferences ?? []).map((reference) =>
+      requiredRuntimeText(reference, "INVALID_GATEWAY_REFERENCE", 200),
+    );
+    if (gatewayReferences.length > 4) throw new BadRequestException("INVALID_GATEWAY_REFERENCES");
     if (!input.body || input.body.length > 50_000) throw new BadRequestException("INVALID_OUTBOUND_BODY");
     const payloadHash = createHash("sha256").update(`${input.channel}\0${input.externalSessionId}\0${contentType}\0${input.body}`).digest("hex");
     return this.prisma.$transaction(async (tx) => {
@@ -391,7 +603,16 @@ export class KoralConversationsService {
         conversation.version !== input.expectedVersion
         || !mayKoralAutoReply(conversation.status, conversation.assignments.length > 0)
       ) {
-        return { committed: false as const, replayed: false as const, reason: "CONVERSATION_NOT_AI_ACTIVE" as const };
+        return {
+          committed: false as const,
+          replayed: false as const,
+          reason: "CONVERSATION_NOT_AI_ACTIVE" as const,
+          currentStatus: conversation.status,
+          mayAutoReply: mayKoralAutoReply(
+            conversation.status,
+            conversation.assignments.length > 0,
+          ),
+        };
       }
       const channelSession = await tx.conversationChannelSession.findUnique({
         where: { channel_externalSessionId: { channel: input.channel, externalSessionId: input.externalSessionId } },
@@ -399,12 +620,15 @@ export class KoralConversationsService {
       if (!channelSession || channelSession.conversationId !== input.conversationId) {
         throw new ConflictException("CHANNEL_SESSION_MISMATCH");
       }
+      const isLocallyDeliverableWeb = input.channel === ConversationChannel.WEB;
       const message = await tx.conversationMessage.create({
         data: {
           conversationId: input.conversationId,
           channelSessionId: channelSession.id,
           direction: ConversationMessageDirection.OUTBOUND,
-          status: ConversationMessageStatus.PENDING,
+          status: isLocallyDeliverableWeb
+            ? ConversationMessageStatus.SENT
+            : ConversationMessageStatus.PENDING,
           externalMessageId: `koral:${idempotencyKey}`,
           contentType,
           body: input.body,
@@ -419,13 +643,22 @@ export class KoralConversationsService {
       await tx.conversationEvent.create({
         data: {
           conversationId: input.conversationId,
-          eventType: "KORAL_RESPONSE_QUEUED",
+          eventType: isLocallyDeliverableWeb
+            ? "KORAL_RESPONSE_SENT"
+            : "KORAL_RESPONSE_QUEUED",
           correlationId,
           idempotencyKey: `outbound:${idempotencyKey}`,
           previousStatus: conversation.status,
           newStatus: ConversationStatus.WAITING_USER,
           result: AuditEventResult.SUCCESS,
-          metadata: { messageId: message.id, channel: input.channel, contentType, payloadHash },
+          metadata: {
+            messageId: message.id,
+            channel: input.channel,
+            contentType,
+            payloadHash,
+            deliveryStatus: message.status,
+            gatewayReferences,
+          },
         },
       });
       return { committed: true as const, replayed: false as const, messageId: message.id };
