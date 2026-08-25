@@ -6,12 +6,17 @@ import { IDENTITY_RESOLUTION_CONTRACT_VERSION } from "./contracts/identity-resol
 import { KORAL_ORCHESTRATOR_CONTRACT_VERSION } from "./contracts/orchestrator.contract";
 import { KoralConversationsService } from "./koral-conversations.service";
 import { GovernedKoralOrchestrationPipeline } from "./koral-orchestration.pipeline";
+import { KnowledgeService } from "../knowledge/knowledge.service";
+import { DEFAULT_KNOWLEDGE_RETRIEVAL_CONFIG } from "../knowledge/knowledge.tokens";
+import { CanonicalKoralKnowledgeGatewayAdapter } from "./koral-gateway.adapters";
 
 describe("Koral conversation foundation (integration, real Postgres)", () => {
   let prisma: PrismaClient;
   let service: KoralConversationsService;
   const conversationIds: string[] = [];
   const userIds: string[] = [];
+  const knowledgeItemIds: string[] = [];
+  const knowledgeCorrelationPrefix = `koral-knowledge-${randomUUID()}`;
 
   beforeAll(async () => {
     prisma = createTestPrismaClient();
@@ -35,6 +40,35 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
       await prisma.conversation.deleteMany({ where: { id: { in: conversationIds } } });
       conversationIds.length = 0;
     }
+    if (knowledgeItemIds.length > 0) {
+      const versions = await prisma.knowledgeVersion.findMany({
+        where: { knowledgeItemId: { in: knowledgeItemIds } },
+        select: { id: true },
+      });
+      const versionIds = versions.map(({ id }) => id);
+      await prisma.knowledgePublicationSnapshot.deleteMany({
+        where: { knowledgeItemId: { in: knowledgeItemIds } },
+      });
+      await prisma.knowledgeAuditEvent.deleteMany({
+        where: { knowledgeItemId: { in: knowledgeItemIds } },
+      });
+      await prisma.knowledgeChunk.deleteMany({
+        where: { knowledgeVersionId: { in: versionIds } },
+      });
+      await prisma.knowledgeSource.deleteMany({
+        where: { knowledgeVersionId: { in: versionIds } },
+      });
+      await prisma.knowledgeVersion.deleteMany({
+        where: { id: { in: versionIds } },
+      });
+      await prisma.knowledgeItem.deleteMany({
+        where: { id: { in: knowledgeItemIds } },
+      });
+      knowledgeItemIds.length = 0;
+    }
+    await prisma.knowledgeRetrievalAudit.deleteMany({
+      where: { correlationId: { startsWith: knowledgeCorrelationPrefix } },
+    });
     if (userIds.length > 0) {
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
       userIds.length = 0;
@@ -350,6 +384,7 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     const pipeline = new GovernedKoralOrchestrationPipeline(
       service,
       gateway as never,
+      { search: jest.fn() } as never,
       { get: jest.fn().mockReturnValue(true) } as never,
     );
     const outcome = await pipeline.run({
@@ -377,6 +412,158 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     });
     expect(audit.metadata).toMatchObject({ gatewayReferences: ["gateway-public-greeting"] });
     expect(JSON.stringify(audit.metadata)).not.toContain("ignored provider prose");
+  });
+
+  it("runs a public Web message through the real KnowledgeGateway before grounded inference", async () => {
+    const actor = await createActiveUser("knowledge-publisher");
+    const marker = `beneficio-koral-${randomUUID().replaceAll("-", "")}`;
+    const knowledge = new KnowledgeService(
+      prisma as never,
+      [],
+      DEFAULT_KNOWLEDGE_RETRIEVAL_CONFIG,
+    );
+    const draft = await knowledge.createManualDraft(
+      {
+        stableKey: marker,
+        title: `Beneficios ASODEF ${marker}`,
+        domain: "BENEFICIOS_Y_CONVENIOS",
+        audience: "PUBLIC",
+        classification: "PUBLIC",
+        language: "es",
+        sourceReference: `manual://${marker}`,
+        sourceOwner: "Equipo ASODEF",
+        changeReason: "Integración Koral Knowledge",
+        content: `${marker} beneficios ASODEF publicados y verificables ${marker}`,
+      },
+      { actorUserId: actor.id, correlationId: `${knowledgeCorrelationPrefix}-create` },
+    );
+    knowledgeItemIds.push(draft.knowledgeItemId);
+    const review = await knowledge.submitReview(
+      draft.id,
+      { expectedRevision: draft.revision, changeReason: "Revisión Koral" },
+      { actorUserId: actor.id, correlationId: `${knowledgeCorrelationPrefix}-review` },
+    );
+    const approved = await knowledge.approve(
+      draft.id,
+      { expectedRevision: review.revision, changeReason: "Aprobación Koral" },
+      { actorUserId: actor.id, correlationId: `${knowledgeCorrelationPrefix}-approve` },
+    );
+    await knowledge.publish(
+      draft.id,
+      { expectedRevision: approved.revision, changeReason: "Publicación Koral" },
+      { actorUserId: actor.id, correlationId: `${knowledgeCorrelationPrefix}-publish` },
+    );
+
+    const externalSessionId = randomUUID();
+    const question = `¿Cuáles son los beneficios de ASODEF ${marker}?`;
+    const receipt = await service.receiveInbound(
+      inbound(externalSessionId, randomUUID(), question),
+    );
+    conversationIds.push(receipt.conversationId);
+    const aiGateway = {
+      infer: jest.fn().mockResolvedValue({
+        kind: "ASSISTANT_RESPONSE",
+        content: "ignored provider prose",
+        structuredOutput: { response: "Beneficio publicado y verificado." },
+        gatewayCorrelationId: "ai-grounded-integration",
+      }),
+    };
+    const pipeline = new GovernedKoralOrchestrationPipeline(
+      service,
+      aiGateway as never,
+      new CanonicalKoralKnowledgeGatewayAdapter(knowledge),
+      { get: jest.fn().mockReturnValue(true) } as never,
+    );
+    const correlationId = `${knowledgeCorrelationPrefix}-retrieval`;
+    const outcome = await pipeline.run({
+      version: KORAL_ORCHESTRATOR_CONTRACT_VERSION,
+      normalizedMessageId: receipt.messageId,
+      correlationId,
+      deadlineAt: new Date(Date.now() + 20_000).toISOString(),
+      effectiveIdentity: {
+        version: IDENTITY_RESOLUTION_CONTRACT_VERSION,
+        identityId: "anonymous:knowledge-integration",
+        channelIdentities: [
+          {
+            channel: ConversationChannel.WEB,
+            externalIdentityId: "visitor-knowledge",
+            verified: false,
+          },
+        ],
+        assuranceLevel: "ANONYMOUS",
+        authenticationEvidence: {
+          authenticated: false,
+          mfaVerified: false,
+          stepUpVerified: false,
+        },
+        consentState: { status: "UNKNOWN", purposeKeys: [] },
+        verifiedAttributes: [],
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "RESPONDED",
+      conversationId: receipt.conversationId,
+    });
+    expect(aiGateway.infer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ content: expect.stringContaining(marker) }),
+        ]),
+      }),
+      expect.objectContaining({
+        effectiveScope: expect.objectContaining({
+          authority: "SERVER_SIDE",
+          tenantKey: "ASODEF",
+          audience: "PUBLIC",
+        }),
+      }),
+    );
+    await expect(
+      prisma.knowledgeRetrievalAudit.findFirstOrThrow({
+        where: { correlationId },
+      }),
+    ).resolves.toMatchObject({
+      result: "SUFFICIENT_EVIDENCE",
+      citationCount: 1,
+    });
+    const event = await prisma.conversationEvent.findFirstOrThrow({
+      where: {
+        conversationId: receipt.conversationId,
+        eventType: "KORAL_RESPONSE_SENT",
+      },
+    });
+    expect(event.metadata).toMatchObject({
+      gatewayReferences: [
+        expect.stringMatching(
+          /^knowledge-evidence:v1:[0-9a-f-]{36}:[0-9a-f-]{36}:ai:ai-grounded-integration$/u,
+        ),
+      ],
+    });
+    expect(event.correlationId).toBe(correlationId);
+    const reference = (event.metadata as { gatewayReferences: string[] })
+      .gatewayReferences[0]!;
+    const [, , snapshotId, chunkId] = reference.split(":");
+    await expect(
+      prisma.knowledgePublicationSnapshot.findUniqueOrThrow({
+        where: { id: snapshotId },
+        include: {
+          knowledgeItem: true,
+          knowledgeVersion: true,
+          source: true,
+        },
+      }),
+    ).resolves.toMatchObject({
+      knowledgeItemId: draft.knowledgeItemId,
+      knowledgeVersionId: draft.id,
+      source: { sourceReference: `manual://${marker}` },
+    });
+    await expect(
+      prisma.knowledgeChunk.findFirstOrThrow({
+        where: { id: chunkId, knowledgeVersionId: draft.id },
+      }),
+    ).resolves.toMatchObject({ content: expect.stringContaining(marker) });
+    expect(JSON.stringify(event.metadata)).not.toContain(question);
   });
 
   it("linearizes a Koral handoff against concurrent human assignment and audits only the winner", async () => {

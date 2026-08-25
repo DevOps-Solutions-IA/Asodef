@@ -81,6 +81,8 @@ export const KORAL_ORCHESTRATION_STEPS = [
   "RESOLVE_CONVERSATION",
   "BUILD_SAFE_CONTEXT",
   "EVALUATE_AI_POLICY",
+  "INVOKE_KNOWLEDGE_GATEWAY",
+  "GROUND_KNOWLEDGE",
   "INVOKE_AI_GATEWAY",
   "RECEIVE_TOOL_REQUEST",
   "INVOKE_TOOL_GATEWAY",
@@ -125,7 +127,11 @@ export interface KoralOrchestrationPipeline {
     effectiveIdentity: ResolvedIdentityContext,
   ): Promise<SafeConversationContext>;
   evaluateAiPolicy(context: SafeConversationContext): Promise<OrchestrationDecision>;
-  invokeAiGateway(context: SafeConversationContext, decision: OrchestrationDecision): Promise<KoralInferenceOutcome>;
+  invokeAiGateway(
+    context: SafeConversationContext,
+    decision: OrchestrationDecision,
+    knowledge?: KoralKnowledgeOutcome,
+  ): Promise<KoralInferenceOutcome>;
   receiveToolRequest(outcome: KoralInferenceOutcome): Promise<readonly string[]>;
   invokeToolGateway(context: SafeConversationContext, toolCallId: string): Promise<KoralToolOutcome>;
   returnToolResult(conversationId: string, outcome: KoralToolOutcome): Promise<void>;
@@ -133,7 +139,7 @@ export interface KoralOrchestrationPipeline {
   validateOutboundResponse(context: SafeConversationContext, candidate: KoralInferenceOutcome): Promise<ResponseValidationResult>;
   handoffIfRequired(context: SafeConversationContext, violations: readonly string[]): Promise<boolean>;
   appendAuditAndConversationEvents(conversationId: string, correlationId: string, gatewayReferences: readonly string[]): Promise<void>;
-  retrieveKnowledge?(context: SafeConversationContext, query: string): Promise<KoralKnowledgeOutcome>;
+  retrieveKnowledge(context: SafeConversationContext, query: string): Promise<KoralKnowledgeOutcome>;
   run(input: KoralOrchestrationRunInput): Promise<KoralOrchestrationRunResult>;
 }
 

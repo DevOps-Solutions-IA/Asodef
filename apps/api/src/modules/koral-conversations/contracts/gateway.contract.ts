@@ -6,6 +6,7 @@ import type {
   GovernedToolContract,
   JsonSchema,
   KnowledgeGatewayRequest,
+  KnowledgeGroundingOutcome,
   ToolGatewayRequest,
 } from "@asodef/connect-contracts";
 
@@ -66,11 +67,21 @@ export type KoralKnowledgeRequest = Omit<KnowledgeGatewayRequest, "version">;
 export type KoralKnowledgeOutcome =
   | {
       kind: "FOUND";
+      outcome: KnowledgeGroundingOutcome;
       passages: readonly {
         reference: string;
         content: string;
         score?: number;
         classification: DataClassification;
+        trace: {
+          publicationSnapshotId: string;
+          knowledgeItemId: string;
+          knowledgeVersionId: string;
+          knowledgeChunkId: string;
+          knowledgeSourceId: string;
+          sourceReference: string;
+          sourceChecksumSha256: string;
+        };
       }[];
       correlationId: string;
     }

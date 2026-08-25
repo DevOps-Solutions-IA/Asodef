@@ -392,12 +392,26 @@ describe("router", () => {
 
   it.each([
     ["/admin/koral/inbox", "Inbox"],
-    ["/admin/koral/conocimiento", "Conocimiento"],
     ["/admin/comunicaciones/plantillas", "Plantillas"],
   ])("renders the Control Plane foundation at %s with settings.manage", async (path, heading) => {
     renderAtPath(path, buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["settings.manage", "koral.conversations.read"] }));
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
     expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
+  });
+
+  it("renders the real Knowledge Admin route with knowledge.read", async () => {
+    renderAtPath(
+      "/admin/koral/conocimiento",
+      buildCurrentUser({ roles: ["SUPER_ADMIN"], permissions: ["knowledge.read"] }),
+      (url) => url.includes("/admin/knowledge/items?")
+        ? jsonResponse(200, { items: [], total: 0, page: 1, pageSize: 30 })
+        : undefined,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Conocimiento" })).toBeInTheDocument();
+    expect(screen.getByText("RUNTIME REAL")).toBeInTheDocument();
+    expect(await screen.findByText("Sin conocimiento")).toBeInTheDocument();
+    expect(screen.queryByText(/NOT_CONFIGURED/)).not.toBeInTheDocument();
   });
 
   it.each(["/admin/koral/inbox", "/admin/comunicaciones/plantillas"])(

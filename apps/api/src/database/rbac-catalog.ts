@@ -34,7 +34,10 @@ export interface RoleDefinition {
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "payments.read", description: "Ver órdenes y transacciones de pago" },
   { key: "payments.create", description: "Crear órdenes de pago" },
-  { key: "payments.reconcile", description: "Ejecutar y resolver conciliación de pagos" },
+  {
+    key: "payments.reconcile",
+    description: "Ejecutar y resolver conciliación de pagos",
+  },
   // US-056's own AC requires the approval step to be gated by "a
   // separate permission" from the request step - payments.refund's own
   // catalog description already bundled "solicitar y aprobar" (request
@@ -42,7 +45,10 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   // using the RBAC design's own documented extension mechanism (new
   // permission keys are a data seed, never a schema migration).
   { key: "payments.refund", description: "Solicitar reembolsos o reversiones" },
-  { key: "payments.refund.approve", description: "Aprobar reembolsos o reversiones" },
+  {
+    key: "payments.refund.approve",
+    description: "Aprobar reembolsos o reversiones",
+  },
   { key: "payments.export", description: "Exportar reportes de pagos" },
   { key: "customers.read", description: "Ver clientes" },
   { key: "customers.create", description: "Crear clientes" },
@@ -51,15 +57,25 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "affiliates.manage", description: "Administrar afiliados" },
   { key: "companies.read", description: "Ver empresas" },
   { key: "companies.manage", description: "Administrar empresas" },
-  { key: "crm.manage", description: "Administrar prospectos, oportunidades, propuestas y convenios" },
+  {
+    key: "crm.manage",
+    description:
+      "Administrar prospectos, oportunidades, propuestas y convenios",
+  },
   // US-061 AC5: "a user without crm.manage sees the CRM screens in
   // read-only mode... not hidden" requires the read endpoints to accept
   // a permission that isn't crm.manage itself - crm.manage previously
   // gated CrmController's every route (reads included) at the class
   // level, which made read-only access impossible for any role. Same
   // split precedent as payments.refund/payments.refund.approve (US-056).
-  { key: "crm.read", description: "Ver prospectos, oportunidades, propuestas y convenios" },
-  { key: "partners.manage", description: "Administrar aliados comerciales y su publicación" },
+  {
+    key: "crm.read",
+    description: "Ver prospectos, oportunidades, propuestas y convenios",
+  },
+  {
+    key: "partners.manage",
+    description: "Administrar aliados comerciales y su publicación",
+  },
   { key: "contracts.read", description: "Ver contratos" },
   { key: "contracts.manage", description: "Administrar contratos" },
   { key: "contracts.approve", description: "Aprobar contratos" },
@@ -70,43 +86,128 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { key: "users.read", description: "Ver usuarios internos" },
   { key: "users.manage", description: "Administrar usuarios internos" },
   { key: "users.create", description: "Crear usuarios internos" },
-  { key: "users.update", description: "Editar datos de perfil de usuarios internos" },
+  {
+    key: "users.update",
+    description: "Editar datos de perfil de usuarios internos",
+  },
   { key: "users.deactivate", description: "Desactivar usuarios internos" },
   { key: "users.reactivate", description: "Reactivar usuarios internos" },
-  { key: "users.unlock", description: "Desbloquear cuentas de usuario tras un bloqueo por intentos fallidos" },
-  { key: "users.roles.manage", description: "Asignar y revocar roles de usuarios internos" },
-  { key: "users.sessions.read", description: "Ver sesiones activas de usuarios internos" },
-  { key: "users.sessions.revoke", description: "Revocar sesiones de usuarios internos" },
-  { key: "users.security.read", description: "Ver historial de seguridad de usuarios internos" },
+  {
+    key: "users.unlock",
+    description:
+      "Desbloquear cuentas de usuario tras un bloqueo por intentos fallidos",
+  },
+  {
+    key: "users.roles.manage",
+    description: "Asignar y revocar roles de usuarios internos",
+  },
+  {
+    key: "users.sessions.read",
+    description: "Ver sesiones activas de usuarios internos",
+  },
+  {
+    key: "users.sessions.revoke",
+    description: "Revocar sesiones de usuarios internos",
+  },
+  {
+    key: "users.security.read",
+    description: "Ver historial de seguridad de usuarios internos",
+  },
   { key: "roles.manage", description: "Administrar roles" },
   { key: "permissions.manage", description: "Administrar permisos" },
   { key: "content.read", description: "Ver contenido institucional" },
   { key: "content.manage", description: "Administrar contenido institucional" },
   { key: "audit.read", description: "Ver auditoría" },
-  { key: "settings.manage", description: "Administrar configuración del sistema" },
+  {
+    key: "settings.manage",
+    description: "Administrar configuración del sistema",
+  },
   { key: "plans.read", description: "Ver planes y sus versiones comerciales" },
   { key: "plans.manage", description: "Crear y editar borradores de planes" },
-  { key: "plans.publish", description: "Publicar o retirar versiones comerciales de planes" },
-  { key: "koral.plans.read", description: "Consultar planes publicados y visibles para Koral" },
-  { key: "legal.approve", description: "Aprobar y publicar documentos legales" },
-  { key: "data.manage", description: "Gestionar solicitudes de derechos de datos (habeas data)" },
-  { key: "retention.manage", description: "Aprobar retención, anonimización o eliminación de datos" },
+  {
+    key: "plans.publish",
+    description: "Publicar o retirar versiones comerciales de planes",
+  },
+  {
+    key: "koral.plans.read",
+    description: "Consultar planes publicados y visibles para Koral",
+  },
+  {
+    key: "legal.approve",
+    description: "Aprobar y publicar documentos legales",
+  },
+  {
+    key: "data.manage",
+    description: "Gestionar solicitudes de derechos de datos (habeas data)",
+  },
+  {
+    key: "retention.manage",
+    description: "Aprobar retención, anonimización o eliminación de datos",
+  },
   { key: "pqr.manage", description: "Gestionar casos de PQR" },
-  { key: "approvals.manage", description: "Administrar aprobaciones legales y comerciales de producción" },
-  { key: "koral.conversations.read", description: "Ver conversaciones y su historial operativo en Koral" },
-  { key: "koral.conversations.manage", description: "Asignar, intervenir y documentar conversaciones en Koral" },
+  {
+    key: "approvals.manage",
+    description: "Administrar aprobaciones legales y comerciales de producción",
+  },
+  {
+    key: "koral.conversations.read",
+    description: "Ver conversaciones y su historial operativo en Koral",
+  },
+  {
+    key: "koral.conversations.manage",
+    description: "Asignar, intervenir y documentar conversaciones en Koral",
+  },
+  {
+    key: "knowledge.read",
+    description:
+      "Consultar conocimiento publicado dentro del ámbito autorizado",
+  },
+  {
+    key: "knowledge.manage",
+    description: "Crear y revisar versiones de conocimiento",
+  },
+  {
+    key: "knowledge.publish",
+    description: "Aprobar, publicar y retirar versiones de conocimiento",
+  },
 ];
 
 export const ROLE_CATALOG: RoleDefinition[] = [
-  { name: "SUPER_ADMIN", description: "Control total de la plataforma, incluyendo roles, permisos y configuración" },
+  {
+    name: "SUPER_ADMIN",
+    description:
+      "Control total de la plataforma, incluyendo roles, permisos y configuración",
+  },
   { name: "ADMIN", description: "Operación general de la plataforma" },
-  { name: "FINANCE", description: "Pagos, conciliación, reembolsos y reportes financieros" },
-  { name: "COMMERCIAL", description: "Prospectos, oportunidades, empresas y aliados" },
-  { name: "CUSTOMER_SERVICE", description: "Atención a clientes, PQR y solicitudes de datos" },
-  { name: "COMPANY_PARTNER", description: "Acceso limitado de una empresa aliada a su propia información" },
-  { name: "AFFILIATE", description: "Acceso limitado de un afiliado a su propia información" },
-  { name: "CUSTOMER", description: "Acceso limitado de un cliente a su propia información" },
-  { name: "AUDITOR", description: "Acceso de solo lectura a auditoría y reportes" },
+  {
+    name: "FINANCE",
+    description: "Pagos, conciliación, reembolsos y reportes financieros",
+  },
+  {
+    name: "COMMERCIAL",
+    description: "Prospectos, oportunidades, empresas y aliados",
+  },
+  {
+    name: "CUSTOMER_SERVICE",
+    description: "Atención a clientes, PQR y solicitudes de datos",
+  },
+  {
+    name: "COMPANY_PARTNER",
+    description:
+      "Acceso limitado de una empresa aliada a su propia información",
+  },
+  {
+    name: "AFFILIATE",
+    description: "Acceso limitado de un afiliado a su propia información",
+  },
+  {
+    name: "CUSTOMER",
+    description: "Acceso limitado de un cliente a su propia información",
+  },
+  {
+    name: "AUDITOR",
+    description: "Acceso de solo lectura a auditoría y reportes",
+  },
 ];
 
 const ALL_PERMISSION_KEYS = PERMISSION_CATALOG.map((p) => p.key);

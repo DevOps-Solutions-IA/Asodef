@@ -1,4 +1,4 @@
-export type AuditTimelineSource = "AUDIT" | "SECURITY";
+export type AuditTimelineSource = "AUDIT" | "KNOWLEDGE" | "SECURITY";
 export type AuditTimelineResult = "SUCCESS" | "FAILURE" | "DENIED" | "NO_OP" | "UNKNOWN";
 
 export interface AuditTimelineItem {

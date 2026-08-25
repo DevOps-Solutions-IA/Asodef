@@ -63,7 +63,7 @@ const KORAL_SERVICE_PRINCIPAL = Object.freeze({
   principalId: "service:koral-orchestrator",
   effectiveActorId: "service:koral-orchestrator",
   identityLevel: "AUTHENTICATED" as const,
-  permissions: ["koral.ai.infer"] as const,
+  permissions: ["koral.ai.infer", "knowledge.read"] as const,
 });
 
 /** The gateway actor is a server-owned service principal. Visitor assurance
@@ -92,6 +92,13 @@ export function buildKoralServiceGatewayRequestContext(
       consentVerified,
       piiPolicy: input.piiPolicy,
       dataClassification: input.dataClassification,
+    },
+    effectiveScope: {
+      authority: "SERVER_SIDE",
+      tenantKey: "ASODEF",
+      audience: "PUBLIC",
+      organizationIds: [],
+      maximumDataClassification: "PUBLIC",
     },
     deadlineAt: input.deadlineAt,
   };
@@ -274,10 +281,21 @@ export class CanonicalKoralKnowledgeGatewayAdapter
     }
     return {
       kind: "FOUND",
+      outcome: result.response.outcome,
       passages: result.response.citations.map((citation) => ({
         reference: `${citation.publicationId}:${citation.knowledgeVersionId}`,
         content: citation.excerpt,
         classification: citation.dataClassification,
+        score: citation.score,
+        trace: {
+          publicationSnapshotId: citation.publicationId,
+          knowledgeItemId: citation.knowledgeItemId,
+          knowledgeVersionId: citation.knowledgeVersionId,
+          knowledgeChunkId: citation.knowledgeChunkId,
+          knowledgeSourceId: citation.knowledgeSourceId,
+          sourceReference: citation.sourceReference,
+          sourceChecksumSha256: citation.sourceChecksumSha256,
+        },
       })),
       correlationId: result.response.correlationId,
     };

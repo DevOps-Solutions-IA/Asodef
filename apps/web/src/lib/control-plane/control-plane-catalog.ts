@@ -189,7 +189,8 @@ export function getControlPlaneSection(
 export function getControlPlanePermission(
   area: ControlPlaneArea,
   slug: string,
-): "settings.manage" | "koral.conversations.read" {
+): "settings.manage" | "koral.conversations.read" | "knowledge.read" {
+  if (area === "koral" && slug === "conocimiento") return "knowledge.read";
   return area === "koral" && (slug === "conversaciones" || slug === "inbox")
     ? "koral.conversations.read"
     : "settings.manage";
@@ -200,6 +201,7 @@ export function getContractClassification(
   slug: string,
 ): ContractClassification {
   if (area === "koral") {
+    if (slug === "conocimiento") return "MATCHES_CANONICAL";
     if (slug === "conversaciones" || slug === "inbox") {
       return "ADAPTER_REQUIRED";
     }

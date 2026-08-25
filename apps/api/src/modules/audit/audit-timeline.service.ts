@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { SecurityEventType, type Prisma } from "@prisma/client";
+import { AuditEventResult, SecurityEventType, type Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import {
   AuditTimelineResultFilter,
@@ -9,11 +9,11 @@ import {
 import type { AuditTimelineItem, AuditTimelinePage } from "./audit-timeline.types";
 
 const SECURITY_EVENT_TYPES = new Set<string>(Object.values(SecurityEventType));
-const CURSOR_ID_PATTERN = /^(AUDIT|SECURITY):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CURSOR_ID_PATTERN = /^(AUDIT|KNOWLEDGE|SECURITY):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface TimelineCursor {
   timestamp: Date;
-  source: "AUDIT" | "SECURITY";
+  source: "AUDIT" | "KNOWLEDGE" | "SECURITY";
   rawId: string;
 }
 
@@ -28,31 +28,37 @@ export class AuditTimelineService {
   async list(query: AuditTimelineQueryDto): Promise<AuditTimelinePage> {
     const cursor = decodeCursor(query.cursor);
     const candidateLimit = query.pageSize + 1;
-    const includeAudit = query.source !== AuditTimelineSourceFilter.SECURITY;
-    const includeSecurity = query.source !== AuditTimelineSourceFilter.AUDIT
+    const includeAudit = query.source === AuditTimelineSourceFilter.ALL || query.source === AuditTimelineSourceFilter.AUDIT;
+    const includeKnowledge = query.source === AuditTimelineSourceFilter.ALL || query.source === AuditTimelineSourceFilter.KNOWLEDGE;
+    const includeSecurity = (query.source === AuditTimelineSourceFilter.ALL || query.source === AuditTimelineSourceFilter.SECURITY)
       && (!query.action || SECURITY_EVENT_TYPES.has(query.action));
 
     const auditBaseWhere = this.auditWhere(query);
     const securityBaseWhere = this.securityWhere(query);
+    const knowledgeBaseWhere = this.knowledgeWhere(query);
     const auditWhere = cursor ? { AND: [auditBaseWhere, auditCursorWhere(cursor)] } : auditBaseWhere;
     const securityWhere = cursor ? { AND: [securityBaseWhere, securityCursorWhere(cursor)] } : securityBaseWhere;
-    const [auditRows, auditCount, securityRows, securityCount] = await Promise.all([
+    const knowledgeWhere = cursor ? { AND: [knowledgeBaseWhere, knowledgeCursorWhere(cursor)] } : knowledgeBaseWhere;
+    const [auditRows, auditCount, securityRows, securityCount, knowledgeRows, knowledgeCount] = await Promise.all([
       includeAudit ? this.prisma.auditLog.findMany({ where: auditWhere, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: candidateLimit }) : [],
       includeAudit ? this.prisma.auditLog.count({ where: auditBaseWhere }) : 0,
       includeSecurity ? this.prisma.securityEvent.findMany({ where: securityWhere, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: candidateLimit }) : [],
       includeSecurity ? this.prisma.securityEvent.count({ where: securityBaseWhere }) : 0,
+      includeKnowledge ? this.prisma.knowledgeAuditEvent.findMany({ where: knowledgeWhere, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: candidateLimit }) : [],
+      includeKnowledge ? this.prisma.knowledgeAuditEvent.count({ where: knowledgeBaseWhere }) : 0,
     ]);
 
     const merged = [
       ...auditRows.map((row) => this.fromAudit(row)),
       ...securityRows.map((row) => this.fromSecurity(row)),
+      ...knowledgeRows.map((row) => this.fromKnowledge(row)),
     ].sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime() || right.id.localeCompare(left.id));
     const items = merged.slice(0, query.pageSize);
     const nextCursor = merged.length > query.pageSize && items.length > 0
       ? encodeCursor(items[items.length - 1]!)
       : null;
 
-    return { items, total: auditCount + securityCount, pageSize: query.pageSize, nextCursor };
+    return { items, total: auditCount + securityCount + knowledgeCount, pageSize: query.pageSize, nextCursor };
   }
 
   private auditWhere(query: AuditTimelineQueryDto): Prisma.AuditLogWhereInput {
@@ -71,6 +77,16 @@ export class AuditTimelineService {
       ...(query.action && SECURITY_EVENT_TYPES.has(query.action) ? { type: query.action as SecurityEventType } : {}),
       ...(query.actorId ? { actorUserId: query.actorId } : {}),
       ...(query.result ? securityResultWhere(query.result) : {}),
+      ...(createdAt ? { createdAt } : {}),
+    };
+  }
+
+  private knowledgeWhere(query: AuditTimelineQueryDto): Prisma.KnowledgeAuditEventWhereInput {
+    const createdAt = timelineDateRange(query.from, query.to);
+    return {
+      ...(query.action ? { action: query.action } : {}),
+      ...(query.actorId ? { actorUserId: query.actorId } : {}),
+      ...(query.result ? { result: query.result as AuditEventResult } : {}),
       ...(createdAt ? { createdAt } : {}),
     };
   }
@@ -109,6 +125,24 @@ export class AuditTimelineService {
       previousState: null,
       newState: null,
       reason: row.reason,
+      requestId: row.requestId,
+      correlationId: row.correlationId,
+    };
+  }
+
+  private fromKnowledge(row: Prisma.KnowledgeAuditEventGetPayload<object>): AuditTimelineItem {
+    return {
+      id: `KNOWLEDGE:${row.id}`,
+      source: "KNOWLEDGE",
+      action: row.action,
+      result: row.result,
+      timestamp: row.createdAt,
+      actorId: row.actorUserId,
+      entityType: "KNOWLEDGE_VERSION",
+      entityId: row.knowledgeVersionId,
+      previousState: row.previousStatus,
+      newState: row.nextStatus,
+      reason: row.changeReason,
       requestId: row.requestId,
       correlationId: row.correlationId,
     };
@@ -175,7 +209,7 @@ function decodeCursor(value: string | undefined): TimelineCursor | null {
     const timestamp = new Date(decoded.timestamp);
     if (Number.isNaN(timestamp.getTime())) throw new Error("invalid cursor timestamp");
     const [sourceValue, rawId] = decoded.id.split(":");
-    const source = sourceValue!.toUpperCase() as "AUDIT" | "SECURITY";
+    const source = sourceValue!.toUpperCase() as "AUDIT" | "KNOWLEDGE" | "SECURITY";
     return { timestamp, source, rawId: rawId! };
   } catch {
     throw new BadRequestException("El cursor de auditoría no es válido.");
@@ -198,6 +232,14 @@ function securityCursorWhere(cursor: TimelineCursor): Prisma.SecurityEventWhereI
     // At equal timestamps every `security:*` global id sorts before every
     // `audit:*` id, so none belongs after an AUDIT cursor.
     return { createdAt: { lt: cursor.timestamp } };
+  }
+  return { OR: [{ createdAt: { lt: cursor.timestamp } }, { createdAt: cursor.timestamp, id: { lt: cursor.rawId } }] };
+}
+
+function knowledgeCursorWhere(cursor: TimelineCursor): Prisma.KnowledgeAuditEventWhereInput {
+  if (cursor.source === "AUDIT") return { createdAt: { lt: cursor.timestamp } };
+  if (cursor.source === "SECURITY") {
+    return { OR: [{ createdAt: { lt: cursor.timestamp } }, { createdAt: cursor.timestamp }] };
   }
   return { OR: [{ createdAt: { lt: cursor.timestamp } }, { createdAt: cursor.timestamp, id: { lt: cursor.rawId } }] };
 }

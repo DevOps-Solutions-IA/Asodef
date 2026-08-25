@@ -15,6 +15,7 @@ import {
   DOMAIN_EVENT_PUBLISH_V2_CONTRACT,
   INITIAL_DOMAIN_EVENT_TYPES,
   KNOWLEDGE_GATEWAY_CONTRACT,
+  KNOWLEDGE_AUDIENCES,
   KNOWLEDGE_STATUSES,
   PLAN_LIFECYCLE,
   PLAN_LIFECYCLE_COMMAND_CONTRACT,
@@ -60,6 +61,12 @@ describe("canonical ASODEF Connect gateway contracts", () => {
   });
 
   it("keeps knowledge approval distinct from publication", () => {
+    expect(KNOWLEDGE_AUDIENCES).toEqual([
+      "PUBLIC",
+      "AUTHENTICATED_AFFILIATE",
+      "INTERNAL",
+      "ADMIN_ONLY",
+    ]);
     expect(KNOWLEDGE_STATUSES).toEqual([
       "DRAFT",
       "REVIEW",
@@ -67,6 +74,13 @@ describe("canonical ASODEF Connect gateway contracts", () => {
       "PUBLISHED",
       "RETIRED",
     ]);
+    expect(KNOWLEDGE_GATEWAY_CONTRACT.contextSchema.required).toContain(
+      "effectiveScope",
+    );
+    expect(KNOWLEDGE_GATEWAY_CONTRACT.publication).toContain("ONLY_PUBLISHED");
+    expect(JSON.stringify(KNOWLEDGE_GATEWAY_CONTRACT)).not.toMatch(
+      /collectionIds|documentId|publishedKnowledgeVersionIds/,
+    );
   });
 
   it("publishes structured errors and policy semantics for every gateway", () => {

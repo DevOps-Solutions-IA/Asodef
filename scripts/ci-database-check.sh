@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly COMPOSE_FILE="$REPOSITORY_ROOT/.github/compose.ci.yml"
-readonly EXPECTED_MIGRATIONS="50"
+readonly EXPECTED_MIGRATIONS="51"
 readonly PURPOSE_LABEL="prisma-clean-install-check"
 
 cd "$REPOSITORY_ROOT"
@@ -210,10 +210,10 @@ unfinished_migrations="$(db_scalar "SELECT count(*) FROM _prisma_migrations WHER
 
 expected_indexes="$(db_scalar "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN ('self_service_sessions_token_hash_key','self_service_idempotency_session_id_operation_key_key','payment_orders_public_reference_key','payment_events_idempotency_key_key','data_subject_requests_public_reference_key','pqr_cases_case_number_key');")"
 expected_constraints="$(db_scalar "SELECT count(*) FROM pg_constraint WHERE conname IN ('self_service_sessions_challenge_id_fkey','self_service_otp_challenges_access_lookup_id_fkey','self_service_idempotency_session_id_fkey','self_service_contact_updates_session_id_fkey');")"
-expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','pqr_cases','data_subject_requests','payment_events','payment_orders','connect_domain_events','connect_automations','connect_automation_versions','connect_automation_executions','connect_automation_execution_steps','connect_automation_retries','connect_automation_dead_letters','connect_communications','connect_communication_recipients','web_chat_sessions','web_chat_message_processings');")"
+expected_tables="$(db_scalar "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('self_service_access_lookups','self_service_otp_challenges','self_service_sessions','self_service_idempotency','self_service_contact_updates','self_service_audit_events','pqr_cases','data_subject_requests','payment_events','payment_orders','connect_domain_events','connect_automations','connect_automation_versions','connect_automation_executions','connect_automation_execution_steps','connect_automation_retries','connect_automation_dead_letters','connect_communications','connect_communication_recipients','web_chat_sessions','web_chat_message_processings','knowledge_items','knowledge_versions','knowledge_sources','knowledge_chunks','knowledge_publication_snapshots','knowledge_retrieval_audits','knowledge_audit_events');")"
 [[ "$expected_indexes" == "6" ]] || fail "one or more required unique indexes are missing"
 [[ "$expected_constraints" == "4" ]] || fail "one or more self-service foreign keys are missing"
-[[ "$expected_tables" == "21" ]] || fail "one or more representative tables are missing"
+[[ "$expected_tables" == "28" ]] || fail "one or more representative tables are missing"
 
 snapshot_sql=$(cat <<'SQL'
 SELECT 'roles=' || count(*) FROM roles
@@ -263,7 +263,7 @@ for seed_run in 1 2 3; do
 done
 
 [[ "$(db_scalar "SELECT count(*) FROM roles;")" == "9" ]] || fail "seeded role count is not 9"
-[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "51" ]] || fail "seeded permission count is not 51"
+[[ "$(db_scalar "SELECT count(*) FROM permissions;")" == "54" ]] || fail "seeded permission count is not 54"
 [[ "$(db_scalar "SELECT count(*) FROM content_entries;")" == "38" ]] || fail "seeded content count is not 38"
 [[ "$(db_scalar "SELECT count(*) FROM legal_documents;")" == "21" ]] || fail "legal seed must create exactly 21 documents"
 [[ "$(db_scalar "SELECT count(*) FROM legal_document_versions WHERE version=1 AND status='DRAFT';")" == "21" ]] || fail "legal seed must create 21 version-1 DRAFT records"

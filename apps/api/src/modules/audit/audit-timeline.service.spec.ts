@@ -43,18 +43,36 @@ const securityRow = {
   createdAt: new Date("2026-08-19T11:00:00.000Z"),
 };
 
+const knowledgeRow = {
+  id: "00000000-0000-4000-8000-000000000003",
+  knowledgeVersionId: "00000000-0000-4000-8000-000000000103",
+  knowledgeItemId: "00000000-0000-4000-8000-000000000104",
+  actorUserId: "00000000-0000-4000-8000-000000000201",
+  tenantKey: "ASODEF",
+  action: "knowledge.version.published",
+  previousStatus: "APPROVED",
+  nextStatus: "PUBLISHED",
+  result: "SUCCESS",
+  correlationId: "00000000-0000-4000-8000-000000000305",
+  requestId: "00000000-0000-4000-8000-000000000306",
+  changeReason: "approved publication",
+  sanitizedMetadata: { snapshotId: "safe-reference" },
+  createdAt: new Date("2026-08-19T10:30:00.000Z"),
+};
+
 describe("AuditTimelineService", () => {
   it("merges sources chronologically and exposes only the minimized canonical shape", async () => {
     const prisma = {
       auditLog: { findMany: jest.fn().mockResolvedValue([auditRow]), count: jest.fn().mockResolvedValue(1) },
       securityEvent: { findMany: jest.fn().mockResolvedValue([securityRow]), count: jest.fn().mockResolvedValue(1) },
+      knowledgeAuditEvent: { findMany: jest.fn().mockResolvedValue([knowledgeRow]), count: jest.fn().mockResolvedValue(1) },
     };
     const service = new AuditTimelineService(prisma as never);
 
     const result = await service.list({ source: AuditTimelineSourceFilter.ALL, pageSize: 20 });
 
-    expect(result.total).toBe(2);
-    expect(result.items.map((item) => item.source)).toEqual(["SECURITY", "AUDIT"]);
+    expect(result.total).toBe(3);
+    expect(result.items.map((item) => item.source)).toEqual(["SECURITY", "KNOWLEDGE", "AUDIT"]);
     expect(result.items[0]).toMatchObject({
       action: "LOGIN_FAILED",
       result: "FAILURE",
@@ -63,6 +81,13 @@ describe("AuditTimelineService", () => {
       correlationId: securityRow.correlationId,
     });
     expect(result.items[1]).toMatchObject({
+      action: "knowledge.version.published",
+      entityType: "KNOWLEDGE_VERSION",
+      entityId: knowledgeRow.knowledgeVersionId,
+      previousState: "APPROVED",
+      newState: "PUBLISHED",
+    });
+    expect(result.items[2]).toMatchObject({
       action: "PAYMENT_APPROVED",
       result: "SUCCESS",
       actorId: auditRow.actorUserId,
@@ -79,6 +104,7 @@ describe("AuditTimelineService", () => {
     const prisma = {
       auditLog: { findMany: jest.fn().mockResolvedValue([auditRow]), count: jest.fn().mockResolvedValue(1) },
       securityEvent: { findMany: jest.fn().mockResolvedValue([newest, securityRow]), count: jest.fn().mockResolvedValue(2) },
+      knowledgeAuditEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     };
     const service = new AuditTimelineService(prisma as never);
 
@@ -95,6 +121,7 @@ describe("AuditTimelineService", () => {
     const prisma = {
       auditLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       securityEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      knowledgeAuditEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     };
     const service = new AuditTimelineService(prisma as never);
 
@@ -113,6 +140,7 @@ describe("AuditTimelineService", () => {
     const prisma = {
       auditLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       securityEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      knowledgeAuditEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     };
     const service = new AuditTimelineService(prisma as never);
 
@@ -134,12 +162,16 @@ describe("AuditTimelineService", () => {
     expect(prisma.securityEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ type: "LOGIN_FAILED", createdAt: expectedRange }),
     }));
+    expect(prisma.knowledgeAuditEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ action: "LOGIN_FAILED", createdAt: expectedRange }),
+    }));
   });
 
   it("uses a keyset cursor on subsequent pages and never introduces an offset or page ceiling", async () => {
     const prisma = {
       auditLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       securityEvent: { findMany: jest.fn().mockResolvedValue([securityRow]), count: jest.fn().mockResolvedValue(1) },
+      knowledgeAuditEvent: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     };
     const service = new AuditTimelineService(prisma as never);
     const cursor = Buffer.from(JSON.stringify({
