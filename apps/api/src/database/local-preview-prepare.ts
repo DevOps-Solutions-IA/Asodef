@@ -1,5 +1,6 @@
 import { connect, createServer } from "node:net";
 import { prepareE2ERuntime } from "./prepare-e2e-runtime";
+import { prepareLocalPreviewKnowledge } from "./local-preview-knowledge";
 
 async function main(): Promise<void> {
   if (process.env.LOCAL_PREVIEW !== "true") {
@@ -54,8 +55,14 @@ async function main(): Promise<void> {
       ASODEF_E2E_PREPARE: "true",
       DATABASE_URL: localUrl.toString(),
     });
+    const knowledge = await prepareLocalPreviewKnowledge({
+      ...process.env,
+      NODE_ENV: "test",
+      LOCAL_PREVIEW: "true",
+      DATABASE_URL: localUrl.toString(),
+    });
     process.stdout.write(
-      `Local preview preparation complete: ${published} legal documents published.\n`,
+      `Local preview preparation complete: ${published} legal documents published; ${knowledge.publishedFixtureCount} review Knowledge fixture published.\n`,
     );
   } finally {
     await new Promise<void>((resolve) => proxy.close(() => resolve()));

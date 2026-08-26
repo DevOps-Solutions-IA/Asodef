@@ -16,9 +16,21 @@ test.describe("Knowledge V1 administrative lifecycle (real E2E)", () => {
         await currentPrivilegedSessionId(page),
       ),
     ).toBe(1);
+    const initialListRequest = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && new URL(response.url()).pathname.endsWith("/admin/knowledge/items"),
+    );
     await page.goto("/admin/koral/conocimiento");
+    expect((await initialListRequest).status()).toBe(200);
     await expect(page.getByRole("heading", { name: "Conocimiento" })).toBeVisible();
     await expect(page.getByText("RUNTIME REAL")).toBeVisible();
+    if (process.env.LOCAL_PREVIEW === "true") {
+      const previewKnowledgeItem = page.getByRole("button", { name: /^Beneficios de ASODEF\b/ });
+      await expect(previewKnowledgeItem).toBeVisible();
+      await expect(page.getByText("PUBLISHED", { exact: true }).first()).toBeVisible();
+      await previewKnowledgeItem.click();
+      await expect(page.getByRole("heading", { name: "Beneficios de ASODEF", exact: true })).toBeVisible();
+    }
 
     const createSection = page.getByRole("heading", { name: "Crear DRAFT" }).locator("xpath=..");
     await createSection.getByLabel("Stable key").fill(marker);

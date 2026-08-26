@@ -149,6 +149,7 @@ export class ListKnowledgeItemsQueryDto {
   page: number = 1;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)

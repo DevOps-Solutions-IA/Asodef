@@ -61,7 +61,18 @@ El comando valida o crea
 puertos locales aislados, construye Web con el destino API correcto y levanta
 PostgreSQL, Redis, API y Web reales. También aplica exactamente 51 migraciones,
 comprueba cero drift, ejecuta tres veces el seed idempotente y prepara datos
-sintéticos para la revisión administrativa.
+sintéticos para la revisión administrativa. Entre ellos se publica un único
+Knowledge Item de laboratorio, `local-preview-public-benefits`, visible en el
+Admin y consultable en una conversación nueva con:
+`¿Qué información de beneficios publica ASODEF en este entorno de revisión?`.
+La evidencia identifica explícitamente que es sintética y no representa una
+promesa comercial real.
+
+Con el Preview activo y su entorno protegido cargado, la revisión dirigida de
+saludo y respuesta pública puede ejecutarse con
+`pnpm exec playwright test --config=playwright.local-preview.config.ts`. Este
+harness no forma parte del E2E sin proveedor externo y deshabilita trazas,
+capturas y video para no persistir material de la sesión local.
 
 Los servicios se publican exclusivamente sobre la dirección de red
 `127.0.0.1`, mientras que las URLs canónicas consumidas por el navegador usan
