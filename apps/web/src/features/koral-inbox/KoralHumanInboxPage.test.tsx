@@ -60,7 +60,10 @@ describe("KoralHumanInboxPage", () => {
       return undefined;
     });
     renderWithAuth(<KoralHumanInboxPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /Ayuda con afiliación/i }));
+    const inboxItem = await screen.findByRole("button", { name: /Ayuda con afiliación/i });
+    expect(inboxItem).toHaveTextContent(`ID ${conversation.id}`);
+    expect(inboxItem).toHaveTextContent("WEB");
+    fireEvent.click(inboxItem);
     expect(await screen.findByText("Necesito ayuda")).toBeInTheDocument();
     expect(screen.getByText("Autorrespuesta de Koral deshabilitada")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enviar respuesta" })).toBeDisabled();
@@ -75,5 +78,21 @@ describe("KoralHumanInboxPage", () => {
     renderWithAuth(<KoralHumanInboxPage />);
     expect(await screen.findByText("safe")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+
+  it("surfaces assignee and read acknowledgement failures and exposes channel/SLA filters", async () => {
+    mockAuthFetch(buildCurrentUser({ id: "user-1", permissions: ["koral.conversations.read", "koral.conversations.manage"] }), (url) => {
+      if (url.endsWith("/eligible-assignees")) return response(503, { message: "Responsables no disponibles" });
+      if (url.endsWith(`/${conversation.id}/read`)) return response(503, { message: "Lectura no confirmada" });
+      if (url.endsWith(`/${conversation.id}`)) return response(200, detail);
+      if (url.includes("/admin/koral/conversations?")) return response(200, { items: [conversation], total: 1, page: 1, pageSize: 30 });
+      return undefined;
+    });
+    renderWithAuth(<KoralHumanInboxPage />);
+    expect(await screen.findByText("No se pudieron cargar los responsables")).toBeInTheDocument();
+    expect(screen.getByLabelText("Canal")).toBeInTheDocument();
+    expect(screen.getByLabelText("SLA")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Ayuda con afiliación/i }));
+    expect(await screen.findByText("No se pudo actualizar la lectura")).toBeInTheDocument();
   });
 });

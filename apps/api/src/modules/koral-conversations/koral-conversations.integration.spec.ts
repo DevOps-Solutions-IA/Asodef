@@ -118,6 +118,10 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     expect([first.duplicate, replay.duplicate].sort()).toEqual([false, true]);
     expect(await prisma.conversationMessage.count({ where: { conversationId: first.conversationId } })).toBe(1);
     expect(await prisma.conversationEvent.count({ where: { conversationId: first.conversationId, eventType: "MESSAGE_RECEIVED" } })).toBe(1);
+    await expect(service.findById(first.conversationId, randomUUID())).resolves.toMatchObject({
+      channels: [ConversationChannel.WEB],
+      channelSessions: [expect.objectContaining({ channel: ConversationChannel.WEB })],
+    });
   });
 
   it("does not leak message content into audit metadata and suppresses auto-reply while HUMAN_ACTIVE", async () => {
@@ -526,6 +530,15 @@ describe("Koral conversation foundation (integration, real Postgres)", () => {
     ).resolves.toMatchObject({
       result: "SUFFICIENT_EVIDENCE",
       citationCount: 1,
+    });
+    await expect(service.findById(receipt.conversationId, actor.id)).resolves.toMatchObject({
+      knowledgeRetrievals: [
+        {
+          result: "SUFFICIENT_EVIDENCE",
+          citationCount: 1,
+          correlationId,
+        },
+      ],
     });
     const event = await prisma.conversationEvent.findFirstOrThrow({
       where: {

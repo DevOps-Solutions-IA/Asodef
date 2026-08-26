@@ -282,6 +282,24 @@ export class KoralConversationsService {
       },
     });
     if (!conversation) throw new NotFoundException(GENERIC_NOT_FOUND);
+    const correlationIds = [...new Set([
+      ...conversation.messages.map(({ correlationId }) => correlationId),
+      ...conversation.events.map(({ correlationId }) => correlationId),
+    ].filter((value): value is string => Boolean(value)))];
+    const knowledgeRetrievals = correlationIds.length === 0
+      ? []
+      : await this.prisma.knowledgeRetrievalAudit.findMany({
+        where: { correlationId: { in: correlationIds } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          result: true,
+          reasonCode: true,
+          correlationId: true,
+          citationCount: true,
+          createdAt: true,
+        },
+      });
     const active = conversation.assignments.find((assignment) => assignment.releasedAt === null) ?? null;
     const latestInbound = [...conversation.messages].reverse().find((message) => message.direction === ConversationMessageDirection.INBOUND);
     return {
@@ -311,6 +329,8 @@ export class KoralConversationsService {
       tags: conversation.tags.map(({ tag }) => tag),
       events: conversation.events,
       identityTimeline: conversation.identityBindings,
+      knowledgeRetrievals,
+      channels: conversation.channelSessions.map((session) => session.channel),
       channelSessions: conversation.channelSessions,
       resolvedAt: conversation.resolvedAt,
       closedAt: conversation.closedAt,

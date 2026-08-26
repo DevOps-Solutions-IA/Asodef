@@ -30,6 +30,7 @@ export interface InboxConversationDetail extends InboxConversationSummary {
   internalNotes: Array<{ id: string; body: string; createdAt: string; author: InboxAssignee }>;
   events: Array<{ id: string; eventType: string; actorUserId: string | null; requestId: string | null; correlationId: string | null; previousStatus: string | null; newStatus: string | null; result: string; reason: string | null; createdAt: string }>;
   identityTimeline: Array<{ id: string; previousAssurance: string | null; newAssurance: string; reason: string; correlationId: string; createdAt: string }>;
+  knowledgeRetrievals: Array<{ id: string; result: string; reasonCode: string | null; correlationId: string; citationCount: number; createdAt: string }>;
   channelSessions: Array<{ id: string; channel: ConversationChannel; adapterVersion: string; openedAt: string; lastSeenAt: string; closedAt: string | null }>;
   resolvedAt: string | null;
   closedAt: string | null;

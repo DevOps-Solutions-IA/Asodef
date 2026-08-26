@@ -1,99 +1,63 @@
-# ASODEF Connect — Control Plane API dependency map
+# ASODEF Connect — Control Plane truth map
 
-Evidence date: 2026-08-23. Consumer branch: `codex/plans-canonicalization`, locally resynchronized on `origin/main` `1339cd7ec3b463ee339781c33dd5375cab69d60c`.
+Evidence date: 2026-08-26. Base: `e4da369ff6bb1051906f787c3c5f9b4a339b54ff`.
 
-The Control Plane is a consumer only. This document records canonical contracts, UI adapters and missing runtimes. `BACKEND_RUNTIME_MISSING` means a contract exists but no stable administrative or execution runtime was verified. Plans is now backed by the canonical Plans application service and contracts; no frontend mapping is authoritative.
+The Control Plane presents server-authoritative state. It does not infer permissions, ownership, model availability, executable tools, automation status, Knowledge eligibility, provider health, token usage or cost.
 
-## Integrated canonical evidence
+## Koral navigation
 
-| Capability                                              | Integrated source | Main evidence                                                                       | Status    |
-| ------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------- | --------- |
-| Business Core                                           | PR #10            | merge `95b1c2a`                                                                     | `IN_MAIN` |
-| AI Gateway, Tool Gateway and Knowledge contracts        | PR #20            | merge `6cd482f`; `packages/connect-contracts` and `apps/api/src/modules/ai-gateway` | `IN_MAIN` |
-| Koral Conversation Core and canonical gateway adapters  | PR #19            | merge `e8979e8`; `apps/api/src/modules/koral-conversations`                         | `IN_MAIN` |
-| Domain Events, Automation, Communications and Templates | PR #21            | merge `0c3ed98`; `packages/connect-contracts`                                       | `IN_MAIN` |
-| Governed OpenRouter runtime                             | PR #25            | merge `0f2e694`; `apps/api/src/modules/ai-gateway`                                  | `IN_MAIN` |
-| Koral identity resolution runtime                       | PR #23            | merge `fbf1640`; `apps/api/src/modules/koral-conversations`                         | `IN_MAIN` |
-| Automation and Communications runtime                   | PR #26            | merge `1339cd7`; `apps/api/src/modules/{automation,communications,domain-events}`   | `IN_MAIN` |
+| Section | Route | Server truth | Mutations | Final status |
+| --- | --- | --- | --- | --- |
+| Resumen | `/admin/koral/resumen` | `GET /api/v1/admin/koral/control-plane`; conversations, handoffs, Knowledge, agent configuration, tools and automations | None | `REAL_CONNECTED` |
+| Conversaciones | `/admin/koral/conversaciones` | `GET /api/v1/admin/koral/conversations` and `/:id`; persisted messages, ownership, assurance, Knowledge audits and event correlations | None | `REAL_CONNECTED` |
+| Inbox | `/admin/koral/inbox` | Human Inbox list/detail and canonical command endpoints | Assignment, takeover/transfer, release, return, priority and state transitions with server RBAC, step-up, CAS, idempotency and audit | `REAL_CONNECTED`; human outbound remains `UNAVAILABLE` |
+| Conocimiento | `/admin/koral/conocimiento` | Knowledge items, versions, sources, snapshots, retrieval and lifecycle | Canonical Knowledge lifecycle only | `REAL_CONNECTED` |
+| Agentes | `/admin/koral/agentes` | `GET /api/v1/admin/koral/control-plane/runtime/agents`; source-controlled agent/model binding and effective configuration | None; there is no dynamic agent registry | `REAL_CONNECTED_READ_ONLY` |
+| Herramientas | `/admin/koral/herramientas` | `GET /api/v1/admin/koral/control-plane/tools`; canonical catalog and sanitized schemas | None; Tool Gateway has zero registered executors | `REAL_CONNECTED_READ_ONLY` |
+| Recomendaciones | hidden | No canonical recommendation decisions, evidence or projection | None | `HIDDEN_NO_CANONICAL_DOMAIN` |
+| Automatizaciones | `/admin/koral/automatizaciones` | `GET /api/v1/admin/koral/control-plane/automations`; definitions, versions, executions, steps, retries and dead letters | None; no governed admin commands exist | `REAL_CONNECTED_READ_ONLY` |
+| Analítica | `/admin/koral/analitica` | `GET /api/v1/admin/koral/control-plane/analytics`; bounded aggregates from persisted runtime tables | None | `REAL_CONNECTED_READ_ONLY` |
 
-There is one canonical `@asodef/connect-contracts` package in `main`. Koral consumes the AI, Tool and Knowledge gateways through Koral-named adapters; it does not own parallel gateway contracts. The former temporary Knowledge resolver is no longer present.
+All Control Plane projection endpoints require `settings.manage`. Conversation reads require `koral.conversations.read`; Inbox commands require `koral.conversations.manage`; Knowledge keeps its canonical `knowledge.*` permissions. Route visibility is only a convenience: every server endpoint enforces its permission independently.
 
-## Contract reconciliation
+## Runtime boundaries
 
-| UI capability                                                  | Canonical source in `main`                                                               | Classification            | Consumer decision                                                                                                                                                     |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conversation list/detail, channels and handoff status          | `KoralConversationsController`, `ConversationSummaryResponse`, Prisma conversation enums | `ADAPTER_REQUIRED`        | Bind the web client to the declared API response. Dates require transport serialization; do not expose a Prisma shape directly in the UI.                             |
-| Assignment/takeover, return to Koral, internal note            | Koral conversation commands                                                              | `MATCHES_CANONICAL`       | Preserve canonical RBAC, step-up, version compare-and-swap, idempotency and sanitized audit semantics.                                                                |
-| Queue filtering, release, priority-only change, resolve, close | Koral conversation domain; routes absent                                                 | `BACKEND_RUNTIME_MISSING` | Controls remain unavailable until canonical capabilities exist.                                                                                                       |
-| `AiGateway`                                                    | `@asodef/connect-contracts/ai-gateway`                                                   | `MATCHES_CANONICAL`       | AI Gateway is canonical. Koral is a consumer through its adapter.                                                                                                     |
-| `ToolGateway` and governed tools                               | `@asodef/connect-contracts/tool-gateway`                                                 | `MATCHES_CANONICAL`       | Consume `GovernedToolContract`; never reproduce request, result, policy, permission, audit or idempotency types in web code.                                          |
-| Knowledge lifecycle and gateway                                | `@asodef/connect-contracts/knowledge-gateway` and Koral canonical adapter                | `MATCHES_CANONICAL`       | Contracts and adapter are integrated. Only published knowledge may be retrieved; failures remain closed.                                                              |
-| Knowledge persistence, admin API and stable retrieval          | No verified runtime                                                                      | `BACKEND_RUNTIME_MISSING` | Do not present configured sources, publication success or retrieval availability.                                                                                     |
-| Model Profiles, tool administration and AI evaluations         | AI Gateway registry/policy/evaluation contracts                                          | `BACKEND_RUNTIME_MISSING` | No stable list/draft/review/publish or aggregate analytics API is verified.                                                                                           |
-| Agent Profiles                                                 | Koral `agentProfileKey` to canonical `modelProfileId` binding                            | `BACKEND_RUNTIME_MISSING` | A runtime binding exists, but no administrable Agent Profile contract/API exists.                                                                                     |
-| Domain Events                                                  | `@asodef/connect-contracts/domain-events`                                                | `MATCHES_CANONICAL`       | Consume `DomainEventEnvelope` and `events.publish`; do not reuse an internal conversation event as the generic envelope.                                              |
-| Automations                                                    | `@asodef/connect-contracts/automation`                                                   | `ADAPTER_REQUIRED`        | Initial EVENT/condition/COMMUNICATION_SEND execution, history, retry and dead-letter runtime exists; administration and other triggers/actions remain absent.         |
-| Communications and Templates                                   | `@asodef/connect-contracts/communications` and `templates`                               | `ADAPTER_REQUIRED`        | `communications.send` and published source-template rendering exist behind the EMAIL outbox; admin lifecycle APIs remain absent and other channels are contract-only. |
-| Recommendations using plan eligibility, price or benefits      | `plans.published.read@1.0.0`                                                             | `BACKEND_RUNTIME_MISSING` | Canonical published inputs now exist; recommendation runtime remains absent and must not be simulated in UI.                                                          |
-| Plans                                                          | `plans.published.read@1.0.0`, `plans.lifecycle.command@1.0.0`, Plans API                 | `MATCHES_CANONICAL`       | Admin consumes `/admin/plans`; Public and Koral consume audience-filtered published reads.                                                                            |
-| Provider health                                                | Current `/api/v1/admin/sistema` response lacks OpenRouter/Meta/WhatsApp fields           | `BACKEND_RUNTIME_MISSING` | Render `UNKNOWN`/`UNAVAILABLE`; never infer connection or health from browser state or configuration.                                                                 |
+- Provider configuration establishes `CONFIGURED`, `DISABLED` or `MISCONFIGURED`. It is not a provider health probe and never produces `HEALTHY`.
+- Model IDs, fallback order, token bounds and circuit policy come from source-controlled model profiles plus validated runtime configuration. Secret values are never returned.
+- Knowledge availability is backed by the real Knowledge persistence and retrieval runtime.
+- The Tool contract catalog is real, but no Tool Gateway executor is registered. `CONTRACT_PRESENT != EXECUTABLE`; executable count is zero and the UI has no execute action.
+- Automation supports real EVENT processing and `COMMUNICATION_SEND`. SCHEDULE, MANUAL, TOOL_CALL and EMIT_EVENT are not presented as executable. The Control Plane is read-only until governed admin commands exist.
+- AI invocation details, tokens and costs are not stored durably. The analytics response states this gap and does not fabricate charts or costs.
+- Human ownership is real. `HUMAN_ACTIVE => AI_AUTORESPONSE=OFF`. Human outbound delivery has no canonical adapter yet and remains visibly disabled. External channels never report fake delivery success.
+- Recommendations remain absent until a canonical recommendation domain exists.
 
-No duplicate `DataClassification`, `GatewayRequestContext`, `DomainEvent`, `communications.send`, `GovernedToolContract`, Koral handoff states or AI gateway types are maintained by the Control Plane.
-
-## Inbox API requirements
+## Conversation contract
 
 Canonical prefix: `/api/v1/admin/koral/conversations`.
 
-| Capability                     | Exact contract                                                                                                                | Classification            | RBAC / step-up                                      | Version, idempotency and audit                                                               |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| List conversations             | `GET /api/v1/admin/koral/conversations?status&page&pageSize`                                                                  | `MATCHES_CANONICAL`       | `koral.conversations.read`; no step-up              | Read-only.                                                                                   |
-| Filter queues                  | Add canonical queue read capability and bounded `queueId`, `priority`, `assigneeUserId`, `channel`, `tag`, `slaState` filters | `BACKEND_RUNTIME_MISSING` | `koral.conversations.read`; no step-up              | Queue/SLA ownership and PII-safe response must be canonical.                                 |
-| Get conversation               | `GET /api/v1/admin/koral/conversations/:id`                                                                                   | `ADAPTER_REQUIRED`        | `koral.conversations.read`; no step-up              | Bind a declared transport DTO; do not consume Prisma objects in the browser.                 |
-| Takeover / assign              | `POST /api/v1/admin/koral/conversations/:id/assignments`                                                                      | `MATCHES_CANONICAL`       | `koral.conversations.manage`; step-up               | `expectedVersion`, UUID idempotency key, canonical 409; sanitized assignment/takeover audit. |
-| Release without Koral takeover | Canonical release command is absent                                                                                           | `BACKEND_RUNTIME_MISSING` | `koral.conversations.manage`; step-up required      | Require reason, expected version and idempotency key; audit release.                         |
-| Return to Koral                | `POST /api/v1/admin/koral/conversations/:id/return-to-koral`                                                                  | `MATCHES_CANONICAL`       | `koral.conversations.manage`; step-up; active owner | Compare-and-swap, idempotent replay, 409 and `RETURNED_TO_KORAL`.                            |
-| Add internal note              | `POST /api/v1/admin/koral/conversations/:id/internal-notes`                                                                   | `MATCHES_CANONICAL`       | `koral.conversations.manage`; no step-up            | UUID idempotency key; append-only; note body excluded from audit.                            |
-| Change priority                | Canonical priority command is absent                                                                                          | `BACKEND_RUNTIME_MISSING` | `koral.conversations.manage`; step-up required      | Require reason, priority, expected version and idempotency key; audit before/after.          |
-| Resolve                        | Canonical resolve command is absent                                                                                           | `BACKEND_RUNTIME_MISSING` | `koral.conversations.manage`; step-up required      | Require summary, expected version and idempotency key; audit transition.                     |
-| Close                          | Canonical close command is absent                                                                                             | `BACKEND_RUNTIME_MISSING` | `koral.conversations.manage`; step-up required      | Require reason, expected version and idempotency key; enforce terminal transition and audit. |
+| Capability | Endpoint | Permission | Governance |
+| --- | --- | --- | --- |
+| List/filter/page | `GET /` | `koral.conversations.read` | Bounded server filters for status, priority, assignee, channel, SLA, queue and search |
+| Detail | `GET /:id` | `koral.conversations.read` | Sanitized participants, messages, assignments, notes, events, assurance, Knowledge retrieval and channel sessions |
+| Eligible assignees | `GET /eligible-assignees` | `koral.conversations.manage` | Active users with the canonical manage permission |
+| Assign/takeover/transfer | `POST /:id/assignments` | `koral.conversations.manage` | Step-up, expected version, UUID idempotency, advisory lock and audit |
+| Release | `POST /:id/release` | `koral.conversations.manage` | Step-up, ownership, CAS, idempotency and audit |
+| Return to Koral | `POST /:id/return-to-koral` | `koral.conversations.manage` | Step-up, ownership, CAS, idempotency and audit |
+| Priority | `POST /:id/priority` | `koral.conversations.manage` | Step-up, CAS, idempotency and audit |
+| Resolve/close | `POST /:id/status-transitions` | `koral.conversations.manage` | Step-up, transition invariants, CAS, idempotency and audit |
+| Read state | `POST /:id/read` | `koral.conversations.read` | Per-user persisted read projection |
+| Internal note | `POST /:id/internal-notes` | `koral.conversations.manage` | Append-only persisted note; body excluded from audit metadata |
 
-Canonical handoff states are `AI_ACTIVE`, `WAITING_USER`, `HUMAN_REQUIRED`, `HUMAN_ACTIVE`, `WAITING_INTERNAL`, `RESOLVED` and `CLOSED`. `HUMAN_ACTIVE` and `HUMAN_REQUIRED` suppress Koral auto-reply. The UI must not present Koral as actively attending while a human owns the interaction.
+Canonical states are `AI_ACTIVE`, `WAITING_USER`, `HUMAN_REQUIRED`, `HUMAN_ACTIVE`, `WAITING_INTERNAL`, `RESOLVED` and `CLOSED`. The UI renders the persisted state and never guesses thread ownership from a subject or channel.
 
-All errors use the platform envelope: validation 400, authentication 401, permission/step-up 403, not found 404, version/ownership/idempotency conflict 409 and rate limit 429.
+## Analytics sources
 
-## Koral and Communications Admin requirements
+The bounded analytics projection uses only `Conversation`, `ConversationEvent`, `WebChatMessageProcessing`, `KnowledgeRetrievalAudit`, `ConnectAutomationExecution` and `ConnectAutomationDeadLetter`. No durable provider latency, invocation, token or cost store exists, so those values are not displayed. Technical provider health remains owned by Sistema.
 
-The paths below are dependency requirements, not implemented endpoints. Lifecycle resources need bounded `READ`, `CREATE_DRAFT`, `UPDATE_DRAFT`, `SUBMIT_REVIEW`, `PUBLISH`, `RETIRE` and `ROLLBACK` operations where the canonical lifecycle permits them.
+## Test contract
 
-| UI domain                               | Required base path                                                    | Canonical source                                                   | Classification / constraint                                                        |
-| --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Model Profiles                          | `/api/v1/admin/koral/model-profiles`                                  | AI Gateway `ModelProfile`                                          | `BACKEND_RUNTIME_MISSING`                                                          |
-| Agents                                  | `/api/v1/admin/koral/agent-profiles`                                  | Runtime binding only; admin contract absent                        | `BACKEND_RUNTIME_MISSING`                                                          |
-| Tools                                   | `/api/v1/admin/koral/tools`                                           | `GovernedToolContract` and registry                                | `BACKEND_RUNTIME_MISSING`                                                          |
-| Knowledge                               | `/api/v1/admin/koral/knowledge`                                       | Knowledge source/document/version/collection/publication contracts | `BACKEND_RUNTIME_MISSING`; preserve canonical `APPROVED` and rollback reference.   |
-| Recommendations                         | `/api/v1/admin/koral/recommendation-policies`                         | Published Plans input is canonical; recommendation runtime absent  | `BACKEND_RUNTIME_MISSING`; do not simulate scoring or success.                     |
-| Automations                             | `/api/v1/admin/koral/automations`                                     | Automation/Version/Execution/DeadLetter contracts                  | `BACKEND_RUNTIME_MISSING`; activation, execution, retry and requeue stay disabled. |
-| Analytics/evaluations                   | `/api/v1/admin/koral/analytics` and `/api/v1/admin/koral/evaluations` | AI eval/usage contracts                                            | `BACKEND_RUNTIME_MISSING`; immutable results are read-only.                        |
-| Communication templates                 | `/api/v1/admin/communications/templates`                              | Template/Version/preview contract                                  | `BACKEND_RUNTIME_MISSING`                                                          |
-| Communication automation/history/config | `/api/v1/admin/communications/{automations,history,configuration}`    | Automation and Communications contracts                            | `BACKEND_RUNTIME_MISSING`; sending and provider configuration stay disabled.       |
-
-Required operation shape: list/detail reads; idempotent draft creation; draft-only patch with expected version; explicit review/publish/retire/rollback commands; immutable preview and semantic diff. Mutations require reason, expected version, idempotency key, RBAC and before/after audit. Publish, retire and rollback require step-up at minimum. Runtime consumers resolve published versions only. Secrets, credentials, hidden reasoning, raw prompts, rendered bodies and recipients are excluded from administrative audit responses.
-
-## Plans dependency resolved
-
-`Plan`/`PlanVersion`, canonical contracts and the Plans API now define codes,
-feature/benefit schemas, minor-unit pricing plus currency, billing vocabulary,
-audience visibility, effective dates and `DRAFT -> REVIEW -> PUBLISHED ->
-RETIRED`. Legacy records remain visibly unmapped and unavailable to published
-consumers pending a separately approved backfill. Plans Admin is a read
-consumer; recommendation and automation engines remain runtime dependencies.
-
-The implemented design keeps one stable PostgreSQL Plan identity and immutable versions, with one published-version pointer for Admin, public pages, Koral, CRM and Contracts. Master/Firebird remains an optional projection. Plans owns the canonical backend and additive migrations; the Control Plane remains a read consumer and contains no canonical business mapping.
-
-## Runtime and technical-state truth
-
-- Automation contracts are canonical; initial EVENT execution exists, while administration and SCHEDULE/MANUAL runtime remain `NOT_CONFIGURED`.
-- Communications contracts are canonical; EMAIL is `REAL_EXISTING_ADAPTER` through the encrypted outbox. The governed tool remains `REVIEW`, and other transports remain `CONTRACT_ONLY`.
-- Koral functional/business configuration remains under Koral. OpenRouter, Meta, WhatsApp and other provider health remains under Sistema.
-- Technical states are `HEALTHY`, `DEGRADED`, `UNAVAILABLE`, `UNKNOWN`, `NOT_CONFIGURED` and `DISABLED`.
-- A provider without evidence is `UNKNOWN`, never `HEALTHY`. A capability without runtime is `NOT_CONFIGURED` or `UNAVAILABLE`, never simulated success.
+- Unit and integration tests cover authorization, bounded DTOs, configuration truth, sanitized output and frontend loading/empty/error/non-empty states.
+- Chromium E2E calls compiled Web/API with real PostgreSQL and Redis; it does not intercept network requests.
+- The automation E2E fixture is guarded to isolated `asodef_ci_*` databases and dispatches through the canonical `DomainEventDispatcherService`; the notification transport is in-memory under `NODE_ENV=test`.
+- Local Preview provider verification calls real OpenRouter and checks that the resulting conversation is visible in Admin Conversaciones.
+- Synthetic fixtures never run in production and are removed with the isolated runtime.

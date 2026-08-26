@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
+import { loginPrivilegedAdmin } from "./support/admin-auth";
 
 const prisma = new PrismaClient();
 const MESSAGES_PATH = "/api/v1/koral/web-chat/messages";
@@ -25,7 +26,18 @@ test.describe.serial("Local Preview manual-review Web Chat", () => {
     const result = await sendMessage(page, LOCAL_PREVIEW_KNOWLEDGE_QUERY);
     await expect(result.dialog.getByText("Koral espera tu respuesta")).toBeVisible();
     await expect(result.dialog.locator("ol").getByText("Koral", { exact: true })).toBeVisible();
-    await assertRealKoralOutbound(result.clientMessageId, true);
+    const persisted = await assertRealKoralOutbound(result.clientMessageId, true);
+    await loginPrivilegedAdmin(page, { kind: "totp" });
+    const listResponse = page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && new URL(response.url()).pathname.endsWith("/admin/koral/conversations"),
+    );
+    await page.goto("/admin/koral/conversaciones");
+    expect((await listResponse).status()).toBe(200);
+    const item = page.getByRole("button").filter({ hasText: `ID ${persisted.conversationId}` });
+    await expect(item).toBeVisible();
+    await item.click();
+    await expect(page.getByText(persisted.body, { exact: true })).toBeVisible();
   });
 });
 
@@ -55,7 +67,7 @@ async function sendMessage(page: Page, body: string) {
 async function assertRealKoralOutbound(
   clientMessageId: string,
   knowledgeRequired: boolean,
-): Promise<void> {
+): Promise<{ conversationId: string; body: string }> {
   await expect
     .poll(async () =>
       prisma.conversationMessage.findFirst({
@@ -100,4 +112,5 @@ async function assertRealKoralOutbound(
       ),
     ).toBe(true);
   }
+  return { conversationId: inbound.conversationId, body: outbound.body! };
 }

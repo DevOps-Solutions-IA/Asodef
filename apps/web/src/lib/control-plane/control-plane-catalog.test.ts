@@ -13,25 +13,25 @@ describe("Control Plane consumer catalog", () => {
       expect(getControlPlanePermission("koral", slug)).toBe(
         "koral.conversations.read",
       );
-      expect(getContractClassification("koral", slug)).toBe("ADAPTER_REQUIRED");
+      expect(getContractClassification("koral", slug)).toBe("MATCHES_CANONICAL");
     },
   );
 
-  it("keeps contract-only configuration APIs fail-closed until runtime exists", () => {
+  it("marks visible Koral projections as canonical and hides recommendations", () => {
     for (const section of KORAL_SECTIONS.filter(
       ({ slug }) =>
         slug !== "conversaciones" &&
         slug !== "inbox" &&
-        slug !== "conocimiento" &&
-        slug !== "recomendaciones",
+        slug !== "conocimiento",
     )) {
       expect(getControlPlanePermission("koral", section.slug)).toBe(
         "settings.manage",
       );
       expect(getContractClassification("koral", section.slug)).toBe(
-        "BACKEND_RUNTIME_MISSING",
+        "MATCHES_CANONICAL",
       );
     }
+    expect(KORAL_SECTIONS.some(({ slug }) => slug === "recomendaciones")).toBe(false);
     expect(getContractClassification("koral", "recomendaciones")).toBe(
       "BACKEND_RUNTIME_MISSING",
     );

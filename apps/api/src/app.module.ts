@@ -40,6 +40,7 @@ import { DomainEventsModule } from "./modules/domain-events/domain-events.module
 import { AdminBusinessIdempotencyModule } from "./common/idempotency/admin-business-idempotency.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { KnowledgeModule } from "./modules/knowledge/knowledge.module";
+import { KoralControlPlaneModule } from "./modules/koral-control-plane/koral-control-plane.module";
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { KnowledgeModule } from "./modules/knowledge/knowledge.module";
     AdminBusinessIdempotencyModule,
     PlansModule,
     KnowledgeModule,
+    KoralControlPlaneModule,
   ],
   controllers: [AppController],
   providers: [],
