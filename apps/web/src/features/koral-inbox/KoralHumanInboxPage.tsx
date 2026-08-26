@@ -19,7 +19,7 @@ import {
   returnConversationToKoral,
   transitionConversationStatus,
 } from "./koral-inbox.api";
-import type { ConversationPriority, ConversationQueueView, ConversationStatus, InboxConversationDetail, InboxFilters } from "./koral-inbox.types";
+import type { ConversationChannel, ConversationPriority, ConversationQueueView, ConversationSlaState, ConversationStatus, InboxConversationDetail, InboxFilters } from "./koral-inbox.types";
 
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   AI_ACTIVE: "Koral activo",
@@ -32,6 +32,8 @@ const STATUS_LABELS: Record<ConversationStatus, string> = {
 };
 const PRIORITIES: ConversationPriority[] = ["LOW", "NORMAL", "HIGH", "URGENT"];
 const STATUSES = Object.keys(STATUS_LABELS) as ConversationStatus[];
+const CHANNELS: ConversationChannel[] = ["WEB", "WHATSAPP", "INSTAGRAM", "MESSENGER", "FUTURE"];
+const SLA_STATES: ConversationSlaState[] = ["ON_TRACK", "DUE_SOON", "OVERDUE"];
 
 export function KoralHumanInboxPage() {
   const { user, hasPermission } = useAuth();
@@ -118,6 +120,9 @@ export function KoralHumanInboxPage() {
 
       <InboxFiltersBar filters={filters} assignees={assigneesQuery.data ?? []} onChange={setFilters} />
 
+      {assigneesQuery.isError && <Alert variant="danger" title="No se pudieron cargar los responsables">{getAdminErrorMessage(assigneesQuery.error)}</Alert>}
+      {readMutation.isError && <Alert variant="warning" title="No se pudo actualizar la lectura">{getAdminErrorMessage(readMutation.error)}</Alert>}
+
       {listQuery.isLoading && <Skeleton className="h-64 w-full" />}
       {listQuery.isError && <ErrorState description={getAdminErrorMessage(listQuery.error)} action={<Button onClick={() => listQuery.refetch()}>Reintentar</Button>} />}
       {listQuery.isSuccess && listItems.length === 0 && <EmptyState title="No hay conversaciones en esta vista" description="Ajusta los filtros o espera una nueva solicitud de atención." />}
@@ -137,9 +142,11 @@ export function KoralHumanInboxPage() {
                   <span className="font-semibold text-text-main">{item.subject ?? "Conversación sin asunto"}</span>
                   {item.unread && <span className="mt-1 h-2.5 w-2.5 rounded-full bg-brand-accent" aria-label="No leída" />}
                 </div>
+                <span className="mt-1 block break-all text-xs text-text-muted">ID {item.id}</span>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Badge variant="neutral">{STATUS_LABELS[item.status]}</Badge>
                   <Badge variant="neutral">{item.priority}</Badge>
+                  <Badge variant="neutral">{item.channels.join(", ") || "Sin canal"}</Badge>
                   <SlaBadge state={item.slaState} />
                 </div>
                 <p className="mt-2 text-xs text-text-muted">{item.activeAssignee?.displayName ?? "Sin asignar"} · {formatDateTime(item.lastMessageAt)}</p>
@@ -156,6 +163,8 @@ export function KoralHumanInboxPage() {
         </div>
       )}
 
+      {listQuery.isSuccess && listQuery.data.total > listQuery.data.pageSize && <nav aria-label="Paginación del Inbox" className="flex items-center justify-between"><Button variant="outline" disabled={listQuery.data.page <= 1} onClick={() => setFilters({ ...filters, page: listQuery.data.page - 1 })}>Anterior</Button><span className="text-sm text-text-muted">Página {listQuery.data.page}</span><Button variant="outline" disabled={listQuery.data.page * listQuery.data.pageSize >= listQuery.data.total} onClick={() => setFilters({ ...filters, page: listQuery.data.page + 1 })}>Siguiente</Button></nav>}
+
       {Boolean(mutationError) && !isStepUpCancelledError(mutationError) && (
         <Alert variant="danger" title={mutationError instanceof ApiError && mutationError.status === 409 ? "La conversación cambió" : "No se pudo completar la acción"}>
           {getAdminErrorMessage(mutationError)} {mutationError instanceof ApiError && mutationError.status === 429 && mutationError.retryAfterSeconds ? `Reintenta en ${mutationError.retryAfterSeconds} segundos.` : ""}
@@ -168,11 +177,13 @@ export function KoralHumanInboxPage() {
 function InboxFiltersBar({ filters, assignees, onChange }: { filters: InboxFilters; assignees: Array<{ id: string; displayName: string }>; onChange: (filters: InboxFilters) => void }) {
   const patch = (value: Partial<InboxFilters>) => onChange({ ...filters, ...value, page: 1 });
   return (
-    <form role="search" className="grid gap-3 rounded-2xl border border-border-soft bg-white p-4 sm:grid-cols-2 xl:grid-cols-6" onSubmit={(event) => event.preventDefault()}>
+    <form role="search" className="grid gap-3 rounded-2xl border border-border-soft bg-white p-4 sm:grid-cols-2 xl:grid-cols-8" onSubmit={(event) => event.preventDefault()}>
       <label className="sm:col-span-2 xl:col-span-2"><span className="mb-1 block text-sm font-medium">Buscar</span><span className="relative block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" /><Input type="search" value={filters.search ?? ""} onChange={(event) => patch({ search: event.target.value })} placeholder="Asunto, participante o etiqueta" className="pl-9" /></span></label>
       <FilterSelect label="Cola" value={filters.queue ?? "ALL"} onChange={(value) => patch({ queue: value as ConversationQueueView })} options={[["ALL", "Todas"], ["MINE", "Mis conversaciones"], ["UNASSIGNED", "Sin asignar"], ["HUMAN_REQUIRED", "Requieren atención"]]} />
       <FilterSelect label="Estado" value={filters.status ?? ""} onChange={(value) => patch({ status: (value || undefined) as ConversationStatus | undefined })} options={[["", "Todos"], ...STATUSES.map((status) => [status, STATUS_LABELS[status]])]} />
       <FilterSelect label="Prioridad" value={filters.priority ?? ""} onChange={(value) => patch({ priority: (value || undefined) as ConversationPriority | undefined })} options={[["", "Todas"], ...PRIORITIES.map((priority) => [priority, priority])]} />
+      <FilterSelect label="Canal" value={filters.channel ?? ""} onChange={(value) => patch({ channel: (value || undefined) as ConversationChannel | undefined })} options={[["", "Todos"], ...CHANNELS.map((channel) => [channel, channel])]} />
+      <FilterSelect label="SLA" value={filters.slaState ?? ""} onChange={(value) => patch({ slaState: (value || undefined) as ConversationSlaState | undefined })} options={[["", "Todos"], ...SLA_STATES.map((state) => [state, state === "ON_TRACK" ? "En curso" : state === "DUE_SOON" ? "Próximo" : "Vencido"])]} />
       <FilterSelect label="Responsable" value={filters.assigneeUserId ?? ""} onChange={(value) => patch({ assigneeUserId: value || undefined })} options={[["", "Cualquiera"], ...assignees.map((assignee) => [assignee.id, assignee.displayName])]} />
     </form>
   );
@@ -201,10 +212,12 @@ function ConversationDetail({ detail, currentActorId, canManage, assignees, assi
   return <div className="space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-display text-xl font-semibold">{detail.subject ?? "Conversación sin asunto"}</h2><p className="mt-1 text-sm text-text-muted">Versión {detail.version} · {detail.channels.join(", ") || "Canal no disponible"}</p></div><StatusBadge tone={detail.status === "HUMAN_ACTIVE" ? "warning" : detail.status === "CLOSED" ? "inactive" : "active"} label={STATUS_LABELS[detail.status]} /></header>
     {detail.status === "HUMAN_ACTIVE" && <Alert variant="warning" title="Autorrespuesta de Koral deshabilitada">La conversación está bajo control humano. Koral no responderá automáticamente.</Alert>}
-    <section aria-labelledby="messages-heading"><h3 id="messages-heading" className="font-semibold">Mensajes</h3><ol className="mt-3 max-h-72 space-y-3 overflow-y-auto" aria-label="Historial de mensajes">{detail.messages.map((message) => <li key={message.id} className={`max-w-[90%] rounded-2xl p-3 text-sm ${message.direction === "INBOUND" ? "bg-surface-muted" : "ml-auto bg-brand-dark text-white"}`}><p className="whitespace-pre-wrap break-words">{message.body ?? `[${message.contentType}]`}</p><time className="mt-1 block text-xs opacity-70">{formatDateTime(message.occurredAt)}</time></li>)}</ol></section>
+    {detail.status === "RESOLVED" && <Alert variant="success" title="Conversación resuelta">La resolución permanece en el timeline auditable.</Alert>}
+    {detail.status === "CLOSED" && <Alert variant="warning" title="Conversación cerrada">Este estado es terminal; las acciones de gestión permanecen deshabilitadas.</Alert>}
+    <section aria-labelledby="messages-heading"><h3 id="messages-heading" className="font-semibold">Mensajes</h3>{detail.messages.length === 0 ? <p className="mt-2 text-sm text-text-muted">Sin mensajes disponibles.</p> : <ol className="mt-3 max-h-72 space-y-3 overflow-y-auto" aria-label="Historial de mensajes">{detail.messages.map((message) => <li key={message.id} className={`max-w-[90%] rounded-2xl p-3 text-sm ${message.direction === "INBOUND" ? "bg-surface-muted" : "ml-auto bg-brand-dark text-white"}`}><p className="whitespace-pre-wrap break-words">{message.body ?? `[${message.contentType}]`}</p><time className="mt-1 block text-xs opacity-70">{formatDateTime(message.occurredAt)}</time></li>)}</ol>}</section>
     {canManage && <section aria-labelledby="actions-heading" className="space-y-3 border-t border-border-soft pt-4"><h3 id="actions-heading" className="font-semibold">Gestión humana</h3><div className="grid gap-3 sm:grid-cols-2"><label><span className="mb-1 block text-sm">Responsable</span><Select value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)}><option value="">Selecciona</option>{assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.displayName}</option>)}</Select></label><label><span className="mb-1 block text-sm">Motivo de la acción</span><Input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></label></div><div className="flex flex-wrap gap-2"><Button size="sm" disabled={!assigneeUserId || (Boolean(detail.activeAssignee) && reasonRequired) || command.isPending} onClick={() => command.mutate("assign")}>{detail.activeAssignee ? "Transferir / takeover" : "Asignar"}</Button>{ownedByCurrent && <><Button size="sm" variant="outline" disabled={reasonRequired || command.isPending} onClick={() => command.mutate("release")}>Liberar</Button><Button size="sm" variant="outline" disabled={reasonRequired || command.isPending} onClick={() => command.mutate("return")}>Devolver a Koral</Button></>}<Button size="sm" variant="outline" disabled={reasonRequired || command.isPending || detail.status === "CLOSED"} onClick={() => command.mutate("priority")}>Alternar urgente</Button><Button size="sm" variant="outline" disabled={reasonRequired || command.isPending || detail.status === "CLOSED"} onClick={() => command.mutate("resolve")}>Resolver</Button><Button size="sm" variant="outline" disabled={reasonRequired || command.isPending || detail.status === "CLOSED"} onClick={() => command.mutate("close")}>Cerrar</Button></div></section>}
     <section aria-labelledby="reply-heading" className="rounded-2xl border border-border-soft bg-surface-muted p-4"><h3 id="reply-heading" className="font-semibold">Respuesta al usuario</h3><p className="mt-1 text-sm text-text-muted">UNAVAILABLE: pendiente del contrato canónico de entrega humana del runtime 1C. No se simula ni se persiste un envío.</p><Button className="mt-3" disabled title="Entrega humana aún no disponible">Enviar respuesta</Button></section>
-    {canManage && <section aria-labelledby="notes-heading"><h3 id="notes-heading" className="font-semibold">Notas internas</h3><ul className="mt-2 space-y-2">{detail.internalNotes.map((item) => <li key={item.id} className="rounded-xl bg-surface-muted p-3 text-sm"><p>{item.body}</p><p className="mt-1 text-xs text-text-muted">{item.author.displayName} · {formatDateTime(item.createdAt)}</p></li>)}</ul><label className="mt-3 block"><span className="sr-only">Nueva nota interna</span><Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Añadir nota interna" maxLength={10_000} /></label><Button className="mt-2" size="sm" variant="outline" disabled={!note.trim() || noteMutation.isPending} onClick={() => noteMutation.mutate()}>Guardar nota</Button></section>}
+    {canManage && <section aria-labelledby="notes-heading"><h3 id="notes-heading" className="font-semibold">Notas internas</h3>{detail.internalNotes.length === 0 ? <p className="mt-2 text-sm text-text-muted">Sin notas internas.</p> : <ul className="mt-2 space-y-2">{detail.internalNotes.map((item) => <li key={item.id} className="rounded-xl bg-surface-muted p-3 text-sm"><p>{item.body}</p><p className="mt-1 text-xs text-text-muted">{item.author.displayName} · {formatDateTime(item.createdAt)}</p></li>)}</ul>}<label className="mt-3 block"><span className="sr-only">Nueva nota interna</span><Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Añadir nota interna" maxLength={10_000} /></label><Button className="mt-2" size="sm" variant="outline" disabled={!note.trim() || noteMutation.isPending || detail.status === "CLOSED"} onClick={() => noteMutation.mutate()}>Guardar nota</Button></section>}
   </div>;
 }
 

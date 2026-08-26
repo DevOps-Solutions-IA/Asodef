@@ -113,5 +113,15 @@ export const queryKeys = {
       item: (id: string) => ["admin", "knowledge", "item", id] as const,
       diff: (versionId: string) => ["admin", "knowledge", "diff", versionId] as const,
     },
+    koralControlPlane: {
+      all: () => ["admin", "koral", "control-plane"] as const,
+      overview: () => ["admin", "koral", "control-plane", "overview"] as const,
+      agents: () => ["admin", "koral", "control-plane", "agents"] as const,
+      tools: () => ["admin", "koral", "control-plane", "tools"] as const,
+      automations: (hours: number, limit: number) =>
+        ["admin", "koral", "control-plane", "automations", hours, limit] as const,
+      analytics: (hours: number) =>
+        ["admin", "koral", "control-plane", "analytics", hours] as const,
+    },
   },
 } as const;

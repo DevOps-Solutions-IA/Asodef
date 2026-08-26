@@ -217,6 +217,13 @@ export ASODEF_E2E_ADMIN_PASSWORD="$(openssl rand -hex 24)"
 export ASODEF_E2E_ADMIN_MFA_SECRET="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";process.stdout.write([...randomBytes(32)].map((b)=>a[b&31]).join(""))')"
 export ASODEF_E2E_ADMIN_RECOVERY_CODES="$(node -e 'const {randomBytes}=require("node:crypto");const a="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";const code=()=>{const v=[...randomBytes(12)].map((b)=>a[b%a.length]).join("");return `${v.slice(0,4)}-${v.slice(4,8)}-${v.slice(8)}`};process.stdout.write(Array.from({length:10},code).join(","))')"
 export ADMIN_MFA_REQUIRED=true
+# The browser suite deliberately exercises more than ten independent login
+# journeys against one isolated API/Redis stack. They all originate from the
+# same loopback address, so the production default would make unrelated specs
+# contend for one coarse IP bucket. Keep the limiter enabled with a bounded
+# E2E-only capacity; the dedicated API integration tests retain the exact
+# default-limit and rejection coverage.
+export LOGIN_RATE_LIMIT_MAX=32
 ASODEF_E2E_PREPARE=true NODE_ENV=development pnpm --filter @asodef/api ci:prepare-e2e
 
 printf 'CI verification: compiled runtime\n'

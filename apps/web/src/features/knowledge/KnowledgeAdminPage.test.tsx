@@ -63,4 +63,19 @@ describe("KnowledgeAdminPage", () => {
     fireEvent.click(within(section).getByRole("button", { name: "Crear versión DRAFT" }));
     await vi.waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith("/admin/knowledge/versions/manual") && init?.method === "POST")).toBe(true));
   });
+
+  it("keeps managed diff and publish preview out of a read-only session", async () => {
+    mockAuthFetch(buildCurrentUser({ permissions: ["knowledge.read"] }), (url) => {
+      if (url.includes("/admin/knowledge/items?")) return response({ items: [item], total: 1, page: 1, pageSize: 30 });
+      if (url.endsWith(`/admin/knowledge/items/${item.id}`)) return response(item);
+      return undefined;
+    });
+    renderWithAuth(<KnowledgeAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Información institucional/ }));
+    expect(await screen.findByRole("heading", { name: "Información institucional" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Consultar diff gobernado" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Previsualizar versión" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consultar evidencia publicada" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Motivo de lifecycle")).not.toBeInTheDocument();
+  });
 });

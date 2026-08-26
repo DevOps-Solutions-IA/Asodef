@@ -151,16 +151,25 @@ test.describe("admin information architecture", () => {
         await expect(page.getByText("LEGACY / SIN CÓDIGO")).toBeVisible();
         await expect(page.getByRole("alert")).toHaveCount(0);
 
+        const toolsResponse = page.waitForResponse((response) =>
+          response.request().method() === "GET"
+          && new URL(response.url()).pathname.endsWith("/admin/koral/control-plane/tools"),
+        );
         await page.goto("/admin/koral/herramientas");
+        expect((await toolsResponse).status()).toBe(200);
         await expect(
           page.getByRole("heading", { name: "Herramientas" }),
         ).toBeVisible();
+        const executableToolsMetric = page
+          .getByText("Ejecutables", { exact: true })
+          .locator("xpath=..");
+        await expect(executableToolsMetric).toContainText("0");
         await expect(
-          page.getByText("Esquemas de entrada y salida"),
+          page.getByRole("table", {
+            name: "Catálogo gobernado de herramientas de Koral",
+          }),
         ).toBeVisible();
-        await expect(page.getByText("OpenRouter", { exact: true })).toHaveCount(
-          0,
-        );
+        await expect(page.getByRole("button", { name: /ejecutar/iu })).toHaveCount(0);
 
         await page.goto("/admin/comunicaciones/plantillas");
         await expect(

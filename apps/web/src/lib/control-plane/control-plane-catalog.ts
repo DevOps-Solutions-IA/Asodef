@@ -6,7 +6,6 @@ import {
   FileText,
   Gauge,
   Inbox,
-  Lightbulb,
   MessagesSquare,
   Network,
   Settings2,
@@ -100,18 +99,6 @@ export const KORAL_SECTIONS: readonly ControlPlaneSectionDefinition[] = [
     ],
   },
   {
-    slug: "recomendaciones",
-    label: "Recomendaciones",
-    description:
-      "Políticas, evidencia y seguimiento de recomendaciones de Koral.",
-    icon: Lightbulb,
-    capabilities: [
-      "Criterios",
-      "Explicabilidad",
-      "Resultado y retroalimentación",
-    ],
-  },
-  {
     slug: "automatizaciones",
     label: "Automatizaciones",
     description: "Flujos gobernados con aprobación, límites y recuperación.",
@@ -201,12 +188,11 @@ export function getContractClassification(
   slug: string,
 ): ContractClassification {
   if (area === "koral") {
-    if (slug === "conocimiento") return "MATCHES_CANONICAL";
-    if (slug === "conversaciones" || slug === "inbox") {
-      return "ADAPTER_REQUIRED";
+    if (slug === "conocimiento" || slug === "conversaciones" || slug === "inbox") {
+      return "MATCHES_CANONICAL";
     }
-    if (slug === "recomendaciones") {
-      return "BACKEND_RUNTIME_MISSING";
+    if (["resumen", "agentes", "herramientas", "automatizaciones", "analitica"].includes(slug)) {
+      return "MATCHES_CANONICAL";
     }
   }
   return "BACKEND_RUNTIME_MISSING";

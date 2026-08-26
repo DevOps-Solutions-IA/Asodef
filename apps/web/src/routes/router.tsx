@@ -94,8 +94,14 @@ const AdminReconciliationPage = lazy(() => import("../pages/admin/payments/Admin
 const AdminReportsPage = lazy(() => import("../pages/admin/reports/AdminReportsPage").then((m) => ({ default: m.AdminReportsPage })));
 const PlansAdminPage = lazy(() => import("../pages/admin/control-plane/PlansAdminPage").then((m) => ({ default: m.PlansAdminPage })));
 const ControlPlaneSectionPage = lazy(() => import("../pages/admin/control-plane/ControlPlaneSectionPage").then((m) => ({ default: m.ControlPlaneSectionPage })));
+const KoralConversationsPage = lazy(() => import("../features/koral-inbox/KoralConversationsPage").then((m) => ({ default: m.KoralConversationsPage })));
 const KoralHumanInboxPage = lazy(() => import("../features/koral-inbox/KoralHumanInboxPage").then((m) => ({ default: m.KoralHumanInboxPage })));
 const KnowledgeAdminPage = lazy(() => import("../features/knowledge/KnowledgeAdminPage").then((m) => ({ default: m.KnowledgeAdminPage })));
+const KoralOverviewPage = lazy(() => import("../features/koral-control-plane").then((m) => ({ default: m.KoralOverviewPage })));
+const KoralAgentsPage = lazy(() => import("../features/koral-control-plane").then((m) => ({ default: m.KoralAgentsPage })));
+const KoralToolsPage = lazy(() => import("../features/koral-control-plane").then((m) => ({ default: m.KoralToolsPage })));
+const KoralAutomationsPage = lazy(() => import("../features/koral-control-plane").then((m) => ({ default: m.KoralAutomationsPage })));
+const KoralAnalyticsPage = lazy(() => import("../features/koral-control-plane").then((m) => ({ default: m.KoralAnalyticsPage })));
 
 /**
  * Exported separately (not just the built router) so tests can build a
@@ -220,7 +226,7 @@ export const routeConfig: RouteObject[] = [
                 // its API and are never inferred from this UI route.
                 element: <PermissionRoute permissions={["koral.conversations.read"]} />,
                 children: [
-                  { path: "koral/conversaciones", element: <ControlPlaneSectionPage area="koral" section="conversaciones" /> },
+                  { path: "koral/conversaciones", element: <KoralConversationsPage /> },
                   { path: "koral/inbox", element: <KoralHumanInboxPage /> },
                 ],
               },
@@ -229,13 +235,16 @@ export const routeConfig: RouteObject[] = [
                 children: [{ path: "koral/conocimiento", element: <KnowledgeAdminPage /> }],
               },
               {
-                // Foundation routes intentionally reuse the existing
-                // platform-governance permission. Fine-grained backend
-                // permissions remain a documented dependency and are not
-                // inferred by the frontend.
+                // Source-controlled runtime projections are read-only and
+                // use the existing platform-governance permission on both
+                // the route and their server endpoints.
                 element: <PermissionRoute permissions={["settings.manage"]} />,
                 children: [
-                  { path: "koral/:sectionSlug", element: <ControlPlaneSectionPage area="koral" /> },
+                  { path: "koral/resumen", element: <KoralOverviewPage /> },
+                  { path: "koral/agentes", element: <KoralAgentsPage /> },
+                  { path: "koral/herramientas", element: <KoralToolsPage /> },
+                  { path: "koral/automatizaciones", element: <KoralAutomationsPage /> },
+                  { path: "koral/analitica", element: <KoralAnalyticsPage /> },
                   { path: "koral", element: <Navigate to="/admin/koral/resumen" replace /> },
                   { path: "comunicaciones/:sectionSlug", element: <ControlPlaneSectionPage area="comunicaciones" /> },
                   { path: "comunicaciones", element: <Navigate to="/admin/comunicaciones/plantillas" replace /> },

@@ -17,30 +17,10 @@ function renderSection(path: string, area: "koral" | "comunicaciones") {
 }
 
 describe("ControlPlaneSectionPage", () => {
-  it("presents Inbox safety without fake cases or enabled actions", () => {
+  it("does not render a cosmetic fallback for a Koral route", () => {
     renderSection("/admin/koral/inbox", "koral");
-    expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
-    expect(
-      screen.getByText("Adaptador al contrato canónico requerido"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Asignación no verificable")).toBeInTheDocument();
-    expect(
-      screen.getByText("Handoff UNAVAILABLE en esta UI"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /tomar caso/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("keeps model credentials out of the agents foundation", () => {
-    renderSection("/admin/koral/agentes", "koral");
-    expect(
-      screen.getByRole("heading", { name: "Perfiles de modelo" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Nunca renderizadas en el cliente"),
-    ).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("sk-or-v1-");
+    expect(screen.getByText("Sección no disponible")).toBeInTheDocument();
+    expect(screen.queryByText(/Runtime administrativo pendiente/)).not.toBeInTheDocument();
   });
 
   it("includes preview, diff and audit in editable communications", () => {
@@ -53,26 +33,14 @@ describe("ControlPlaneSectionPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("exposes the canonical automation surfaces without enabling a runtime", () => {
+  it("does not render a cosmetic automation foundation", () => {
     renderSection("/admin/koral/automatizaciones", "koral");
-    for (const capability of [
-      "Trigger",
-      "Condiciones",
-      "Acciones",
-      "Versiones",
-      "Historial de ejecución",
-      "Dead-letter",
-    ])
-      expect(screen.getByText(capability)).toBeInTheDocument();
-    expect(
-      screen.getByText("Automation runtime NOT_CONFIGURED"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sección no disponible")).toBeInTheDocument();
+    expect(screen.queryByText("Trigger")).not.toBeInTheDocument();
   });
 
-  it("keeps recommendations unavailable until its runtime exists", () => {
+  it("keeps recommendations outside the generic Koral foundation", () => {
     renderSection("/admin/koral/recomendaciones", "koral");
-    expect(
-      screen.getByText("Runtime administrativo pendiente"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sección no disponible")).toBeInTheDocument();
   });
 });
