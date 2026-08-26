@@ -59,7 +59,8 @@ The bounded existing-path option is:
 6. verify the role is absent and a durable `ROLE_REMOVED` event exists;
 7. verify the four target-state counts above;
 8. create and custody-verify a post-change encrypted backup;
-9. run the isolated 34-to-40 migration rehearsal from the post-change backup.
+9. run the isolated restore rehearsal through the current 51-migration
+   contract from the post-change backup.
 
 Approval of this option explicitly accepts the deployed release's documented
 non-transactional audit limitation for this one reconciliation. If that is not

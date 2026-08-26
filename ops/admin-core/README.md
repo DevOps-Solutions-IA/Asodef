@@ -96,7 +96,7 @@ ops/admin-core/verify-encrypted-backup-custody.sh \
 This creates fresh PostgreSQL 16 and Redis containers on a temporary internal
 Docker network, verifies the checksum, decrypts only into the restore pipe,
 and applies migrations from the exact immutable API image. It requires exactly
-40 applied migrations and removes every container/network on exit. It never
+51 applied migrations and removes every container/network on exit. It never
 points Prisma at production and does not require Node or pnpm on the host.
 
 ```sh
@@ -144,8 +144,8 @@ cleanup.
 First invoke without `--apply`; it validates the fixed production Compose
 contract and both prior images. With `--apply`, only services `api` and `web`
 are recreated. The mail and Master network attachments are preserved because
-rollback uses the same complete contract. Additive migrations 35–40 remain in
-place; do not drop their data.
+rollback uses the same complete contract. All applied additive migrations
+through migration 51 remain in place; do not drop their data.
 
 ```sh
 ops/admin-core/rollback-public-admin-core.sh \

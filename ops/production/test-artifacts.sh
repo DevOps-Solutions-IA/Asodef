@@ -86,7 +86,11 @@ mkdir "$fake_bin"
 cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
-if [[ "${1:-}" == run && "${FAKE_MIGRATION_FAIL:-false}" == true ]]; then
+if [[ "${1:-}" == run && "$*" == *'--network none'* && "$*" == *'find prisma/migrations'* ]]; then
+  printf '%s\n' "${FAKE_MIGRATION_COUNT:-51}"
+  exit 0
+fi
+if [[ "${1:-}" == run && "$*" == *'--network asodef_public_platform_data'* && "${FAKE_MIGRATION_FAIL:-false}" == true ]]; then
   exit 1
 fi
 if [[ "${1:-}" == image && "${2:-}" == inspect && "$*" == *'--format'* ]]; then
@@ -196,6 +200,46 @@ if grep -Fq -- "--file $rollback_runtime/docker-compose.mail-platform.yml" "$run
 fi
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/rollback-docker.log"
 
+# The deployment dry-run validates the exact image's migration plan without
+# applying migrations, installing overlays or recreating services.
+: >"$runtime/deploy-dry-run.log"
+dry_run_output=$(FAKE_DOCKER_LOG="$runtime/deploy-dry-run.log" FAKE_SHARED_DIR="$rollback_runtime" \
+  FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" \
+  PATH="$fake_bin:$PATH" "$script_dir/deploy-public-platform.sh" \
+    --shared-dir "$rollback_runtime" \
+    --source-sha "$source_sha" \
+    --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
+    --api-image-id "$api_image_id" \
+    --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
+    --web-image-id "$web_image_id")
+grep -Fq 'deploy=false scope=api,web migrations=not-applied migrationPlan=51' <<<"$dry_run_output"
+grep -Fq -- 'run --rm --network none --read-only' "$runtime/deploy-dry-run.log"
+if grep -Eq -- 'migrate deploy|up -d' "$runtime/deploy-dry-run.log"; then
+  echo 'status=error code=DRY_RUN_APPLIED_PRODUCTION_CHANGE' >&2
+  exit 1
+fi
+for unexpected_count in 50 52; do
+  mismatch_log="$runtime/deploy-wrong-migration-count-$unexpected_count.log"
+  : >"$mismatch_log"
+  if FAKE_MIGRATION_COUNT="$unexpected_count" FAKE_DOCKER_LOG="$mismatch_log" \
+    FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" \
+    FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
+    "$script_dir/deploy-public-platform.sh" \
+      --shared-dir "$rollback_runtime" \
+      --source-sha "$source_sha" \
+      --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
+      --api-image-id "$api_image_id" \
+      --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
+      --web-image-id "$web_image_id" >/dev/null 2>&1; then
+    echo 'status=error code=DRY_RUN_ACCEPTED_WRONG_MIGRATION_COUNT' >&2
+    exit 1
+  fi
+  if grep -Eq -- 'migrate deploy|up -d' "$mismatch_log"; then
+    echo 'status=error code=WRONG_MIGRATION_COUNT_REACHED_MUTATION' >&2
+    exit 1
+  fi
+done
+
 : >"$runtime/deploy-docker.log"
 if FAKE_DOCKER_LOG="$runtime/deploy-migration-failure.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" FAKE_MIGRATION_FAIL=true PATH="$fake_bin:$PATH" \
   "$script_dir/deploy-public-platform.sh" \
@@ -247,6 +291,7 @@ FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime"
     --apply >/dev/null
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log"
 grep -Fq -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log"
+grep -Fq -- '--env EXPECTED_MIGRATIONS=51' "$runtime/deploy-docker.log"
 migration_line=$(grep -n -m1 -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log" | cut -d: -f1)
 up_line=$(grep -n -m1 -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log" | cut -d: -f1)
 [[ "$migration_line" -lt "$up_line" ]] || {

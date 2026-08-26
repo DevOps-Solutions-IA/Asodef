@@ -7,6 +7,7 @@ usage() {
 }
 
 shared_dir='' source_sha='' api_image='' api_image_id='' web_image='' web_image_id='' apply=false
+readonly EXPECTED_MIGRATIONS=51
 while (($#)); do
   case "$1" in
     --shared-dir) shared_dir=${2:-}; shift 2 ;;
@@ -35,10 +36,24 @@ verify_image "$api_image" "$api_image_id"
 verify_image "$web_image" "$web_image_id"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# Prove the immutable API image carries the complete migration contract before
+# either dry-run planning or any production mutation. This isolated inspection
+# needs no runtime environment, database connection or network access.
+migration_count=$(docker run --rm --network none --read-only \
+  --entrypoint /bin/sh "$api_image" -euc \
+  'test "$(pwd)" = /app/apps/api
+   test -d prisma/migrations
+   find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " "')
+[[ "$migration_count" == "$EXPECTED_MIGRATIONS" ]] || {
+  echo "status=error code=MIGRATION_COUNT_MISMATCH expected=$EXPECTED_MIGRATIONS count=$migration_count" >&2
+  exit 1
+}
+
 install_args=(--shared-dir "$shared_dir" --api-image "$api_image" --web-image "$web_image")
 if [[ "$apply" != true ]]; then
   "$script_dir/install-compose-contract.sh" "${install_args[@]}"
-  echo 'status=ready deploy=false scope=api,web migrations=not-applied'
+  echo "status=ready deploy=false scope=api,web migrations=not-applied migrationPlan=$EXPECTED_MIGRATIONS"
   exit 0
 fi
 
@@ -61,19 +76,20 @@ if ! docker run --rm \
   --env-file "$app_env" \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
+  --env EXPECTED_MIGRATIONS="$EXPECTED_MIGRATIONS" \
   "$api_image" \
   /bin/sh -euc '
     test "$(pwd)" = /app/apps/api
     test -f prisma/schema.prisma
     test -x node_modules/.bin/prisma
-    test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" = 50
+    test "$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" = "$EXPECTED_MIGRATIONS"
     node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma >/dev/null
     node_modules/.bin/prisma migrate status --schema prisma/schema.prisma >/dev/null
   '; then
   echo 'status=error code=PRODUCTION_MIGRATION_FAILED' >&2
   exit 1
 fi
-echo 'status=ok migrations=50 exactImage=PASS'
+echo "status=ok migrations=$EXPECTED_MIGRATIONS exactImage=PASS"
 
 install_args+=(--apply)
 "$script_dir/install-compose-contract.sh" "${install_args[@]}"
