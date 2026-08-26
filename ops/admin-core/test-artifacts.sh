@@ -197,6 +197,12 @@ grep -Fq 'test -f prisma/schema.prisma && test -x node_modules/.bin/prisma' "$sc
 grep -Fq 'node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma' "$script_dir/rehearse-postgres-restore.sh" || {
   echo 'status=error code=REHEARSAL_OFFLINE_MIGRATION_COMMAND_MISSING' >&2; exit 1;
 }
+grep -Fq 'readonly EXPECTED_MIGRATIONS=51' "$script_dir/rehearse-postgres-restore.sh" || {
+  echo 'status=error code=REHEARSAL_MIGRATION_COUNT_CONTRACT_INVALID' >&2; exit 1;
+}
+grep -Fq 'migrations=$EXPECTED_MIGRATIONS schema=PASS' "$script_dir/rehearse-postgres-restore.sh" || {
+  echo 'status=error code=REHEARSAL_MIGRATION_EVIDENCE_INVALID' >&2; exit 1;
+}
 if grep -Eq -- '--filter @asodef/api|pnpm (exec )?prisma' "$script_dir/rehearse-postgres-restore.sh"; then
   echo 'status=error code=REHEARSAL_USES_REPO_ROOT_COMMAND' >&2
   exit 1

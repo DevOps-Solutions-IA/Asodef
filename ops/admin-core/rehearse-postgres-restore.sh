@@ -2,6 +2,8 @@
 set -euo pipefail
 umask 077
 
+readonly EXPECTED_MIGRATIONS=51
+
 usage() {
   echo "Usage: $0 --archive FILE --checksum FILE --metadata FILE --recipient 40_HEX --gpg-home DIR --database NAME --release-sha SHA --api-image IMAGE --api-image-id sha256:64_HEX" >&2
   exit 64
@@ -95,7 +97,7 @@ docker run --rm --network "$network" --env DATABASE_URL="$database_url" \
 
 applied=$(docker exec "$container" psql -U postgres -d asodef_rehearsal -Atqc \
   'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;')
-[[ "$applied" == "40" ]] || { echo "status=error code=MIGRATION_COUNT_MISMATCH count=$applied" >&2; exit 1; }
+[[ "$applied" == "$EXPECTED_MIGRATIONS" ]] || { echo "status=error code=MIGRATION_COUNT_MISMATCH expected=$EXPECTED_MIGRATIONS count=$applied" >&2; exit 1; }
 official=$(docker exec "$container" psql -U postgres -d asodef_rehearsal -Atqc \
   "SELECT count(*) FROM users WHERE lower(email)='admin@asodef.com.co' AND lower(coalesce(recovery_email,''))='asodefsas@gmail.com' AND status='ACTIVE';")
 [[ "$official" == "1" ]] || { echo 'status=error code=ADMIN_IDENTITY_REHEARSAL_FAILED' >&2; exit 1; }
@@ -148,4 +150,4 @@ for _ in $(seq 1 60); do
 done
 [[ "${api_ready:-false}" == "true" ]] || { echo 'status=error code=ISOLATED_API_STARTUP_FAILED' >&2; exit 1; }
 
-echo "status=ok restore=PASS migrations=40 schema=PASS adminInvariant=PASS applicationStartup=PASS apiImageId=$api_image_id imageRevisionLabel=$image_revision_state isolated=true smtp=DISABLED productionModified=false"
+echo "status=ok restore=PASS migrations=$EXPECTED_MIGRATIONS schema=PASS adminInvariant=PASS applicationStartup=PASS apiImageId=$api_image_id imageRevisionLabel=$image_revision_state isolated=true smtp=DISABLED productionModified=false"
