@@ -92,7 +92,11 @@ if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
   if [[ "$*" == *'.Config.Labels'* ]]; then echo "${FAKE_REVISION_LABEL:-<no value>}"; else echo 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; fi
   exit 0
 fi
-if [[ "${1:-}" == "exec" ]]; then printf 'PGDMP synthetic test stream'; exit 0; fi
+if [[ "${1:-}" == "exec" ]]; then
+  printf 'PGDMP synthetic test stream'
+  head -c 8388608 /dev/zero
+  exit 0
+fi
 exit 1
 EOF
 chmod 755 "$fake_bin/docker"
@@ -115,6 +119,103 @@ python3 "$script_dir/verify-backup-metadata.py" \
   --metadata "$backup_metadata" --fingerprint "$test_fingerprint" --encryption-fingerprint "$test_encryption_fingerprint" \
   --sha256 "$backup_sha" --size-bytes "$backup_size" --database synthetic_db \
   --release-sha 0000000000000000000000000000000000000000 >/dev/null
+
+cat >"$fake_bin/pg_restore" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "--list" ]] || exit 64
+dd bs=1 count=8 status=none >/dev/null
+exit "${FAKE_PG_RESTORE_RC:-0}"
+EOF
+chmod 755 "$fake_bin/pg_restore"
+
+# Prove the regression precondition: the consumer accepts the archive while
+# GPG observes the intentionally early close on a much larger plaintext
+# stream. The verifier must not conflate that producer-side SIGPIPE with an
+# invalid PostgreSQL archive after a separate full decrypt has succeeded.
+set +e
+gpg --homedir "$custody_home" --batch --quiet --decrypt "$backup_archive" 2>/dev/null \
+  | PATH="$fake_bin:$PATH" pg_restore --list >/dev/null 2>&1
+sigpipe_status=("${PIPESTATUS[@]}")
+set -e
+[[ "${sigpipe_status[0]}" != "0" && "${sigpipe_status[1]}" == "0" ]] || {
+  echo 'status=error code=SIGPIPE_REGRESSION_PRECONDITION_MISSING' >&2; exit 1;
+}
+valid_custody_output=$(PATH="$fake_bin:$PATH" "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$backup_archive" --checksum "$backup_archive.sha256" --metadata "$backup_metadata" \
+  --fingerprint "$test_fingerprint" --gpg-home "$custody_home" --database synthetic_db \
+  --release-sha 0000000000000000000000000000000000000000)
+grep -Fq 'decryptability=PASS pgArchive=PASS' <<<"$valid_custody_output" || {
+  echo 'status=error code=VALID_SIGPIPE_ARCHIVE_REJECTED' >&2; exit 1;
+}
+
+invalid_pg_output=$(FAKE_PG_RESTORE_RC=7 PATH="$fake_bin:$PATH" \
+  "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$backup_archive" --checksum "$backup_archive.sha256" --metadata "$backup_metadata" \
+  --fingerprint "$test_fingerprint" --gpg-home "$custody_home" --database synthetic_db \
+  --release-sha 0000000000000000000000000000000000000000 2>&1 || true)
+grep -Fq 'code=BACKUP_PG_ARCHIVE_INVALID' <<<"$invalid_pg_output" || {
+  echo 'status=error code=INVALID_PG_ARCHIVE_ACCEPTED' >&2; exit 1;
+}
+
+bad_checksum="$runtime_dir/bad-checksum.sha256"
+printf '%064d  %s\n' 0 "$(basename "$backup_archive")" >"$bad_checksum"
+checksum_output=$(PATH="$fake_bin:$PATH" "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$backup_archive" --checksum "$bad_checksum" --metadata "$backup_metadata" \
+  --fingerprint "$test_fingerprint" --gpg-home "$custody_home" --database synthetic_db \
+  --release-sha 0000000000000000000000000000000000000000 2>&1 || true)
+grep -Fq 'code=BACKUP_CHECKSUM_MISMATCH' <<<"$checksum_output" || {
+  echo 'status=error code=CHECKSUM_MISMATCH_ACCEPTED' >&2; exit 1;
+}
+
+set +e
+metadata_mismatch_output=$(PATH="$fake_bin:$PATH" "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$backup_archive" --checksum "$backup_archive.sha256" --metadata "$backup_metadata" \
+  --fingerprint "$test_fingerprint" --gpg-home "$custody_home" --database wrong_database \
+  --release-sha 0000000000000000000000000000000000000000 2>&1)
+metadata_mismatch_status=$?
+set -e
+[[ "$metadata_mismatch_status" != "0" && -n "$metadata_mismatch_output" ]] || {
+  echo 'status=error code=METADATA_MISMATCH_ACCEPTED' >&2; exit 1;
+}
+
+tampered_archive="$runtime_dir/tampered.dump.gpg"
+python3 - "$backup_archive" "$tampered_archive" <<'PY'
+import pathlib
+import sys
+
+payload = pathlib.Path(sys.argv[1]).read_bytes()
+pathlib.Path(sys.argv[2]).write_bytes(payload[:-16])
+PY
+tampered_sha=$(sha256sum "$tampered_archive" | awk '{print $1}')
+printf '%s  %s\n' "$tampered_sha" "$(basename "$tampered_archive")" >"$tampered_archive.sha256"
+python3 - "$backup_metadata" "$runtime_dir/tampered.metadata.json" "$tampered_archive" "$tampered_sha" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    document = json.load(source)
+document["sizeBytes"] = os.stat(sys.argv[3]).st_size
+document["sha256"] = sys.argv[4]
+with open(sys.argv[2], "w", encoding="utf-8") as target:
+    json.dump(document, target, separators=(",", ":"))
+PY
+tampered_output=$(PATH="$fake_bin:$PATH" "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$tampered_archive" --checksum "$tampered_archive.sha256" \
+  --metadata "$runtime_dir/tampered.metadata.json" --fingerprint "$test_fingerprint" \
+  --gpg-home "$custody_home" --database synthetic_db \
+  --release-sha 0000000000000000000000000000000000000000 2>&1 || true)
+grep -Fq 'code=BACKUP_DECRYPTABILITY_FAILED' <<<"$tampered_output" || {
+  echo 'status=error code=TAMPERED_CIPHERTEXT_ACCEPTED' >&2; exit 1;
+}
+
+wrong_secret_output=$(PATH="$fake_bin:$PATH" "$script_dir/verify-encrypted-backup-custody.sh" \
+  --archive "$backup_archive" --checksum "$backup_archive.sha256" --metadata "$backup_metadata" \
+  --fingerprint "$test_fingerprint" --gpg-home "$public_home" --database synthetic_db \
+  --release-sha 0000000000000000000000000000000000000000 2>&1 || true)
+grep -Fq 'code=CUSTODY_PRIVATE_KEY_UNAVAILABLE' <<<"$wrong_secret_output" || {
+  echo 'status=error code=WRONG_SECRET_KEY_ACCEPTED' >&2; exit 1;
+}
 
 duplicate_metadata="$runtime_dir/duplicate.metadata.json"
 sed 's/^{/{"sha256":"duplicate",/' "$backup_metadata" >"$duplicate_metadata"
