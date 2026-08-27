@@ -183,8 +183,11 @@ def main() -> None:
         api_id = inspect_image(api_tag, args.source_sha)
         web_id = inspect_image(web_tag, args.source_sha)
         privileged_installer = source / "ops/production/install-production-privileged-channel.py"
+        ai_runtime_provisioner = source / "ops/production/provision-ai-runtime.py"
         if not privileged_installer.is_file() or privileged_installer.is_symlink():
             raise SystemExit("status=error code=PRIVILEGED_INSTALLER_UNAVAILABLE")
+        if not ai_runtime_provisioner.is_file() or ai_runtime_provisioner.is_symlink() or not os.access(ai_runtime_provisioner, os.X_OK):
+            raise SystemExit("status=error code=AI_RUNTIME_PROVISIONER_UNAVAILABLE")
         installed = {
             **manifest,
             "apiImage": api_tag,
@@ -194,6 +197,7 @@ def main() -> None:
             "sourceTreeHash": tree_digest(source),
             "privilegedOpsTreeHash": tree_digest(source, ("ops/production", "ops/admin-core", "ops/mail-platform")),
             "privilegedInstallerSha256": digest(privileged_installer),
+            "aiRuntimeProvisionerSha256": digest(ai_runtime_provisioner),
         }
         (source / ".asodef-release-manifest.json").write_text(json.dumps(installed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (source / ".source-sha").write_text(args.source_sha + "\n", encoding="ascii")

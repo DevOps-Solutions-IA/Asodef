@@ -14,6 +14,8 @@ it reports `status=ready`.
 The operator performs these bounded actions with interactive sudo:
 
 1. create a fresh root-owned temporary directory under `/var/lib`;
+   and ensure `/usr/local/libexec/asodef/privileged-releases` exists as a
+   root-owned `0755` directory with no symlinked or writable ancestors;
 2. copy only `install-production-privileged-channel.py` from the published
    release into it as `root:root 0700`;
 3. compare that copy's SHA-256 with `privilegedInstallerSha256` in the release

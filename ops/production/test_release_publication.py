@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -26,11 +27,12 @@ class ReleasePublicationTest(unittest.TestCase):
         (self.repository / "ops/production").mkdir(parents=True)
         shutil.copy2(INSTALL, self.repository / "ops/production/install-published-release.py")
         shutil.copy2(HERE / "install-production-privileged-channel.py", self.repository / "ops/production/install-production-privileged-channel.py")
+        shutil.copy2(HERE / "provision-ai-runtime.py", self.repository / "ops/production/provision-ai-runtime.py")
         (self.repository / "README.md").write_text("synthetic release fixture\n", encoding="utf-8")
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.repository, check=True)
         subprocess.run(["git", "config", "user.email", "ci@example.invalid"], cwd=self.repository, check=True)
         subprocess.run(["git", "config", "user.name", "ASODEF CI"], cwd=self.repository, check=True)
-        subprocess.run(["git", "add", "--", "README.md", "ops/production/install-published-release.py", "ops/production/install-production-privileged-channel.py"], cwd=self.repository, check=True)
+        subprocess.run(["git", "add", "--", "README.md", "ops/production/install-published-release.py", "ops/production/install-production-privileged-channel.py", "ops/production/provision-ai-runtime.py"], cwd=self.repository, check=True)
         subprocess.run(["git", "commit", "-qm", "fixture"], cwd=self.repository, check=True)
         self.sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repository, text=True).strip()
         self.run_id = "123456789"
@@ -125,6 +127,10 @@ class ReleasePublicationTest(unittest.TestCase):
         manifest = json.loads((destination / ".asodef-release-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["sourceSha"], self.sha)
         self.assertRegex(manifest["apiImageId"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(
+            manifest["aiRuntimeProvisionerSha256"],
+            hashlib.sha256((destination / "ops/production/provision-ai-runtime.py").read_bytes()).hexdigest(),
+        )
         self.assertEqual(stat.S_IMODE(destination.stat().st_mode), 0o555)
         second = subprocess.run(command, text=True, capture_output=True, env=environment, check=False)
         self.assertEqual(second.returncode, 0, second.stderr)

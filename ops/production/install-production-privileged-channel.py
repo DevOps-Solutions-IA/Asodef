@@ -18,6 +18,11 @@ import tempfile
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+CANONICAL_PRIVILEGED_ROOT = Path("/usr/local/libexec/asodef/privileged-releases")
+CANONICAL_SUDOERS_DIR = Path("/etc/sudoers.d")
+CANONICAL_OPERATOR_USER = "asodefadmin"
+CANONICAL_SHARED_DIR = Path("/opt/asodef/public-platform/shared")
+CANONICAL_MAIL_CONFIG = Path("/etc/asodef/mail-platform.env")
 
 
 def digest(path: Path) -> str:
@@ -84,6 +89,24 @@ def validate_hardened(root: Path, expected_hash: str, *, test_mode: bool) -> Non
             raise SystemExit("status=error code=EXISTING_PRIVILEGED_RELEASE_OWNER_INVALID")
 
 
+def validate_privileged_ancestor_chain(path: Path, *, test_mode: bool) -> None:
+    stop = Path(os.environ["ASODEF_PRIVILEGED_TEST_TRUST_ROOT"]).absolute() if test_mode else Path("/")
+    current = path.absolute()
+    try:
+        relative = current.relative_to(stop)
+    except ValueError:
+        raise SystemExit("status=error code=PRIVILEGED_ROOT_ANCESTOR_INVALID")
+    candidates = [stop]
+    for component in relative.parts:
+        candidates.append(candidates[-1] / component)
+    for candidate in candidates:
+        details = candidate.lstat()
+        if stat.S_ISLNK(details.st_mode) or not stat.S_ISDIR(details.st_mode) or details.st_mode & 0o022:
+            raise SystemExit("status=error code=PRIVILEGED_ROOT_ANCESTOR_UNSAFE")
+        if not test_mode and details.st_uid != 0:
+            raise SystemExit("status=error code=PRIVILEGED_ROOT_ANCESTOR_OWNER_INVALID")
+
+
 def command(digest_value: str, executable: Path, arguments: str) -> str:
     escaped_arguments = "".join(f"\\{character}" if character in "\\,:=" else character for character in arguments)
     return f"sha256:{digest_value} {executable} {escaped_arguments}"
@@ -92,7 +115,7 @@ def command(digest_value: str, executable: Path, arguments: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-release", required=True)
-    parser.add_argument("--privileged-root", default="/opt/asodef/privileged-releases")
+    parser.add_argument("--privileged-root", default="/usr/local/libexec/asodef/privileged-releases")
     parser.add_argument("--sudoers-dir", default="/etc/sudoers.d")
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--operator-user", default="asodefadmin")
@@ -107,6 +130,17 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     test_mode = os.environ.get("ASODEF_PRIVILEGED_INSTALL_TEST_MODE") == "1"
+    if not test_mode:
+        canonical_parameters = (
+            (Path(args.privileged_root) == CANONICAL_PRIVILEGED_ROOT, "PRIVILEGED_ROOT_NONCANONICAL"),
+            (Path(args.sudoers_dir) == CANONICAL_SUDOERS_DIR, "SUDOERS_DIRECTORY_NONCANONICAL"),
+            (args.operator_user == CANONICAL_OPERATOR_USER, "OPERATOR_USER_NONCANONICAL"),
+            (Path(args.shared_dir) == CANONICAL_SHARED_DIR, "SHARED_DIRECTORY_NONCANONICAL"),
+            (Path(args.mail_config) == CANONICAL_MAIL_CONFIG, "MAIL_CONFIG_NONCANONICAL"),
+        )
+        for valid, code in canonical_parameters:
+            if not valid:
+                raise SystemExit(f"status=error code={code}")
     if os.geteuid() != 0 and not test_mode:
         raise SystemExit("status=error code=ROOT_REQUIRED")
     if not SHA.fullmatch(args.source_sha):
@@ -154,11 +188,20 @@ def main() -> None:
     ops_prefixes = ("ops/production", "ops/admin-core", "ops/mail-platform")
     if not isinstance(expected_ops_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_ops_hash) or tree_digest(source, ops_prefixes) != expected_ops_hash:
         raise SystemExit("status=error code=SOURCE_PRIVILEGED_OPS_MISMATCH")
+    ai_runtime_provisioner = source / "ops/production/provision-ai-runtime.py"
+    if (
+        not ai_runtime_provisioner.is_file()
+        or ai_runtime_provisioner.is_symlink()
+        or not os.access(ai_runtime_provisioner, os.X_OK)
+        or manifest.get("aiRuntimeProvisionerSha256") != digest(ai_runtime_provisioner)
+    ):
+        raise SystemExit("status=error code=AI_RUNTIME_PROVISIONER_PROVENANCE_INVALID")
     inspect_image(args.target_api_image, api_id, args.source_sha)
     inspect_image(args.target_web_image, web_id, args.source_sha)
     inspect_image_id(args.previous_api_image, args.previous_api_image_id)
     inspect_image_id(args.previous_web_image, args.previous_web_image_id)
 
+    validate_privileged_ancestor_chain(privileged_input, test_mode=test_mode)
     privileged_root = privileged_input.resolve()
     sudoers_dir = sudoers_input.resolve()
     for directory, code, mode in ((privileged_root, "PRIVILEGED_ROOT", 0o755), (sudoers_dir, "SUDOERS_DIRECTORY", 0o755)):
@@ -200,6 +243,7 @@ def main() -> None:
         "verify_env": release / "ops/admin-core/verify-runtime-env.sh",
         "deploy": release / "ops/production/deploy-public-platform.sh",
         "rollback_compose": release / "ops/production/rollback-compose-contract.sh",
+        "ai_runtime": release / "ops/production/provision-ai-runtime.py",
         "verify_network": release / "ops/mail-platform/verify-mail-network.sh",
         "verify_mail": release / "ops/mail-platform/verify.sh",
         "test_relay": release / "ops/mail-platform/test-relay-security.sh",

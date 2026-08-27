@@ -38,4 +38,11 @@ if api["image"] != "asodef-public-platform-api:000000000000000000000000000000000
     raise SystemExit("API release image override missing")
 if document["services"]["web"]["image"] != "asodef-public-platform-web:0000000000000000000000000000000000000000":
     raise SystemExit("Web release image override missing")
+environment = api.get("environment", {})
+if environment.get("AI_RUNTIME_ENABLED") != "true":
+    raise SystemExit("AI runtime env source missing")
+if environment.get("OPENROUTER_BASE_URL") != "https://openrouter.ai/api/v1":
+    raise SystemExit("OpenRouter base URL not pinned")
+if len(environment.get("OPENROUTER_API_KEY", "")) < 20:
+    raise SystemExit("OpenRouter credential not materialized from protected app env")
 print("status=ok mergedCompose=PASS masterPreserved=true mailPersistent=true")
