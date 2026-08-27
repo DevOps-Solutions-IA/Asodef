@@ -38,7 +38,8 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 base="$shared_dir/docker-compose.production.yml"
 master="$shared_dir/docker-compose.master-tunnel.yml"
 stack_env="$shared_dir/.stack.env"
-for path in "$base" "$master" "$stack_env"; do
+app_env="$shared_dir/.env.production"
+for path in "$base" "$master" "$stack_env" "$app_env"; do
   [[ -f "$path" && ! -L "$path" ]] || {
     echo 'status=error code=BASE_CONTRACT_UNAVAILABLE' >&2; exit 1;
   }
@@ -47,19 +48,21 @@ done
 # is expected because this is the official protected production env source.
 mode=$(stat -c '%a' "$stack_env")
 (( (8#$mode & 0022) == 0 )) || { echo 'status=error code=STACK_ENV_PERMISSIONS_UNSAFE' >&2; exit 1; }
+app_mode=$(stat -c '%a' "$app_env")
+[[ "$app_mode" == 600 ]] || { echo 'status=error code=APPLICATION_ENV_PERMISSIONS_UNSAFE' >&2; exit 1; }
 
 stage=$(mktemp -d "$shared_dir/.compose-contract-stage.XXXXXX")
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 install -m 0644 "$repo_root/ops/mail-platform/docker-compose.mail-platform.yml" "$stage/docker-compose.mail-platform.yml"
 install -m 0644 "$repo_root/ops/admin-core/docker-compose.admin-core.yml" "$stage/docker-compose.admin-core.yml"
-python3 - "$script_dir/docker-compose.release.yml.template" "$stage/docker-compose.release.yml" "$api_image" "$web_image" <<'PY'
+python3 - "$script_dir/docker-compose.release.yml.template" "$stage/docker-compose.release.yml" "$api_image" "$web_image" "$app_env" <<'PY'
 from pathlib import Path
 import sys
 
-source, target, api_image, web_image = sys.argv[1:]
+source, target, api_image, web_image, app_env = sys.argv[1:]
 text = Path(source).read_text(encoding="utf-8")
-text = text.replace("@@API_IMAGE@@", api_image).replace("@@WEB_IMAGE@@", web_image)
+text = text.replace("@@API_IMAGE@@", api_image).replace("@@WEB_IMAGE@@", web_image).replace("@@APP_ENV_FILE@@", app_env)
 if "@@" in text:
     raise SystemExit("unresolved release image placeholder")
 Path(target).write_text(text, encoding="utf-8")

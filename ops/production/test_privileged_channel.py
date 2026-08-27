@@ -44,6 +44,7 @@ class PrivilegedChannelTest(unittest.TestCase):
             (self.source / subtree).mkdir(parents=True, exist_ok=True)
         production_files = (
             "provision-stack-env.py",
+            "provision-ai-runtime.py",
             "deploy-public-platform.sh",
             "install-compose-contract.sh",
             "compose-contract.sh",
@@ -74,6 +75,7 @@ class PrivilegedChannelTest(unittest.TestCase):
                     "sourceTreeHash": self.tree_digest(self.source),
                     "privilegedOpsTreeHash": self.tree_digest(self.source, ("ops/production", "ops/admin-core", "ops/mail-platform")),
                     "privilegedInstallerSha256": hashlib.sha256(INSTALLER.read_bytes()).hexdigest(),
+                    "aiRuntimeProvisionerSha256": hashlib.sha256((self.source / "ops/production/provision-ai-runtime.py").read_bytes()).hexdigest(),
                 }
             ),
             encoding="utf-8",
@@ -106,6 +108,7 @@ class PrivilegedChannelTest(unittest.TestCase):
         self.environment = os.environ.copy()
         self.environment["PATH"] = f"{fake_bin}:{self.environment['PATH']}"
         self.environment["ASODEF_PRIVILEGED_INSTALL_TEST_MODE"] = "1"
+        self.environment["ASODEF_PRIVILEGED_TEST_TRUST_ROOT"] = str(self.root)
         self.environment["FAKE_SHA"] = self.sha
         self.environment["FAKE_API_ID"] = self.api_id
         self.environment["FAKE_WEB_ID"] = self.web_id
@@ -152,6 +155,10 @@ class PrivilegedChannelTest(unittest.TestCase):
         for forbidden in ("/bin/bash", "/bin/sh ", "/usr/bin/docker ", "/usr/bin/systemctl ", "/usr/sbin/ufw "):
             self.assertNotIn(forbidden, sudoers)
         provisioner = release / "ops/production/provision-stack-env.py"
+        ai_runtime = release / "ops/production/provision-ai-runtime.py"
+        self.assertTrue(ai_runtime.is_file())
+        self.assertEqual(stat.S_IMODE(ai_runtime.stat().st_mode), 0o555)
+        self.assertNotIn(str(ai_runtime), sudoers)
         original_digest = hashlib.sha256(provisioner.read_bytes()).hexdigest()
         self.assertIn(f"sha256:{original_digest} {provisioner}", sudoers)
         provisioner.chmod(0o755)
@@ -197,6 +204,39 @@ class PrivilegedChannelTest(unittest.TestCase):
         result = subprocess.run(self.command(), text=True, capture_output=True, env=environment, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.privileged / self.sha).exists())
+        self.assertEqual(list(self.sudoers.iterdir()), [])
+
+    def test_production_parameters_are_bound_to_canonical_targets(self) -> None:
+        command = self.command()
+        command[command.index("--privileged-root") + 1] = "/usr/local/libexec/asodef/privileged-releases"
+        command[command.index("--sudoers-dir") + 1] = "/etc/sudoers.d"
+        command[command.index("--shared-dir") + 1] = "/opt/asodef/public-platform/shared"
+        command[command.index("--mail-config") + 1] = "/etc/asodef/mail-platform.env"
+        command[command.index("--operator-user") + 1] = "unexpected-operator"
+        environment = self.environment.copy()
+        environment.pop("ASODEF_PRIVILEGED_INSTALL_TEST_MODE")
+        environment.pop("ASODEF_PRIVILEGED_TEST_TRUST_ROOT")
+        result = subprocess.run(command, text=True, capture_output=True, env=environment, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("OPERATOR_USER_NONCANONICAL", result.stderr)
+
+    def test_operator_writable_privileged_ancestor_fails_closed(self) -> None:
+        self.root.chmod(0o770)
+        result = subprocess.run(self.command(), text=True, capture_output=True, env=self.environment, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PRIVILEGED_ROOT_ANCESTOR_UNSAFE", result.stderr)
+        self.assertEqual(list(self.sudoers.iterdir()), [])
+
+    def test_symlinked_privileged_ancestor_fails_closed(self) -> None:
+        real_parent = self.root / "real-parent"
+        real_parent.mkdir()
+        (real_parent / "privileged").mkdir()
+        link = self.root / "linked-parent"
+        link.symlink_to(real_parent, target_is_directory=True)
+        self.privileged = link / "privileged"
+        result = subprocess.run(self.command(), text=True, capture_output=True, env=self.environment, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PRIVILEGED_ROOT_ANCESTOR_UNSAFE", result.stderr)
         self.assertEqual(list(self.sudoers.iterdir()), [])
 
 

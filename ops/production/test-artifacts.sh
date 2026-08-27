@@ -9,6 +9,7 @@ for python_source in "$script_dir"/*.py; do
   python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$python_source"
 done
 python3 -m unittest -v \
+  ops.production.test_provision_ai_runtime \
   ops.production.test_provision_stack_env \
   ops.production.test_release_publication \
   ops.production.test_privileged_channel
@@ -25,9 +26,15 @@ cp "$script_dir/tests/docker-compose.master-tunnel.yml" "$runtime/docker-compose
 cp "$script_dir/tests/stack.env" "$runtime/.stack.env"
 cp "$repo_root/ops/mail-platform/docker-compose.mail-platform.yml" "$runtime/docker-compose.mail-platform.yml"
 cp "$repo_root/ops/admin-core/docker-compose.admin-core.yml" "$runtime/docker-compose.admin-core.yml"
+printf '%s\n' \
+  'AI_RUNTIME_ENABLED=true' \
+  'OPENROUTER_API_KEY=synthetic-openrouter-credential-for-compose-test' \
+  'OPENROUTER_BASE_URL=https://openrouter.ai/api/v1' >"$runtime/.env.production"
+chmod 0600 "$runtime/.env.production"
 sed \
   -e 's#@@API_IMAGE@@#asodef-public-platform-api:0000000000000000000000000000000000000000#' \
   -e 's#@@WEB_IMAGE@@#asodef-public-platform-web:0000000000000000000000000000000000000000#' \
+  -e 's#@@APP_ENV_FILE@@#'"$runtime/.env.production"'#' \
   "$script_dir/docker-compose.release.yml.template" >"$runtime/docker-compose.release.yml"
 
 install_runtime="$runtime/install-test"
@@ -36,6 +43,8 @@ cp "$script_dir/tests/docker-compose.production.yml" "$install_runtime/docker-co
 cp "$script_dir/tests/docker-compose.master-tunnel.yml" "$install_runtime/docker-compose.master-tunnel.yml"
 cp "$script_dir/tests/stack.env" "$install_runtime/.stack.env"
 chmod 0600 "$install_runtime/.stack.env"
+cp "$runtime/.env.production" "$install_runtime/.env.production"
+chmod 0600 "$install_runtime/.env.production"
 ASODEF_COMPOSE_CONTRACT_TEST_MODE=true "$script_dir/install-compose-contract.sh" \
   --shared-dir "$install_runtime" \
   --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
@@ -154,7 +163,11 @@ cp "$script_dir/tests/docker-compose.production.yml" "$rollback_runtime/docker-c
 cp "$script_dir/tests/docker-compose.master-tunnel.yml" "$rollback_runtime/docker-compose.master-tunnel.yml"
 cp "$script_dir/tests/stack.env" "$rollback_runtime/.stack.env"
 chmod 0600 "$rollback_runtime/.stack.env"
-printf 'DATABASE_URL=synthetic-test-value\n' >"$rollback_runtime/.env.production"
+printf '%s\n' \
+  'DATABASE_URL=synthetic-test-value' \
+  'AI_RUNTIME_ENABLED=true' \
+  'OPENROUTER_API_KEY=synthetic-openrouter-credential-for-deploy-test' \
+  'OPENROUTER_BASE_URL=https://openrouter.ai/api/v1' >"$rollback_runtime/.env.production"
 chmod 0600 "$rollback_runtime/.env.production"
 : >"$runtime/install-docker.log"
 FAKE_DOCKER_LOG="$runtime/install-docker.log" PATH="$fake_bin:$PATH" \
@@ -200,12 +213,27 @@ if grep -Fq -- "--file $rollback_runtime/docker-compose.mail-platform.yml" "$run
 fi
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/rollback-docker.log"
 
+# Exercise deployment orchestration through a temporary release-shaped ops
+# tree. The real AI writer has its own unit/security suite and intentionally
+# refuses to run from a mutable checkout; this sibling is a verify-only test
+# boundary so deploy tests cannot accept secret mutation or provisioning.
+deploy_repo="$runtime/deploy-repo"
+mkdir "$deploy_repo"
+cp -a "$repo_root/ops" "$deploy_repo/ops"
+cat >"$deploy_repo/ops/production/provision-ai-runtime.py" <<'EOF'
+#!/bin/sh
+test "$#" -eq 1 && test "$1" = verify || exit 97
+printf '%s\n' 'status=ok action=verify aiRuntime=ENABLED openRouterCredential=PRESENT openRouterBaseUrl=VALID secrets=REDACTED'
+EOF
+chmod 0755 "$deploy_repo/ops/production/provision-ai-runtime.py"
+deploy_script="$deploy_repo/ops/production/deploy-public-platform.sh"
+
 # The deployment dry-run validates the exact image's migration plan without
 # applying migrations, installing overlays or recreating services.
 : >"$runtime/deploy-dry-run.log"
 dry_run_output=$(FAKE_DOCKER_LOG="$runtime/deploy-dry-run.log" FAKE_SHARED_DIR="$rollback_runtime" \
   FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" \
-  PATH="$fake_bin:$PATH" "$script_dir/deploy-public-platform.sh" \
+  PATH="$fake_bin:$PATH" "$deploy_script" \
     --shared-dir "$rollback_runtime" \
     --source-sha "$source_sha" \
     --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
@@ -224,7 +252,7 @@ for unexpected_count in 50 52; do
   if FAKE_MIGRATION_COUNT="$unexpected_count" FAKE_DOCKER_LOG="$mismatch_log" \
     FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" \
     FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
-    "$script_dir/deploy-public-platform.sh" \
+    "$deploy_script" \
       --shared-dir "$rollback_runtime" \
       --source-sha "$source_sha" \
       --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
@@ -242,7 +270,7 @@ done
 
 : >"$runtime/deploy-docker.log"
 if FAKE_DOCKER_LOG="$runtime/deploy-migration-failure.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" FAKE_MIGRATION_FAIL=true PATH="$fake_bin:$PATH" \
-  "$script_dir/deploy-public-platform.sh" \
+  "$deploy_script" \
     --shared-dir "$rollback_runtime" \
     --source-sha "$source_sha" \
     --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
@@ -265,7 +293,7 @@ for managed in docker-compose.mail-platform.yml docker-compose.admin-core.yml do
 done
 
 if FAKE_DOCKER_LOG="$runtime/deploy-provenance-denied.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
-  "$script_dir/deploy-public-platform.sh" \
+  "$deploy_script" \
     --shared-dir "$rollback_runtime" \
     --source-sha "$source_sha" \
     --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \
@@ -281,7 +309,7 @@ if grep -Fq 'up -d' "$runtime/deploy-provenance-denied.log"; then
   exit 1
 fi
 FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime" FAKE_API_IMAGE_ID="$api_image_id" FAKE_WEB_IMAGE_ID="$web_image_id" FAKE_PREVIOUS_API_IMAGE_ID="$previous_api_image_id" FAKE_PREVIOUS_WEB_IMAGE_ID="$previous_web_image_id" FAKE_SOURCE_SHA="$source_sha" PATH="$fake_bin:$PATH" \
-  "$script_dir/deploy-public-platform.sh" \
+  "$deploy_script" \
     --shared-dir "$rollback_runtime" \
     --source-sha "$source_sha" \
     --api-image asodef-public-platform-api:0000000000000000000000000000000000000000 \

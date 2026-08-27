@@ -64,6 +64,15 @@ is `root:root 0600`; Compose therefore runs only through the bounded
 privileged deployment entrypoint. Output contains key counts and state names,
 not values.
 
+OpenRouter is managed separately because the API consumes it from the
+application env, not the Compose interpolation env. After the exact-SHA
+privileged release is installed, the operator runs the root-owned immutable
+`ops/production/provision-ai-runtime.py` directly as `asodefadmin`. The
+`provision` and `rotate` actions accept the credential only through a hidden
+TTY prompt; `verify` emits only presence/state, and `rollback` restores the
+exact protected backup. The target path and pinned OpenRouter URL are constants
+and cannot be supplied as arguments.
+
 ## Release-specific privileged channel
 
 `install-production-privileged-channel.py` is a one-time human root bootstrap.
@@ -86,6 +95,12 @@ and deletes the temporary copy only after `visudo` and negative privilege
 checks pass. The installer itself rejects a non-root-owned copy or a hash that
 does not match the release manifest. This is the only unavoidable privileged
 human action in this mechanism.
+
+The privileged release root is
+`/usr/local/libexec/asodef/privileged-releases`. Every ancestor is required to
+be root-owned and non-writable by group/other. AI provisioning is intentionally
+absent from sudoers: its target is owned by `asodefadmin`, while executable
+integrity comes from that root-owned exact-SHA tree.
 
 ## Safe release sequence
 
@@ -140,6 +155,10 @@ sudo channel. The residual non-official `SUPER_ADMIN` must then be removed via
 the currently deployed UI/API procedure in
 `ops/admin-core/residual-privilege-operator-gate.md`; it is a human gate and
 never uses SQL.
+
+The canonical readiness endpoint is `/api/v1/health/ready`. No short
+`/api/v1/ready` alias exists or is required by Compose, CI, proxying or
+monitoring.
 
 Rollback uses `ops/admin-core/rollback-public-admin-core.sh` with the same
 fixed contract and prior immutable image references. It recreates only API/Web,

@@ -1,5 +1,7 @@
 services:
   api:
     image: @@API_IMAGE@@
+    env_file:
+      - @@APP_ENV_FILE@@
   web:
     image: @@WEB_IMAGE@@

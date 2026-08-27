@@ -37,6 +37,16 @@ verify_image "$web_image" "$web_image_id"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+app_env="$shared_dir/.env.production"
+[[ -f "$app_env" && ! -L "$app_env" ]] || {
+  echo 'status=error code=APPLICATION_ENV_UNAVAILABLE' >&2; exit 1;
+}
+app_env_mode=$(stat -c '%a' "$app_env")
+[[ "$app_env_mode" == 600 ]] || {
+  echo 'status=error code=APPLICATION_ENV_PERMISSIONS_UNSAFE' >&2; exit 1;
+}
+"$script_dir/provision-ai-runtime.py" verify
+
 # Prove the immutable API image carries the complete migration contract before
 # either dry-run planning or any production mutation. This isolated inspection
 # needs no runtime environment, database connection or network access.
@@ -56,15 +66,6 @@ if [[ "$apply" != true ]]; then
   echo "status=ready deploy=false scope=api,web migrations=not-applied migrationPlan=$EXPECTED_MIGRATIONS"
   exit 0
 fi
-
-app_env="$shared_dir/.env.production"
-[[ -f "$app_env" && ! -L "$app_env" ]] || {
-  echo 'status=error code=APPLICATION_ENV_UNAVAILABLE' >&2; exit 1;
-}
-app_env_mode=$(stat -c '%a' "$app_env")
-(( (8#$app_env_mode & 0022) == 0 )) || {
-  echo 'status=error code=APPLICATION_ENV_PERMISSIONS_UNSAFE' >&2; exit 1;
-}
 
 # Apply the exact image's checked-in migrations before changing the installed
 # Compose contract or recreating API/Web. Prisma runs directly from the image,
