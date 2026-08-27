@@ -45,8 +45,25 @@ grep -q '^:pubkey enc packet:' <<<"$packet_listing" || { echo 'status=error code
 [[ $(grep -c '^:pubkey enc packet:' <<<"$packet_listing") == "1" ]] || { echo 'status=error code=BACKUP_RECIPIENT_PACKET_COUNT_INVALID' >&2; exit 1; }
 grep -Fq "keyid $encryption_key_id" <<<"$packet_listing" || { echo 'status=error code=BACKUP_RECIPIENT_PACKET_MISMATCH' >&2; exit 1; }
 
-if ! gpg --homedir "$gpg_home" --batch --quiet --decrypt "$archive" 2>/dev/null | pg_restore --list >/dev/null 2>&1; then
+if ! gpg --homedir "$gpg_home" --batch --quiet --decrypt "$archive" >/dev/null 2>&1; then
   echo 'status=error code=BACKUP_DECRYPTABILITY_FAILED' >&2
+  exit 1
+fi
+
+# Full decryptability is proven above by consuming the complete plaintext
+# stream. pg_restore may finish its TOC inspection before GPG has written the
+# whole stream, which legitimately gives the producer SIGPIPE/EPIPE. Capture
+# each side explicitly: archive validity is authoritative only from
+# pg_restore, while unrelated GPG failures cannot be hidden by this shorter
+# second pass because the complete decrypt has already succeeded.
+set +e
+gpg --homedir "$gpg_home" --batch --quiet --decrypt "$archive" 2>/dev/null \
+  | pg_restore --list >/dev/null 2>&1
+pipeline_status=("${PIPESTATUS[@]}")
+set -e
+pg_restore_status=${pipeline_status[1]}
+if [[ "$pg_restore_status" != "0" ]]; then
+  echo 'status=error code=BACKUP_PG_ARCHIVE_INVALID' >&2
   exit 1
 fi
 echo "status=ok fingerprint=$fingerprint encryptionKeyFingerprint=$encryption_fingerprint checksum=PASS ciphertextRecipient=PASS decryptability=PASS pgArchive=PASS custodyHost=true"
