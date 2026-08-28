@@ -259,11 +259,13 @@ def main() -> None:
     shared = args.shared_dir
     stack = f"{shared}/.stack.env"
     app_env = f"{shared}/.env.production"
+    deploy_arguments = f"--shared-dir {shared} --source-sha {args.source_sha} --api-image {args.target_api_image} --api-image-id {api_id} --web-image {args.target_web_image} --web-image-id {web_id}"
     commands = [
         command(digest(executables["provision"]), executables["provision"], f"provision --stack-env {stack} --app-env {app_env} --mail-config {args.mail_config} --expected-mfa false"),
         command(digest(executables["provision"]), executables["provision"], f"rollback --stack-env {stack}"),
         command(digest(executables["verify_env"]), executables["verify_env"], f"--env-file {stack} --expected-mfa false"),
-        command(digest(executables["deploy"]), executables["deploy"], f"--shared-dir {shared} --source-sha {args.source_sha} --api-image {args.target_api_image} --api-image-id {api_id} --web-image {args.target_web_image} --web-image-id {web_id} --apply"),
+        command(digest(executables["deploy"]), executables["deploy"], deploy_arguments),
+        command(digest(executables["deploy"]), executables["deploy"], f"{deploy_arguments} --apply"),
         command(digest(executables["rollback_compose"]), executables["rollback_compose"], f"--shared-dir {shared} --api-image {args.previous_api_image} --api-image-id {args.previous_api_image_id} --web-image {args.previous_web_image} --web-image-id {args.previous_web_image_id} --apply"),
         command(digest(executables["verify_network"]), executables["verify_network"], f"{args.mail_config} --attachment-only"),
         command(digest(executables["verify_network"]), executables["verify_network"], args.mail_config),

@@ -115,8 +115,11 @@ ops/production/install-compose-contract.sh \
   --web-image asodef-public-platform-web:<exact-green-main-sha>
 ```
 
-After image, backup, restore and identity gates pass, repeat the bounded
-deployment entrypoint with `--apply`. It atomically installs only the managed
+After image, backup, restore and identity gates pass, invoke the digest-bound
+dry-run command through the release-specific privileged channel. This is
+required because `.stack.env` remains correctly protected as `root:root 0600`.
+After the dry-run succeeds, repeat the bounded deployment entrypoint with
+`--apply`. It atomically installs only the managed
 mail/Admin/release overlays, records a private backup pointer, validates the
 installed model and recreates only API/Web. Before changing those overlays or
 containers, it runs the exact API image's local Prisma binary against the
@@ -127,15 +130,17 @@ other than 51. A migration failure leaves the running API/Web and
 the installed Compose contract unchanged:
 
 ```sh
-ops/production/deploy-public-platform.sh \
+sudo /usr/local/libexec/asodef/privileged-releases/<exact-green-main-sha>/ops/production/deploy-public-platform.sh \
   --shared-dir /opt/asodef/public-platform/shared \
   --source-sha <exact-green-main-sha> \
   --api-image asodef-public-platform-api:<exact-green-main-sha> \
   --api-image-id sha256:<exact-64-hex-image-id> \
   --web-image asodef-public-platform-web:<exact-green-main-sha> \
-  --web-image-id sha256:<exact-64-hex-image-id> \
-  --apply
+  --web-image-id sha256:<exact-64-hex-image-id>
 ```
+
+The apply command is identical and adds only `--apply`; both exact argument
+vectors are installed separately in sudoers and remain digest-bound.
 
 The release-specific sudo command binds those full image IDs and the OCI
 revision label. A retagged or rebuilt image is rejected immediately before
