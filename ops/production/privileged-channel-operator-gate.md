@@ -25,8 +25,9 @@ The operator performs these bounded actions with interactive sudo:
 5. allow the installer to validate images/tree, install the privileged release,
    validate sudoers with `visudo`, and atomically install the sudoers file;
 6. remove the temporary root-owned copy after success;
-7. confirm `sudo -n -l` contains only the nine new digest-bound commands,
-   including the full mail and hostile-relay verification entrypoints;
+7. confirm `sudo -n -l` contains only the ten new digest-bound commands,
+   including separate exact deployment dry-run/apply commands and the full
+   mail and hostile-relay verification entrypoints;
 8. confirm `sudo -n bash`, `sudo -n sh`, `sudo -n docker`,
    `sudo -n systemctl` and `sudo -n ufw` remain denied.
 
@@ -41,11 +42,14 @@ ROOT_BOOTSTRAP_ROOT_OWNED=PASS
 ROOT_BOOTSTRAP_HASH=PASS
 PRIVILEGED_RELEASE_IMMUTABLE=PASS
 SUDOERS_VISUDO=PASS
-SUDOERS_EXACT_COMMANDS=9
+SUDOERS_EXACT_COMMANDS=10
 DIRECT_SHELL_DOCKER_SYSTEMCTL_UFW=DENIED
 ```
 
 After this gate, automation may run the exact env provision/validation,
-API/Web deploy/rollback and mail-network verification commands without another
-privilege expansion. The existing `ASODEF_PHASE1_MAIL_MUTATION` channel and its
+API/Web deploy dry-run/apply/rollback and mail-network verification commands
+without another privilege expansion. Both deployment forms bind the same exact
+SHA, image tags, image IDs and executable digest; the dry-run simply omits
+`--apply` so it can validate the root-owned `0600` stack environment without
+mutating production. The existing `ASODEF_PHASE1_MAIL_MUTATION` channel and its
 `fdexec=never` default remain unchanged.
