@@ -157,7 +157,7 @@ export const envSchema = z
       .max(600)
       .default(60),
     EXTERNAL_CORE_PROVIDER: z
-      .enum(["not_configured", "http"])
+      .enum(["not_configured", "hybrid", "http"])
       .default("not_configured"),
     EXTERNAL_CORE_BASE_URL: z.string().default(""),
     EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
@@ -554,6 +554,18 @@ export const envSchema = z
             message: "EXTERNAL_CORE_BASE_URL must be a valid URL",
           });
       }
+    }
+
+    if (
+      config.EXTERNAL_CORE_PROVIDER === "hybrid" &&
+      !config.MASTER_FIREBIRD_ENABLED
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["EXTERNAL_CORE_PROVIDER"],
+        message:
+          "EXTERNAL_CORE_PROVIDER=hybrid requires MASTER_FIREBIRD_ENABLED=true",
+      });
     }
 
     if (config.MASTER_FIREBIRD_ENABLED) {

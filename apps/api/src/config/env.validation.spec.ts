@@ -212,6 +212,32 @@ describe("validateEnv", () => {
     expect(result.MASTER_FIREBIRD_PASSWORD).toBe("");
   });
 
+  it("accepts the internal hybrid provider with the real read-only Master contract and no future HTTP credentials", () => {
+    const result = validateEnv({
+      ...VALID_ENV,
+      EXTERNAL_CORE_PROVIDER: "hybrid",
+      MASTER_FIREBIRD_ENABLED: "true",
+      MASTER_FIREBIRD_HOST: "master.example.invalid",
+      MASTER_FIREBIRD_DATABASE: "sanitized-database-alias",
+      MASTER_FIREBIRD_USER: "ASODEF_READONLY",
+      MASTER_FIREBIRD_PASSWORD: "not-a-real-password",
+    });
+
+    expect(result.EXTERNAL_CORE_PROVIDER).toBe("hybrid");
+    expect(result.EXTERNAL_CORE_BASE_URL).toBe("");
+    expect(result.EXTERNAL_CORE_CLIENT_ID).toBe("");
+    expect(result.EXTERNAL_CORE_CLIENT_SECRET).toBe("");
+  });
+
+  it("fails closed when hybrid mode is selected without enabling Master", () => {
+    expect(() =>
+      validateEnv({
+        ...VALID_ENV,
+        EXTERNAL_CORE_PROVIDER: "hybrid",
+      }),
+    ).toThrow(/requires MASTER_FIREBIRD_ENABLED=true/);
+  });
+
   it("requires every Firebird connection field only when the feature is enabled", () => {
     expect(() =>
       validateEnv({ ...VALID_ENV, MASTER_FIREBIRD_ENABLED: "true" }),

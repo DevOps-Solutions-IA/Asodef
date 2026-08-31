@@ -94,6 +94,7 @@ describe("SelfServiceAccessService security boundary", () => {
         { providerReference: "whatsapp-1", channel: "whatsapp", maskedDestination: "***1234", availability: "AVAILABLE" },
       ],
     });
+    expect(JSON.stringify(result)).not.toContain("subject-1");
     expect(JSON.stringify(result)).not.toContain("person@example.com");
     expect(JSON.stringify(result)).not.toContain("+573001231234");
     expect(messages.deliverOtp).not.toHaveBeenCalled();

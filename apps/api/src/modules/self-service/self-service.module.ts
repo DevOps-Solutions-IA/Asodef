@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AuthModule } from "../auth/auth.module";
+import { MasterModule } from "../master/master.module";
 import { AffiliateSelfServiceController } from "./affiliate-self-service.controller";
 import { CompanySelfServiceController } from "./company-self-service.controller";
 import { SelfServicePaymentsController } from "./self-service-payments.controller";
@@ -14,9 +15,10 @@ import { SelfServiceGatewayService } from "./self-service-gateway.service";
 import { SelfServiceProviderController } from "./self-service-provider.controller";
 import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-service-provider.registry";
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
+import { HybridExternalCoreProvider } from "./hybrid-external-core.provider";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MasterModule],
   controllers: [AffiliateSelfServiceController, CompanySelfServiceController, SelfServicePaymentsController, SelfServiceProviderController],
   providers: [
     SelfServiceCryptoService,
@@ -29,10 +31,11 @@ import { SelfServiceContactUpdateService } from "./self-service-contact-update.s
     SelfServiceProviderRegistry,
     SelfServiceContactUpdateService,
     NotConfiguredExternalCoreProvider,
+    HybridExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
     {
       provide: EXTERNAL_CORE_PROVIDER,
-      inject: [ConfigService, NotConfiguredExternalCoreProvider],
+      inject: [ConfigService, NotConfiguredExternalCoreProvider, HybridExternalCoreProvider],
       useFactory: selectExternalCoreProvider,
     },
     { provide: SELF_SERVICE_MESSAGE_PROVIDER, useExisting: NotConfiguredSelfServiceMessageProvider },

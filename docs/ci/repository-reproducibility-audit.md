@@ -115,7 +115,7 @@ enmascarados para cada variable S.
 | `SELF_SERVICE_OTP_TTL_MINUTES` | OTP | 1..30, D 10 | default | N |
 | `SELF_SERVICE_OTP_MAX_ATTEMPTS` | OTP | 3..10, D 5 | default | N |
 | `SELF_SERVICE_OTP_COOLDOWN_SECONDS` | OTP | 30..600, D 60 | default | N |
-| `EXTERNAL_CORE_PROVIDER` | registry externo | enum, D `not_configured` | fail-closed | N |
+| `EXTERNAL_CORE_PROVIDER` | registry externo | enum `not_configured`/`hybrid`/`http`, D `not_configured` | fail-closed | N |
 | `EXTERNAL_CORE_BASE_URL` | proveedor externo | URL cuando provider=http, C | vacío | N |
 | `EXTERNAL_CORE_CLIENT_ID`, `EXTERNAL_CORE_CLIENT_SECRET`, `EXTERNAL_CORE_WEBHOOK_SECRET` | proveedor externo | no vacío cuando provider=http, C | vacío/no configurado | S |
 | `EXTERNAL_CORE_TIMEOUT_MS` | proveedor externo | 500..30000, D 5000 | default | N |

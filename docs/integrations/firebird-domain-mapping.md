@@ -77,8 +77,10 @@ administrativo.
 
 La habilitación del lookup no autoriza todavía el inicio de sesión de
 autoservicio: falta evidencia de negocio que determine cuáles contactos de
-`TBLPERSONA` están autorizados y verificados para OTP. Por ello no se conecta
-todavía `MasterQueryService` con `ExternalCoreProvider`.
+`TBLPERSONA` están autorizados y verificados para OTP. El proveedor híbrido
+conecta el lookup exclusivamente a través de `MasterQueryService`, pero el
+descubrimiento de canales permanece fail-closed; por tanto no se emite un
+desafío OTP a partir de teléfonos legacy no verificados.
 
 ## Cuotas
 
