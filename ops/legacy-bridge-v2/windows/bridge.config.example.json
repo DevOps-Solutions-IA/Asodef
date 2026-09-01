@@ -1,7 +1,8 @@
 {
   "sshPath": "C:\\Users\\asodef3\\asodef-tools\\openssh\\OpenSSH-Win64\\ssh.exe",
-  "privateKeyPath": "C:\\Users\\asodef3\\asodef-tools\\tunnel-key\\asodef-firebird-tunnel-ed25519",
-  "knownHostsPath": "C:\\Users\\asodef3\\asodef-tools\\tunnel-key\\known_hosts",
+  "sshKeygenPath": "C:\\Users\\asodef3\\asodef-tools\\openssh\\OpenSSH-Win64\\ssh-keygen.exe",
+  "privateKeyPath": "C:\\ProgramData\\ASODEF\\legacy-bridge-v2\\secrets\\asodef-legacy-bridge-v2-ed25519",
+  "knownHostsPath": "C:\\ProgramData\\ASODEF\\legacy-bridge-v2\\secrets\\known_hosts",
   "runtimeDirectory": "C:\\ProgramData\\ASODEF\\legacy-bridge-v2",
   "sshHost": "169.58.36.138",
   "sshPort": 22,
