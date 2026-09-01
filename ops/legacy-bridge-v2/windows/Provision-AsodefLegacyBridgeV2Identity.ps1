@@ -81,10 +81,17 @@ Set-Acl -LiteralPath $secretDirectory -AclObject $directoryAcl
 
 Copy-Item -LiteralPath $ExistingKnownHostsPath -Destination $knownHostsPath
 
-& $sshKeygenPath -q -t ed25519 -N '' -C 'asodef-legacy-bridge-v2@WIN-Q0DAPTGTQ4P' -f $keyPath
-if ($LASTEXITCODE -ne 0) {
+$keygenInfo = New-Object System.Diagnostics.ProcessStartInfo
+$keygenInfo.FileName = $sshKeygenPath
+$keygenInfo.Arguments = '-q -t ed25519 -N "" -C "asodef-legacy-bridge-v2@WIN-Q0DAPTGTQ4P" -f "' + $keyPath + '"'
+$keygenInfo.UseShellExecute = $false
+$keygenInfo.CreateNoWindow = $true
+$keygen = [System.Diagnostics.Process]::Start($keygenInfo)
+$keygen.WaitForExit()
+if ($keygen.ExitCode -ne 0) {
     throw 'ssh-keygen failed to create V2 identity.'
 }
+$keygen.Dispose()
 
 $fileAcl = New-Object Security.AccessControl.FileSecurity
 $fileAcl.SetOwner($currentSid)
