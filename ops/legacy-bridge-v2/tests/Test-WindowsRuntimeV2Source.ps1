@@ -101,8 +101,13 @@ foreach ($forbidden in @('WindowStyle Hidden', 'ExecutionPolicy Bypass', '-Encod
         throw "Endpoint-protection-unfriendly scheduled-task option found: $forbidden"
     }
 }
-if ($registration -notmatch [regex]::Escape('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
-    throw 'Startup task must use the absolute Windows PowerShell path.'
+if ($registration -match 'Start-AsodefLegacyBridgeV2\.ps1') {
+    throw 'Persistent startup must not depend on the PowerShell watchdog launcher.'
+}
+foreach ($required in @('New-ScheduledTaskAction', "'-R'", 'ExitOnForwardFailure=yes', 'StrictHostKeyChecking=yes', 'IdentityAgent=none')) {
+    if ($registration -notmatch [regex]::Escape($required)) {
+        throw "Direct SSH startup control missing: $required"
+    }
 }
 if ($registration -notmatch '-RestartCount 3' -or $registration -notmatch 'New-TimeSpan -Minutes 5') {
     throw 'Startup task restart policy must remain bounded.'
@@ -114,6 +119,7 @@ $health = Get-Content -LiteralPath (
 
 if ($health -notmatch 'Test-BridgeWatchdogProcess' -or
     $health -notmatch 'Test-BridgeManagedSshProcess' -or
+    $health -notmatch 'scheduled_task_direct_ssh' -or
     $health -notmatch 'staleStateRejected') {
     throw 'V2 health must reject stale state and verify live processes.'
 }
