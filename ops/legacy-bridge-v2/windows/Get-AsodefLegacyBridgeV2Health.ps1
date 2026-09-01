@@ -20,8 +20,16 @@ try {
     $stateRunning = $null -ne $state -and [string]$state.status -eq 'running'
     $watchdogHealthy = $stateRunning -and $watchdogAlive -and $managedSshAlive
 
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    $taskRunning = $null -ne $task -and [string]$task.State -eq 'Running'
+    $taskRunning = $false
+    try {
+        $taskService = New-Object -ComObject 'Schedule.Service'
+        $taskService.Connect()
+        $task = $taskService.GetFolder('\\').GetTask($TaskName)
+        $taskRunning = $null -ne $task -and [int]$task.State -eq 4 # TASK_STATE_RUNNING
+    }
+    catch {
+        $taskRunning = $false
+    }
     $expectedForward = '{0}:{1}:{2}:{3}' -f $configuration.remoteBindAddress, $configuration.remoteBindPort, $configuration.firebirdHost, $configuration.firebirdPort
     $expectedTarget = '{0}@{1}' -f $configuration.sshUser, $configuration.sshHost
     $directSsh = @(Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" -ErrorAction SilentlyContinue | Where-Object {
