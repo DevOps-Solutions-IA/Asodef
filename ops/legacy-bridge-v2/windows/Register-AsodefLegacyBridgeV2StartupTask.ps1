@@ -20,18 +20,38 @@ if (-not (Test-BridgeSystemKeyAccess -PrivateKeyPath ([string]$configuration.pri
     throw 'SYSTEM cannot read the configured V2 private key.'
 }
 
-$launcherPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'Start-AsodefLegacyBridgeV2.ps1')).Path
-$resolvedConfigurationPath = (Resolve-Path -LiteralPath $ConfigurationPath).Path
-
-$powerShellPath = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
-if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
-    throw 'Windows PowerShell executable is unavailable.'
-}
-
-# Keep the scheduled action transparent to endpoint protection: no hidden
-# window, no encoded command and no execution-policy bypass.
-$actionArguments = '-NoProfile -NonInteractive -File "{0}" -ConfigurationPath "{1}"' -f $launcherPath, $resolvedConfigurationPath
-$action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $actionArguments
+# Persistence deliberately executes the pinned OpenSSH client directly.
+# This avoids a hidden/persistent PowerShell launcher and keeps the task
+# transparent to endpoint protection while preserving the same SSH controls.
+$reverseForward = '{0}:{1}:{2}:{3}' -f $configuration.remoteBindAddress, $configuration.remoteBindPort, $configuration.firebirdHost, $configuration.firebirdPort
+$arguments = @(
+    '-F', 'NUL',
+    '-i', ([string]$configuration.privateKeyPath),
+    '-o', 'IdentitiesOnly=yes',
+    '-o', 'IdentityAgent=none',
+    '-o', 'BatchMode=yes',
+    '-o', 'PasswordAuthentication=no',
+    '-o', 'KbdInteractiveAuthentication=no',
+    '-o', 'PreferredAuthentications=publickey',
+    '-o', 'NumberOfPasswordPrompts=0',
+    '-o', 'ExitOnForwardFailure=yes',
+    '-o', ('ServerAliveInterval={0}' -f $configuration.serverAliveIntervalSeconds),
+    '-o', ('ServerAliveCountMax={0}' -f $configuration.serverAliveCountMax),
+    '-o', ('ConnectTimeout={0}' -f $configuration.connectTimeoutSeconds),
+    '-o', 'StrictHostKeyChecking=yes',
+    '-o', ('UserKnownHostsFile={0}' -f $configuration.knownHostsPath),
+    '-o', 'GlobalKnownHostsFile=NUL',
+    '-o', 'ForwardAgent=no',
+    '-o', 'RequestTTY=no',
+    '-o', 'PermitLocalCommand=no',
+    '-o', 'LogLevel=ERROR',
+    '-R', $reverseForward,
+    '-N',
+    '-p', ([string]$configuration.sshPort),
+    ('{0}@{1}' -f $configuration.sshUser, $configuration.sshHost)
+)
+$actionArguments = (($arguments | ForEach-Object { ConvertTo-BridgeQuotedArgument ([string]$_) }) -join ' ')
+$action = New-ScheduledTaskAction -Execute ([string]$configuration.sshPath) -Argument $actionArguments
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew
@@ -49,6 +69,7 @@ $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
     principal = [string]$registered.Principal.UserId
     logonType = [string]$registered.Principal.LogonType
     trigger = 'AtStartup'
+    action = 'direct_ssh'
     lastTaskResult = [int]$info.LastTaskResult
     passwordStoredByScript = $false
 } | ConvertTo-Json -Compress
