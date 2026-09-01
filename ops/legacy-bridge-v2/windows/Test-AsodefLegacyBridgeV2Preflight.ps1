@@ -23,7 +23,7 @@ try {
     )
 
     $pathsAbsolute = $true
-    foreach ($property in @('sshPath', 'privateKeyPath', 'knownHostsPath', 'runtimeDirectory')) {
+    foreach ($property in @('sshPath', 'sshKeygenPath', 'privateKeyPath', 'knownHostsPath', 'runtimeDirectory')) {
         $value = [string]$raw.$property
         if ([string]::IsNullOrWhiteSpace($value) -or
             -not [IO.Path]::IsPathRooted($value) -or
@@ -33,6 +33,7 @@ try {
     }
 
     $sshExists = Test-Path -LiteralPath ([string]$raw.sshPath) -PathType Leaf
+    $sshKeygenExists = Test-Path -LiteralPath ([string]$raw.sshKeygenPath) -PathType Leaf
     $keyExists = Test-Path -LiteralPath ([string]$raw.privateKeyPath) -PathType Leaf
     $knownHostsExists = Test-Path -LiteralPath ([string]$raw.knownHostsPath) -PathType Leaf
     $knownHostsNonEmpty = $knownHostsExists -and (Get-Item -LiteralPath ([string]$raw.knownHostsPath)).Length -gt 0
@@ -57,6 +58,17 @@ try {
         }
     }
 
+    $keyUsableByCurrentIdentity = $false
+    if ($keyExists -and $sshKeygenExists) {
+        try {
+            $keyProbe = (& ([string]$raw.sshKeygenPath) -y -f ([string]$raw.privateKeyPath) 2>&1 | Out-String)
+            $keyUsableByCurrentIdentity = ($LASTEXITCODE -eq 0 -and $keyProbe -match '^ssh-(ed25519|rsa|ecdsa)')
+        }
+        catch {
+            $keyUsableByCurrentIdentity = $false
+        }
+    }
+
     $firebirdTcp = $false
     $vpsTcp = $false
 
@@ -65,16 +77,18 @@ try {
         $vpsTcp = Test-BridgeTcpEndpoint -HostName ([string]$raw.sshHost) -Port ([int]$raw.sshPort) -TimeoutMilliseconds 3000
     }
 
-    $ok = $contractOk -and $pathsAbsolute -and $sshExists -and $keyExists -and $knownHostsNonEmpty -and $keyAclSafe -and $firebirdTcp -and $vpsTcp
+    $ok = $contractOk -and $pathsAbsolute -and $sshExists -and $sshKeygenExists -and $keyExists -and $knownHostsNonEmpty -and $keyAclSafe -and $keyUsableByCurrentIdentity -and $firebirdTcp -and $vpsTcp
 
     [ordered]@{
         status = $(if ($ok) { 'ok' } else { 'blocked' })
         contract = $contractOk
         absolutePaths = $pathsAbsolute
         ssh = $sshExists
+        sshKeygen = $sshKeygenExists
         key = $keyExists
         knownHosts = $knownHostsNonEmpty
         keyAclSafe = $keyAclSafe
+        keyUsableByCurrentIdentity = $keyUsableByCurrentIdentity
         firebirdTcp = $firebirdTcp
         vpsTcp = $vpsTcp
     } | ConvertTo-Json -Compress
