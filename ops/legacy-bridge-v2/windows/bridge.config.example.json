@@ -1,0 +1,22 @@
+{
+  "sshPath": "C:\\Users\\asodef3\\asodef-tools\\openssh\\OpenSSH-Win64\\ssh.exe",
+  "privateKeyPath": "C:\\Users\\asodef3\\asodef-tools\\tunnel-key\\asodef-firebird-tunnel-ed25519",
+  "knownHostsPath": "C:\\Users\\asodef3\\asodef-tools\\tunnel-key\\known_hosts",
+  "runtimeDirectory": "C:\\ProgramData\\ASODEF\\legacy-bridge-v2",
+  "sshHost": "169.58.36.138",
+  "sshPort": 22,
+  "sshUser": "asodef-tunnel",
+  "remoteBindAddress": "172.25.51.1",
+  "remoteBindPort": 33051,
+  "firebirdHost": "10.125.16.253",
+  "firebirdPort": 3051,
+  "serverAliveIntervalSeconds": 30,
+  "serverAliveCountMax": 3,
+  "connectTimeoutSeconds": 10,
+  "initialReconnectDelaySeconds": 5,
+  "maximumReconnectDelaySeconds": 60,
+  "stableConnectionSeconds": 60,
+  "healthProbeTimeoutMilliseconds": 3000,
+  "maximumLogBytes": 5242880,
+  "retainedLogFiles": 5
+}
