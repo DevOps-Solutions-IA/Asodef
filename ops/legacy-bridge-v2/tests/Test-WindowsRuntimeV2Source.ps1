@@ -104,7 +104,7 @@ foreach ($forbidden in @('WindowStyle Hidden', 'ExecutionPolicy Bypass', '-Encod
 if ($registration -match 'Start-AsodefLegacyBridgeV2\.ps1') {
     throw 'Persistent startup must not depend on the PowerShell watchdog launcher.'
 }
-foreach ($required in @('schtasks.exe', '/XML', 'S-1-5-18', 'HighestAvailable', 'BootTrigger', '<Enabled>true</Enabled>', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
+foreach ($required in @("Schedule.Service", 'RegisterTaskDefinition', 'TASK_LOGON_SERVICE_ACCOUNT', 'TASK_TRIGGER_BOOT', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
     if ($registration -notmatch [regex]::Escape($required)) {
         throw "Direct SSH startup control missing: $required"
     }
@@ -119,6 +119,7 @@ $health = Get-Content -LiteralPath (
 
 if ($health -notmatch 'Test-BridgeWatchdogProcess' -or
     $health -notmatch 'Test-BridgeManagedSshProcess' -or
+    $health -notmatch 'Schedule.Service' -or
     $health -notmatch 'scheduled_task_direct_ssh' -or
     $health -notmatch 'staleStateRejected') {
     throw 'V2 health must reject stale state and verify live processes.'
