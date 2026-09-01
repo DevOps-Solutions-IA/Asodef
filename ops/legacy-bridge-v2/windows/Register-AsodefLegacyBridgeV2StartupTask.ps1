@@ -22,7 +22,6 @@ if (-not (Test-BridgeSystemKeyAccess -PrivateKeyPath ([string]$configuration.pri
 
 $runtimeDirectory = [string]$configuration.runtimeDirectory
 $sshConfigPath = Join-Path $runtimeDirectory 'ssh_config'
-$taskXmlPath = Join-Path $runtimeDirectory 'startup-task.xml'
 
 $sshConfig = @(
     'Host asodef-legacy-bridge-v2'
@@ -53,91 +52,56 @@ $sshConfig = @(
 $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllLines($sshConfigPath, $sshConfig, $utf8WithoutBom)
 
-$command = [Security.SecurityElement]::Escape([string]$configuration.sshPath)
-$arguments = [Security.SecurityElement]::Escape(('-F "{0}" -N asodef-legacy-bridge-v2' -f $sshConfigPath))
-$description = [Security.SecurityElement]::Escape('Maintains the outbound ASODEF Legacy Bridge V2 reverse SSH tunnel after Windows startup.')
+# Windows Server 2016 on this host has a broken ScheduledTasks CIM provider.
+# Use the native Task Scheduler COM API, which has been validated under SSH.
+$service = New-Object -ComObject 'Schedule.Service'
+$service.Connect()
+$root = $service.GetFolder('\')
+$definition = $service.NewTask(0)
+$definition.RegistrationInfo.Description = 'Maintains the outbound ASODEF Legacy Bridge V2 reverse SSH tunnel after Windows startup.'
+$definition.Principal.UserId = 'SYSTEM'
+$definition.Principal.LogonType = 5  # TASK_LOGON_SERVICE_ACCOUNT
+$definition.Principal.RunLevel = 1   # TASK_RUNLEVEL_HIGHEST
 
-$taskXml = @"
-<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>$description</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <BootTrigger>
-      <Enabled>true</Enabled>
-    </BootTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <UserId>S-1-5-18</UserId>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
-    <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
-    <RestartOnFailure>
-      <Interval>PT5M</Interval>
-      <Count>3</Count>
-    </RestartOnFailure>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>$command</Command>
-      <Arguments>$arguments</Arguments>
-    </Exec>
-  </Actions>
-</Task>
-"@
-[System.IO.File]::WriteAllText($taskXmlPath, $taskXml, [System.Text.Encoding]::Unicode)
+$trigger = $definition.Triggers.Create(8) # TASK_TRIGGER_BOOT
+$trigger.Enabled = $true
 
-$schtasks = Join-Path $env:SystemRoot 'System32\schtasks.exe'
-$createOutput = & $schtasks /Create /TN $TaskName /XML $taskXmlPath /F 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw ('SCHTASKS_XML_CREATE_FAILED:{0}' -f (($createOutput | ForEach-Object { [string]$_ }) -join ' '))
-}
+$action = $definition.Actions.Create(0) # TASK_ACTION_EXEC
+$action.Path = [string]$configuration.sshPath
+$action.Arguments = '-F "{0}" -N asodef-legacy-bridge-v2' -f $sshConfigPath
 
-$xmlText = (& $schtasks /Query /TN $TaskName /XML 2>$null | Out-String)
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xmlText)) {
-    throw 'SCHTASKS_VERIFY_FAILED'
-}
-$xml = [xml]$xmlText
-$commandNode = $xml.SelectSingleNode("//*[local-name()='Command']")
-$argumentsNode = $xml.SelectSingleNode("//*[local-name()='Arguments']")
-$userNode = $xml.SelectSingleNode("//*[local-name()='UserId']")
-$runLevelNode = $xml.SelectSingleNode("//*[local-name()='RunLevel']")
-$bootNode = $xml.SelectSingleNode("//*[local-name()='BootTrigger']")
-$enabledNode = $bootNode.SelectSingleNode("*[local-name()='Enabled']")
-if ($null -eq $commandNode -or $commandNode.InnerText -ne [string]$configuration.sshPath -or
-    $null -eq $argumentsNode -or $argumentsNode.InnerText -notlike '*asodef-legacy-bridge-v2*' -or
-    $null -eq $userNode -or $userNode.InnerText -notin @('SYSTEM','S-1-5-18') -or
-    $null -eq $runLevelNode -or $runLevelNode.InnerText -ne 'HighestAvailable' -or
-    $null -eq $bootNode -or $null -eq $enabledNode -or $enabledNode.InnerText -ne 'true') {
-    throw 'SCHTASKS_VERIFY_MISMATCH'
+$definition.Settings.Enabled = $true
+$definition.Settings.AllowDemandStart = $true
+$definition.Settings.StartWhenAvailable = $true
+$definition.Settings.MultipleInstances = 2 # TASK_INSTANCES_IGNORE_NEW
+$definition.Settings.ExecutionTimeLimit = 'PT0S'
+$definition.Settings.RestartInterval = 'PT5M'
+$definition.Settings.RestartCount = 3
+
+$registered = $root.RegisterTaskDefinition(
+    $TaskName,
+    $definition,
+    6,       # TASK_CREATE_OR_UPDATE
+    'SYSTEM',
+    $null,
+    5,       # TASK_LOGON_SERVICE_ACCOUNT
+    $null
+)
+
+$verified = $root.GetTask($TaskName)
+if ($null -eq $verified -or $verified.Name -ne $TaskName) {
+    throw 'TASK_COM_VERIFY_FAILED'
 }
 
 [ordered]@{
     status = 'registered'
     taskName = $TaskName
-    principal = $userNode.InnerText
-    logonType = $null
-    runLevel = $runLevelNode.InnerText
+    principal = 'SYSTEM'
+    logonType = 'ServiceAccount'
+    runLevel = 'Highest'
     trigger = 'AtStartup'
     triggerEnabled = $true
     action = 'direct_ssh_config'
     sshConfigPath = $sshConfigPath
-    taskXmlPath = $taskXmlPath
     passwordStoredByScript = $false
 } | ConvertTo-Json -Compress
