@@ -91,6 +91,23 @@ foreach ($pattern in $forbiddenLauncherPatterns) {
     }
 }
 
+
+$registration = Get-Content -LiteralPath (
+    Join-Path $resolvedRuntimePath 'Register-AsodefLegacyBridgeV2StartupTask.ps1'
+) -Raw
+
+foreach ($forbidden in @('WindowStyle Hidden', 'ExecutionPolicy Bypass', '-EncodedCommand')) {
+    if ($registration -match [regex]::Escape($forbidden)) {
+        throw "Endpoint-protection-unfriendly scheduled-task option found: $forbidden"
+    }
+}
+if ($registration -notmatch [regex]::Escape('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')) {
+    throw 'Startup task must use the absolute Windows PowerShell path.'
+}
+if ($registration -notmatch '-RestartCount 3' -or $registration -notmatch 'New-TimeSpan -Minutes 5') {
+    throw 'Startup task restart policy must remain bounded.'
+}
+
 $health = Get-Content -LiteralPath (
     Join-Path $resolvedRuntimePath 'Get-AsodefLegacyBridgeV2Health.ps1'
 ) -Raw
