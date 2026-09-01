@@ -71,8 +71,7 @@ $taskXml = @"
   <Principals>
     <Principal id="Author">
       <UserId>S-1-5-18</UserId>
-      <LogonType>ServiceAccount</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
+      <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
   <Settings>
@@ -118,15 +117,13 @@ $xml = [xml]$xmlText
 $commandNode = $xml.SelectSingleNode("//*[local-name()='Command']")
 $argumentsNode = $xml.SelectSingleNode("//*[local-name()='Arguments']")
 $userNode = $xml.SelectSingleNode("//*[local-name()='UserId']")
-$logonNode = $xml.SelectSingleNode("//*[local-name()='LogonType']")
 $runLevelNode = $xml.SelectSingleNode("//*[local-name()='RunLevel']")
 $bootNode = $xml.SelectSingleNode("//*[local-name()='BootTrigger']")
 $enabledNode = $bootNode.SelectSingleNode("*[local-name()='Enabled']")
 if ($null -eq $commandNode -or $commandNode.InnerText -ne [string]$configuration.sshPath -or
     $null -eq $argumentsNode -or $argumentsNode.InnerText -notlike '*asodef-legacy-bridge-v2*' -or
     $null -eq $userNode -or $userNode.InnerText -notin @('SYSTEM','S-1-5-18') -or
-    $null -eq $logonNode -or $logonNode.InnerText -ne 'ServiceAccount' -or
-    $null -eq $runLevelNode -or $runLevelNode.InnerText -ne 'LeastPrivilege' -or
+    $null -eq $runLevelNode -or $runLevelNode.InnerText -ne 'HighestAvailable' -or
     $null -eq $bootNode -or $null -eq $enabledNode -or $enabledNode.InnerText -ne 'true') {
     throw 'SCHTASKS_VERIFY_MISMATCH'
 }
@@ -135,7 +132,7 @@ if ($null -eq $commandNode -or $commandNode.InnerText -ne [string]$configuration
     status = 'registered'
     taskName = $TaskName
     principal = $userNode.InnerText
-    logonType = $logonNode.InnerText
+    logonType = $null
     runLevel = $runLevelNode.InnerText
     trigger = 'AtStartup'
     triggerEnabled = $true
