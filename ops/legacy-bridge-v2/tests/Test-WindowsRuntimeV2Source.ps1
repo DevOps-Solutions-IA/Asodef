@@ -1,10 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$WindowsRuntimePath = (Join-Path $PSScriptRoot '..\windows')
+    [string]$WindowsRuntimePath
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($WindowsRuntimePath)) {
+    $WindowsRuntimePath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'windows'
+}
 
 $resolvedRuntimePath = (Resolve-Path -LiteralPath $WindowsRuntimePath).Path
 $scripts = @(Get-ChildItem -LiteralPath $resolvedRuntimePath -Filter '*.ps1')
