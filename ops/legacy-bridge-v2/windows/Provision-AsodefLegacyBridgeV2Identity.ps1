@@ -36,7 +36,7 @@ if (-not (Test-Path -LiteralPath $sshKeygenPath -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $ExistingKnownHostsPath -PathType Leaf)) {
     throw 'Existing pinned known_hosts is unavailable.'
 }
-if (Test-Path -LiteralPath $keyPath -or Test-Path -LiteralPath $publicKeyPath) {
+if ((Test-Path -LiteralPath $keyPath) -or (Test-Path -LiteralPath $publicKeyPath)) {
     throw 'V2 SSH identity already exists; refusing to overwrite.'
 }
 
@@ -89,6 +89,10 @@ $keygenInfo.CreateNoWindow = $true
 $keygen = [System.Diagnostics.Process]::Start($keygenInfo)
 $keygen.WaitForExit()
 if ($keygen.ExitCode -ne 0) {
+    $keygen.Dispose()
+    Remove-Item -LiteralPath $keyPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $publicKeyPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $knownHostsPath -Force -ErrorAction SilentlyContinue
     throw 'ssh-keygen failed to create V2 identity.'
 }
 $keygen.Dispose()
@@ -107,6 +111,11 @@ $publicAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule
 $publicAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', $allow)))
 Set-Acl -LiteralPath $publicKeyPath -AclObject $publicAcl
 Set-Acl -LiteralPath $knownHostsPath -AclObject $publicAcl
+
+$privateKeyProbe = (& $sshKeygenPath -y -f $keyPath 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $privateKeyProbe -notmatch '^ssh-ed25519 ') {
+    throw 'Generated V2 private key is not usable by the current identity.'
+}
 
 $publicKey = (Get-Content -LiteralPath $publicKeyPath -Raw).Trim()
 $fingerprintOutput = (& $sshKeygenPath -lf $publicKeyPath 2>&1 | Out-String).Trim()
