@@ -104,7 +104,7 @@ foreach ($forbidden in @('WindowStyle Hidden', 'ExecutionPolicy Bypass', '-Encod
 if ($registration -match 'Start-AsodefLegacyBridgeV2\.ps1') {
     throw 'Persistent startup must not depend on the PowerShell watchdog launcher.'
 }
-foreach ($required in @('schtasks.exe', '/XML', 'S-1-5-18', 'ServiceAccount', 'LeastPrivilege', 'BootTrigger', '<Enabled>true</Enabled>', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
+foreach ($required in @('schtasks.exe', '/XML', 'S-1-5-18', 'HighestAvailable', 'BootTrigger', '<Enabled>true</Enabled>', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
     if ($registration -notmatch [regex]::Escape($required)) {
         throw "Direct SSH startup control missing: $required"
     }
