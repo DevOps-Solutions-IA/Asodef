@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$ConfigurationPath
+    [string]$ConfigurationPath,
+    [string]$TaskName = 'ASODEF Legacy Bridge V2'
 )
 
 Set-StrictMode -Version 2.0
@@ -15,19 +16,35 @@ try {
     $targetReachable = Test-BridgeTcpEndpoint -HostName ([string]$configuration.firebirdHost) -Port ([int]$configuration.firebirdPort) -TimeoutMilliseconds ([int]$configuration.healthProbeTimeoutMilliseconds)
 
     $watchdogAlive = Test-BridgeWatchdogProcess $state
-    $sshAlive = Test-BridgeManagedSshProcess -Configuration $configuration -State $state
+    $managedSshAlive = Test-BridgeManagedSshProcess -Configuration $configuration -State $state
     $stateRunning = $null -ne $state -and [string]$state.status -eq 'running'
+    $watchdogHealthy = $stateRunning -and $watchdogAlive -and $managedSshAlive
 
-    $healthy = $stateRunning -and $watchdogAlive -and $sshAlive -and $targetReachable
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    $taskRunning = $null -ne $task -and [string]$task.State -eq 'Running'
+    $expectedForward = '{0}:{1}:{2}:{3}' -f $configuration.remoteBindAddress, $configuration.remoteBindPort, $configuration.firebirdHost, $configuration.firebirdPort
+    $expectedTarget = '{0}@{1}' -f $configuration.sshUser, $configuration.sshHost
+    $directSsh = @(Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" -ErrorAction SilentlyContinue | Where-Object {
+        [string]$_.ExecutablePath -eq [string]$configuration.sshPath -and
+        [string]$_.CommandLine -like "*$expectedForward*" -and
+        [string]$_.CommandLine -like "*$expectedTarget*"
+    })
+    $directSshAlive = $directSsh.Count -eq 1
+    $directHealthy = $taskRunning -and $directSshAlive
+
+    $healthy = $targetReachable -and ($watchdogHealthy -or $directHealthy)
+    $mode = if ($directHealthy) { 'scheduled_task_direct_ssh' } elseif ($watchdogHealthy) { 'watchdog' } else { 'none' }
 
     [ordered]@{
         status = $(if ($healthy) { 'ok' } else { 'unavailable' })
-        state = $(if ($null -ne $state) { [string]$state.status } else { 'missing' })
+        mode = $mode
+        state = $(if ($directHealthy) { 'running' } elseif ($null -ne $state) { [string]$state.status } else { 'missing' })
+        taskRunning = $taskRunning
         watchdogProcessAlive = $watchdogAlive
-        sshProcessAlive = $sshAlive
+        sshProcessAlive = $(if ($directHealthy) { $true } else { $managedSshAlive })
         targetReachable = $targetReachable
         reverseForwardVerification = 'ssh_alive_after_exit_on_forward_failure;confirm_end_to_end_on_vps'
-        staleStateRejected = (-not $watchdogAlive -or -not $sshAlive)
+        staleStateRejected = $(if ($directHealthy) { $false } else { (-not $watchdogAlive -or -not $managedSshAlive) })
     } | ConvertTo-Json -Compress
 
     if ($healthy) { exit 0 }
