@@ -23,8 +23,15 @@ if (-not (Test-BridgeSystemKeyAccess -PrivateKeyPath ([string]$configuration.pri
 $launcherPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'Start-AsodefLegacyBridgeV2.ps1')).Path
 $resolvedConfigurationPath = (Resolve-Path -LiteralPath $ConfigurationPath).Path
 
-$actionArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -File "{0}" -ConfigurationPath "{1}"' -f $launcherPath, $resolvedConfigurationPath
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $actionArguments
+$powerShellPath = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
+    throw 'Windows PowerShell executable is unavailable.'
+}
+
+# Keep the scheduled action transparent to endpoint protection: no hidden
+# window, no encoded command and no execution-policy bypass.
+$actionArguments = '-NoProfile -NonInteractive -File "{0}" -ConfigurationPath "{1}"' -f $launcherPath, $resolvedConfigurationPath
+$action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $actionArguments
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 255 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
