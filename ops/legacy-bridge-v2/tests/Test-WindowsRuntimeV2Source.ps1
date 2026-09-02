@@ -121,6 +121,7 @@ if ($health -notmatch 'Test-BridgeWatchdogProcess' -or
     $health -notmatch 'Test-BridgeManagedSshProcess' -or
     $health -notmatch 'Schedule.Service' -or
     $health -notmatch 'scheduled_task_direct_ssh' -or
+    $health -notmatch 'sshConfigPinned' -or
     $health -notmatch 'staleStateRejected') {
     throw 'V2 health must reject stale state and verify live processes.'
 }
