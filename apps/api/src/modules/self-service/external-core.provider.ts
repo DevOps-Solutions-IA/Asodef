@@ -15,7 +15,7 @@ export type VerificationChannel = {
   masked: string;
   enabled: boolean;
   verified: boolean;
-  lastUpdatedAt: string;
+  lastUpdatedAt?: string;
   operationalCommunicationPermission: boolean;
 };
 export type ContactDestination = {
@@ -24,7 +24,7 @@ export type ContactDestination = {
   destination: string;
   enabled: boolean;
   verified: boolean;
-  lastUpdatedAt: string;
+  lastUpdatedAt?: string;
   operationalCommunicationPermission: boolean;
 };
 export type LookupResult = { subjectRef: string };
