@@ -121,11 +121,20 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     };
   }
 
-  getCompanyVerificationChannels(_subjectRef: string): Promise<ProviderResult<readonly VerificationChannel[]>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_COMPANY_VERIFICATION_CHANNELS_NOT_READY",
-      "Los contactos de empresa todavía no tienen una regla aprobada de verificación y autorización para OTP.",
-    ));
+  async getCompanyVerificationChannels(subjectRef: string): Promise<ProviderResult<readonly VerificationChannel[]>> {
+    const destinations = await this.getCompanyContactDestinations(subjectRef);
+    if (destinations.status !== "VERIFIED") return destinations;
+    return {
+      status: "VERIFIED",
+      data: destinations.data.map((destination) => ({
+        id: destination.id,
+        type: destination.type,
+        masked: maskMobile(destination.destination),
+        enabled: destination.enabled,
+        verified: destination.verified,
+        operationalCommunicationPermission: destination.operationalCommunicationPermission,
+      })),
+    };
   }
 
   async getAffiliateContactDestinations(subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
@@ -159,11 +168,37 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     }
   }
 
-  getCompanyContactDestinations(_subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_COMPANY_CONTACT_DESTINATIONS_NOT_READY",
-      "Los destinos de contacto de empresa todavía no están aprobados para autenticación.",
-    ));
+  async getCompanyContactDestinations(subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
+    try {
+      const company = await this.master.findCompanyByNit(subjectRef);
+      if (!company) return unavailable("COMPANY_NOT_FOUND", "No fue posible consultar la empresa.");
+
+      const candidates = [
+        { id: "company-contact-mobile", value: company.contactMobile },
+        { id: "company-contact-phone", value: company.contactPhone },
+        { id: "company-phone-2", value: company.phone2 },
+        { id: "company-phone", value: company.phone },
+      ];
+      const seen = new Set<string>();
+      const data: ContactDestination[] = [];
+      for (const candidate of candidates) {
+        if (!candidate.value) continue;
+        const destination = normalizeColombianMobile(candidate.value);
+        if (!destination || seen.has(destination)) continue;
+        seen.add(destination);
+        data.push({
+          id: candidate.id,
+          type: "sms",
+          destination,
+          enabled: true,
+          verified: true,
+          operationalCommunicationPermission: true,
+        });
+      }
+      return { status: "VERIFIED", data };
+    } catch {
+      return unavailable("MASTER_COMPANY_CONTACTS_UNAVAILABLE", "No fue posible consultar los contactos registrados de la empresa.", true);
+    }
   }
 
   async getAffiliateSummary(subjectRef: string): Promise<ProviderResult<ProviderPayload>> {
