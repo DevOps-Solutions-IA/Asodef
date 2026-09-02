@@ -157,7 +157,7 @@ export const envSchema = z
       .max(600)
       .default(60),
     EXTERNAL_CORE_PROVIDER: z
-      .enum(["not_configured", "http"])
+      .enum(["not_configured", "http", "master"])
       .default("not_configured"),
     EXTERNAL_CORE_BASE_URL: z.string().default(""),
     EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
