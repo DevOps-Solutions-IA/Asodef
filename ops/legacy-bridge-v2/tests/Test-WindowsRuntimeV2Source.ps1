@@ -109,8 +109,8 @@ foreach ($required in @("Schedule.Service", 'RegisterTaskDefinition', 'TASK_LOGO
         throw "Direct SSH startup control missing: $required"
     }
 }
-if ($registration -notmatch '-RestartCount 3' -or $registration -notmatch 'New-TimeSpan -Minutes 5') {
-    throw 'Startup task restart policy must remain bounded.'
+if ($registration -match 'RestartInterval' -or $registration -match 'RestartCount' -or $registration -match 'ExecutionTimeLimit' -or $registration -match 'MultipleInstances') {
+    throw 'Startup task must keep the validated minimal Server 2016 settings.'
 }
 
 $health = Get-Content -LiteralPath (
