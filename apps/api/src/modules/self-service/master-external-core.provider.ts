@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MasterQueryService } from "../master/application/master-query.service";
+import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import type { Contract, Payment, Person } from "../master/domain/master.models";
 import type {
   AffiliateLookupInput,
@@ -198,11 +199,34 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     ));
   }
 
-  getAffiliateObligations(_subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_OUTSTANDING_OBLIGATIONS_NOT_READY",
-      "La regla de obligaciones pendientes todavía no está aprobada.",
-    ));
+  async getAffiliateObligations(subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
+    try {
+      const contracts = await this.master.getContractsByPerson(subjectRef);
+      const groups = await Promise.all(
+        contracts.map(async (contract) => ({
+          contract,
+          installments: await this.master.getOutstandingInstallments(contract.contractId),
+        })),
+      );
+      return {
+        status: "VERIFIED",
+        data: groups.flatMap(({ contract, installments }) =>
+          installments.map((installment) => ({
+            id: installment.installmentId,
+            reference: contract.contractId,
+            label: installment.installmentNumber === null
+              ? "Cuota ASODEF"
+              : `Cuota ${installment.installmentNumber}`,
+            amount: installment.balance,
+            currency: "COP",
+            status: payableInstallmentStatus(installment),
+            dueDate: installment.dueDate,
+          })),
+        ),
+      };
+    } catch {
+      return unavailable("MASTER_OBLIGATIONS_UNAVAILABLE", "No fue posible consultar las obligaciones.", true);
+    }
   }
 
   async getAffiliatePayments(subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
