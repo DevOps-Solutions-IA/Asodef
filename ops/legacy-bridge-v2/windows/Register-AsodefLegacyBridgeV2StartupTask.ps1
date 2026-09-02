@@ -27,14 +27,21 @@ $systemKeyPath = Join-Path $runtimeDirectory 'secrets\asodef-legacy-bridge-v2-sy
 # Windows OpenSSH rejects a private key when the executing identity can see
 # ACL grants for other principals. Preserve the operator key for manual use,
 # but give the SYSTEM-scheduled task a SYSTEM-owned, SYSTEM-only copy.
-Copy-Item -LiteralPath ([string]$configuration.privateKeyPath) -Destination $systemKeyPath -Force
+#
+# Once created, the SYSTEM-only key is intentionally unreadable by the
+# administrator. Re-registration must therefore reuse it instead of trying
+# to overwrite it.
 $systemSid = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
 $allow = [Security.AccessControl.AccessControlType]::Allow
-$systemKeyAcl = New-Object Security.AccessControl.FileSecurity
-$systemKeyAcl.SetOwner($systemSid)
-$systemKeyAcl.SetAccessRuleProtection($true, $false)
-$systemKeyAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', $allow)))
-Set-Acl -LiteralPath $systemKeyPath -AclObject $systemKeyAcl
+
+if (-not (Test-Path -LiteralPath $systemKeyPath -PathType Leaf)) {
+    Copy-Item -LiteralPath ([string]$configuration.privateKeyPath) -Destination $systemKeyPath
+    $systemKeyAcl = New-Object Security.AccessControl.FileSecurity
+    $systemKeyAcl.SetOwner($systemSid)
+    $systemKeyAcl.SetAccessRuleProtection($true, $false)
+    $systemKeyAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', $allow)))
+    Set-Acl -LiteralPath $systemKeyPath -AclObject $systemKeyAcl
+}
 
 $verifiedSystemKeyAcl = Get-Acl -LiteralPath $systemKeyPath
 $ownerSid = $verifiedSystemKeyAcl.Owner
