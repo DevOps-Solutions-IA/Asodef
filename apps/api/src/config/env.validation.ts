@@ -551,23 +551,17 @@ export const envSchema = z
         }
       }
 
-      if (config.TELEAMIGO_SMS_API_ENDPOINT) {
-        try {
-          const parsed = new URL(config.TELEAMIGO_SMS_API_ENDPOINT);
-          if (parsed.protocol !== "https:") {
-            context.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ["TELEAMIGO_SMS_API_ENDPOINT"],
-              message: "TELEAMIGO_SMS_API_ENDPOINT must use HTTPS",
-            });
-          }
-        } catch {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["TELEAMIGO_SMS_API_ENDPOINT"],
-            message: "TELEAMIGO_SMS_API_ENDPOINT must be a valid HTTPS URL",
-          });
-        }
+      if (
+        config.TELEAMIGO_SMS_API_ENDPOINT &&
+        config.TELEAMIGO_SMS_API_ENDPOINT !==
+          "https://api.infobip.com/sms/3/messages"
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TELEAMIGO_SMS_API_ENDPOINT"],
+          message:
+            "TELEAMIGO_SMS_API_ENDPOINT must match the verified SMS v3 endpoint",
+        });
       }
 
       if (
