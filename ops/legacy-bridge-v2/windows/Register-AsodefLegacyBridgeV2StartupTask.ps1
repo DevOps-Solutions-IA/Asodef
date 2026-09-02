@@ -22,13 +22,40 @@ if (-not (Test-BridgeSystemKeyAccess -PrivateKeyPath ([string]$configuration.pri
 
 $runtimeDirectory = [string]$configuration.runtimeDirectory
 $sshConfigPath = Join-Path $runtimeDirectory 'ssh_config'
+$systemKeyPath = Join-Path $runtimeDirectory 'secrets\asodef-legacy-bridge-v2-system-ed25519'
+
+# Windows OpenSSH rejects a private key when the executing identity can see
+# ACL grants for other principals. Preserve the operator key for manual use,
+# but give the SYSTEM-scheduled task a SYSTEM-owned, SYSTEM-only copy.
+Copy-Item -LiteralPath ([string]$configuration.privateKeyPath) -Destination $systemKeyPath -Force
+$systemSid = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
+$allow = [Security.AccessControl.AccessControlType]::Allow
+$systemKeyAcl = New-Object Security.AccessControl.FileSecurity
+$systemKeyAcl.SetOwner($systemSid)
+$systemKeyAcl.SetAccessRuleProtection($true, $false)
+$systemKeyAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($systemSid, 'FullControl', $allow)))
+Set-Acl -LiteralPath $systemKeyPath -AclObject $systemKeyAcl
+
+$verifiedSystemKeyAcl = Get-Acl -LiteralPath $systemKeyPath
+$ownerSid = $verifiedSystemKeyAcl.Owner
+try {
+    $ownerSid = (New-Object Security.Principal.NTAccount($verifiedSystemKeyAcl.Owner)).Translate([Security.Principal.SecurityIdentifier]).Value
+}
+catch {
+}
+$allowedSids = @($verifiedSystemKeyAcl.Access | Where-Object { $_.AccessControlType -eq $allow } | ForEach-Object {
+    $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+} | Select-Object -Unique)
+if ($ownerSid -ne 'S-1-5-18' -or $allowedSids.Count -ne 1 -or $allowedSids[0] -ne 'S-1-5-18') {
+    throw 'SYSTEM_PRIVATE_KEY_ACL_VERIFY_FAILED'
+}
 
 $sshConfig = @(
     'Host asodef-legacy-bridge-v2'
     ('    HostName {0}' -f $configuration.sshHost)
     ('    Port {0}' -f $configuration.sshPort)
     ('    User {0}' -f $configuration.sshUser)
-    ('    IdentityFile {0}' -f ([string]$configuration.privateKeyPath).Replace('\','/'))
+    ('    IdentityFile {0}' -f $systemKeyPath.Replace('\','/'))
     '    IdentitiesOnly yes'
     '    IdentityAgent none'
     '    BatchMode yes'
@@ -103,5 +130,7 @@ if ($null -eq $verified -or $verified.Name -ne $TaskName) {
     triggerEnabled = $true
     action = 'direct_ssh_config'
     sshConfigPath = $sshConfigPath
+    systemPrivateKeyPath = $systemKeyPath
+    systemPrivateKeyOwner = 'SYSTEM'
     passwordStoredByScript = $false
 } | ConvertTo-Json -Compress
