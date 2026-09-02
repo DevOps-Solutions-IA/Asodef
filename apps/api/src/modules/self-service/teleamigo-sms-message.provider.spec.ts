@@ -4,9 +4,8 @@ import { TeleamigoSmsMessageProvider } from "./teleamigo-sms-message.provider";
 
 function config(): ConfigService<EnvConfig, true> {
   const values: Partial<EnvConfig> = {
-    TELEAMIGO_SMS_BASE_URL: "https://sms.iatechsas.com",
-    TELEAMIGO_SMS_USERNAME: "api-user",
-    TELEAMIGO_SMS_API_PASSWORD: "api-password",
+    TELEAMIGO_SMS_BASE_URL: "https://abc123.api.infobip.com",
+    TELEAMIGO_SMS_API_KEY: "test-api-key-not-a-real-secret",
     TELEAMIGO_SMS_FROM: "ASODEF",
     TELEAMIGO_SMS_TIMEOUT_MS: 5000,
   };
@@ -18,13 +17,22 @@ describe("TeleamigoSmsMessageProvider", () => {
     jest.restoreAllMocks();
   });
 
-  it("sends the existing ASODEF OTP through the documented SMS REST endpoint", async () => {
+  it("sends the existing ASODEF OTP through the scoped SMS API-key endpoint", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({
-        campaignId: 1,
-        sendingId: 2,
-        result: [{ accepted: true, to: "573001112233", id: "sms-1", parts: 1 }],
-      }), { status: 202, headers: { "Content-Type": "application/json" } }),
+        bulkId: "bulk-1",
+        messages: [{
+          messageId: "sms-1",
+          destination: "573001112233",
+          status: {
+            groupId: 1,
+            groupName: "PENDING",
+            id: 26,
+            name: "PENDING_ACCEPTED",
+            description: "Message sent to next instance",
+          },
+        }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
     );
     const provider = new TeleamigoSmsMessageProvider(config());
 
@@ -36,24 +44,25 @@ describe("TeleamigoSmsMessageProvider", () => {
     })).resolves.toEqual({ status: "VERIFIED", data: { delivered: true } });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://sms.iatechsas.com/api/rest/sms",
+      "https://abc123.api.infobip.com/sms/3/messages",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          Authorization: expect.stringMatching(/^Basic /),
+          Accept: "application/json",
+          Authorization: "App test-api-key-not-a-real-secret",
         }),
       }),
     );
     const request = fetchMock.mock.calls[0]?.[1];
     const payload = JSON.parse(String(request?.body));
-    expect(payload).toMatchObject({
-      to: ["573001112233"],
-      from: "ASODEF",
-      parts: 1,
-      encoding: "gsm",
+    expect(payload).toEqual({
+      messages: [{
+        sender: "ASODEF",
+        destinations: [{ to: "573001112233" }],
+        content: { text: expect.stringContaining("123456") },
+      }],
     });
-    expect(payload.message).toContain("123456");
   });
 
   it("fails closed for non-SMS channels and invalid Colombian mobiles", async () => {
@@ -77,11 +86,22 @@ describe("TeleamigoSmsMessageProvider", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not claim delivery when Teleamigo rejects the recipient", async () => {
+  it("does not claim delivery when the provider response is not accepted", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({
-        result: [{ accepted: false, to: "573001112233", error: { code: 102, description: "No valid recipients" } }],
-      }), { status: 207, headers: { "Content-Type": "application/json" } }),
+        bulkId: "bulk-2",
+        messages: [{
+          messageId: "sms-2",
+          destination: "573001112233",
+          status: {
+            groupId: 5,
+            groupName: "REJECTED",
+            id: 42,
+            name: "REJECTED_NETWORK",
+            description: "Rejected",
+          },
+        }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
     );
     const provider = new TeleamigoSmsMessageProvider(config());
 
