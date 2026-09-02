@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AuthModule } from "../auth/auth.module";
+import { MasterModule } from "../master/master.module";
 import { AffiliateSelfServiceController } from "./affiliate-self-service.controller";
 import { CompanySelfServiceController } from "./company-self-service.controller";
 import { SelfServicePaymentsController } from "./self-service-payments.controller";
 import { EXTERNAL_CORE_PROVIDER, SELF_SERVICE_MESSAGE_PROVIDER } from "./external-core.provider";
+import { MasterExternalCoreProvider } from "./master-external-core.provider";
 import { NotConfiguredExternalCoreProvider, NotConfiguredSelfServiceMessageProvider } from "./not-configured.provider";
 import { SelfServiceAccessService } from "./self-service-access.service";
 import { SelfServiceCryptoService } from "./self-service-crypto.service";
@@ -16,7 +18,7 @@ import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MasterModule],
   controllers: [AffiliateSelfServiceController, CompanySelfServiceController, SelfServicePaymentsController, SelfServiceProviderController],
   providers: [
     SelfServiceCryptoService,
@@ -28,11 +30,12 @@ import { SelfServiceContactUpdateService } from "./self-service-contact-update.s
     SelfServiceGatewayService,
     SelfServiceProviderRegistry,
     SelfServiceContactUpdateService,
+    MasterExternalCoreProvider,
     NotConfiguredExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
     {
       provide: EXTERNAL_CORE_PROVIDER,
-      inject: [ConfigService, NotConfiguredExternalCoreProvider],
+      inject: [ConfigService, NotConfiguredExternalCoreProvider, MasterExternalCoreProvider],
       useFactory: selectExternalCoreProvider,
     },
     { provide: SELF_SERVICE_MESSAGE_PROVIDER, useExisting: NotConfiguredSelfServiceMessageProvider },
