@@ -30,15 +30,24 @@ try {
     catch {
         $taskRunning = $false
     }
-    $expectedForward = '{0}:{1}:{2}:{3}' -f $configuration.remoteBindAddress, $configuration.remoteBindPort, $configuration.firebirdHost, $configuration.firebirdPort
-    $expectedTarget = '{0}@{1}' -f $configuration.sshUser, $configuration.sshHost
+    $sshConfigPath = Join-Path ([string]$configuration.runtimeDirectory) 'ssh_config'
+    $configPinned = $false
+    if (Test-Path -LiteralPath $sshConfigPath -PathType Leaf) {
+        $sshConfigText = Get-Content -LiteralPath $sshConfigPath -Raw
+        $expectedForward = 'RemoteForward {0}:{1} {2}:{3}' -f $configuration.remoteBindAddress, $configuration.remoteBindPort, $configuration.firebirdHost, $configuration.firebirdPort
+        $configPinned = $sshConfigText -match [regex]::Escape(('HostName {0}' -f $configuration.sshHost)) -and
+            $sshConfigText -match [regex]::Escape(('User {0}' -f $configuration.sshUser)) -and
+            $sshConfigText -match [regex]::Escape($expectedForward) -and
+            $sshConfigText -match [regex]::Escape('StrictHostKeyChecking yes') -and
+            $sshConfigText -match [regex]::Escape('ExitOnForwardFailure yes')
+    }
     $directSsh = @(Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" -ErrorAction SilentlyContinue | Where-Object {
         [string]$_.ExecutablePath -eq [string]$configuration.sshPath -and
-        [string]$_.CommandLine -like "*$expectedForward*" -and
-        [string]$_.CommandLine -like "*$expectedTarget*"
+        [string]$_.CommandLine -like "*-F*$sshConfigPath*" -and
+        [string]$_.CommandLine -like '*-N*asodef-legacy-bridge-v2*'
     })
     $directSshAlive = $directSsh.Count -eq 1
-    $directHealthy = $taskRunning -and $directSshAlive
+    $directHealthy = $taskRunning -and $directSshAlive -and $configPinned
 
     $healthy = $targetReachable -and ($watchdogHealthy -or $directHealthy)
     $mode = if ($directHealthy) { 'scheduled_task_direct_ssh' } elseif ($watchdogHealthy) { 'watchdog' } else { 'none' }
@@ -51,6 +60,7 @@ try {
         watchdogProcessAlive = $watchdogAlive
         sshProcessAlive = $(if ($directHealthy) { $true } else { $managedSshAlive })
         targetReachable = $targetReachable
+        sshConfigPinned = $configPinned
         reverseForwardVerification = 'ssh_alive_after_exit_on_forward_failure;confirm_end_to_end_on_vps'
         staleStateRejected = $(if ($directHealthy) { $false } else { (-not $watchdogAlive -or -not $managedSshAlive) })
     } | ConvertTo-Json -Compress
