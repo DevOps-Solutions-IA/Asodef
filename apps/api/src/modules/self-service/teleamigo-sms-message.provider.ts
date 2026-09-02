@@ -5,16 +5,39 @@ import type { ProviderResult, SelfServiceMessageProvider } from "./external-core
 import { normalizeColombianMobile } from "./sms-destination";
 
 type SmsApiResponse = {
-  result?: readonly {
-    accepted?: boolean;
+  bulkId?: string;
+  messages?: readonly {
+    messageId?: string;
+    destination?: string;
     to?: string;
-    id?: string;
-    error?: { code?: number; description?: string };
+    status?: {
+      groupId?: number;
+      groupName?: string;
+      id?: number;
+      name?: string;
+      description?: string;
+    };
   }[];
 };
 
 function unavailable(code: string, message: string, retryable: boolean): ProviderResult<{ delivered: true }> {
   return { status: "UNAVAILABLE", error: { code, message, retryable } };
+}
+
+function providerAcceptedMessage(body: SmsApiResponse | null, recipient: string): boolean {
+  return body?.messages?.some((message) => {
+    const destination = message.destination ?? message.to;
+    const group = message.status?.groupName?.toUpperCase();
+    const name = message.status?.name?.toUpperCase();
+    return (
+      destination === recipient &&
+      Boolean(message.messageId) &&
+      (group === "PENDING" ||
+        group === "ACCEPTED" ||
+        name === "PENDING_ACCEPTED" ||
+        name === "MESSAGE_ACCEPTED")
+    );
+  }) ?? false;
 }
 
 @Injectable()
@@ -45,29 +68,30 @@ export class TeleamigoSmsMessageProvider implements SelfServiceMessageProvider {
     }
 
     const baseUrl = this.config.get("TELEAMIGO_SMS_BASE_URL", { infer: true }).replace(/\/$/, "");
-    const username = this.config.get("TELEAMIGO_SMS_USERNAME", { infer: true });
-    const apiPassword = this.config.get("TELEAMIGO_SMS_API_PASSWORD", { infer: true });
+    const apiKey = this.config.get("TELEAMIGO_SMS_API_KEY", { infer: true });
     const sender = this.config.get("TELEAMIGO_SMS_FROM", { infer: true });
     const timeoutMs = this.config.get("TELEAMIGO_SMS_TIMEOUT_MS", { infer: true });
-    const authorization = Buffer.from(`${username}:${apiPassword}`, "utf8").toString("base64");
-    const message = `ASODEF: tu codigo de verificacion es ${input.code}. Vigente por ${input.expiresInMinutes} min. No lo compartas.`;
+    const message =
+      `ASODEF: tu codigo de verificacion es ${input.code}. Vigente por ${input.expiresInMinutes} min. No lo compartas.`;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`${baseUrl}/api/rest/sms`, {
+      const response = await fetch(`${baseUrl}/sms/3/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Basic ${authorization}`,
+          Accept: "application/json",
+          Authorization: `App ${apiKey}`,
         },
         body: JSON.stringify({
-          to: [recipient],
-          from: sender,
-          message,
-          encoding: "gsm",
-          parts: 1,
-          trans: 1,
+          messages: [
+            {
+              sender,
+              destinations: [{ to: recipient }],
+              content: { text: message },
+            },
+          ],
         }),
         signal: controller.signal,
       });
@@ -79,8 +103,7 @@ export class TeleamigoSmsMessageProvider implements SelfServiceMessageProvider {
         body = null;
       }
 
-      const accepted = body?.result?.some((item) => item.accepted === true && item.to === recipient) ?? false;
-      if ((response.status === 202 || response.status === 207) && accepted) {
+      if (response.status === 200 && providerAcceptedMessage(body, recipient)) {
         return { status: "VERIFIED", data: { delivered: true } };
       }
 
