@@ -24,7 +24,7 @@ try {
     try {
         $taskService = New-Object -ComObject 'Schedule.Service'
         $taskService.Connect()
-        $task = $taskService.GetFolder('\\').GetTask($TaskName)
+        $task = $taskService.GetFolder('\').GetTask($TaskName)
         $taskRunning = $null -ne $task -and [int]$task.State -eq 4 # TASK_STATE_RUNNING
     }
     catch {
