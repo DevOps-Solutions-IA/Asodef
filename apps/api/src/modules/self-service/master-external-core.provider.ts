@@ -13,7 +13,7 @@ import type {
   ProviderResult,
   VerificationChannel,
 } from "./external-core.provider";
-import { maskMobile, normalizeColombianMobile } from "./sms-destination";
+import { maskMobile, normalizeColombianMobile } from "./colombian-mobile";
 
 function unavailable<T>(code: string, message: string, retryable = false): ProviderResult<T> {
   return { status: "UNAVAILABLE", error: { code, message, retryable } };
@@ -143,8 +143,8 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
       if (!person) return unavailable("SUBJECT_NOT_FOUND", "No fue posible consultar el registro.");
 
       const candidates = [
-        { id: "legacy-phone", value: person.phone },
         { id: "legacy-whatsapp", value: person.whatsapp },
+        { id: "legacy-phone", value: person.phone },
       ];
       const seen = new Set<string>();
       const data: ContactDestination[] = [];
@@ -155,7 +155,7 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
         seen.add(destination);
         data.push({
           id: candidate.id,
-          type: "sms",
+          type: "whatsapp",
           destination,
           enabled: true,
           verified: true,
@@ -188,7 +188,7 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
         seen.add(destination);
         data.push({
           id: candidate.id,
-          type: "sms",
+          type: "whatsapp",
           destination,
           enabled: true,
           verified: true,
