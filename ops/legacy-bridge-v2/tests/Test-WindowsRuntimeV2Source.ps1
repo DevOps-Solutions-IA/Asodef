@@ -104,13 +104,16 @@ foreach ($forbidden in @('WindowStyle Hidden', 'ExecutionPolicy Bypass', '-Encod
 if ($registration -match 'Start-AsodefLegacyBridgeV2\.ps1') {
     throw 'Persistent startup must not depend on the PowerShell watchdog launcher.'
 }
-foreach ($required in @("Schedule.Service", 'RegisterTaskDefinition', 'TASK_LOGON_SERVICE_ACCOUNT', 'TASK_TRIGGER_BOOT', 'ASODEF-Legacy-Bridge-V2', 'asodef-legacy-bridge-v2-system-ed25519', 'SetAccessRuleProtection', 'S-1-5-18', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
+foreach ($required in @("Schedule.Service", 'RegisterTaskDefinition', 'TASK_LOGON_SERVICE_ACCOUNT', 'TASK_TRIGGER_BOOT', 'TASK_TRIGGER_TIME', 'Repetition.Interval', 'PT1M', 'TASK_INSTANCES_IGNORE_NEW', 'ASODEF-Legacy-Bridge-V2', 'asodef-legacy-bridge-v2-system-ed25519', 'SetAccessRuleProtection', 'S-1-5-18', 'RemoteForward', 'ExitOnForwardFailure yes', 'StrictHostKeyChecking yes', 'IdentityAgent none', 'direct_ssh_config')) {
     if ($registration -notmatch [regex]::Escape($required)) {
         throw "Direct SSH startup control missing: $required"
     }
 }
-if ($registration -match 'RestartInterval' -or $registration -match 'RestartCount' -or $registration -match 'ExecutionTimeLimit' -or $registration -match 'MultipleInstances') {
-    throw 'Startup task must keep the validated minimal Server 2016 settings.'
+if ($registration -match 'RestartInterval' -or $registration -match 'RestartCount' -or $registration -match 'ExecutionTimeLimit') {
+    throw 'Startup task must not use the unreliable Server 2016 restart-on-failure settings.'
+}
+if ($registration -notmatch 'MultipleInstances\s*=\s*2') {
+    throw 'Startup task must use TASK_INSTANCES_IGNORE_NEW for periodic self-healing.'
 }
 
 $health = Get-Content -LiteralPath (
