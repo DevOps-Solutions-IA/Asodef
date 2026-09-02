@@ -100,10 +100,6 @@ $action.Arguments = '-F "{0}" -N asodef-legacy-bridge-v2' -f $sshConfigPath
 $definition.Settings.Enabled = $true
 $definition.Settings.AllowDemandStart = $true
 $definition.Settings.StartWhenAvailable = $true
-$definition.Settings.MultipleInstances = 2 # TASK_INSTANCES_IGNORE_NEW
-$definition.Settings.ExecutionTimeLimit = 'PT0S'
-$definition.Settings.RestartInterval = 'PT5M'
-$definition.Settings.RestartCount = 3
 
 $registered = $root.RegisterTaskDefinition(
     $TaskName,
