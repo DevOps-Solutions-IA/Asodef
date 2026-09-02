@@ -110,7 +110,15 @@ describe("MasterExternalCoreProvider", () => {
 
   it("resolves a company NIT through the Master read service", async () => {
     const master = masterMock();
-    master.findCompanyByNit.mockResolvedValue({ nit: "900123456", name: "EMPRESA", status: "ACTIVA" });
+    master.findCompanyByNit.mockResolvedValue({
+      nit: "900123456",
+      name: "EMPRESA",
+      status: "ACTIVA",
+      contactMobile: null,
+      contactPhone: null,
+      phone2: "315 111 2233",
+      phone: "602 555 0101",
+    });
     const provider = new MasterExternalCoreProvider(master);
 
     await expect(provider.startCompanyLookupByNit({ nit: "900123456" }))
@@ -144,6 +152,55 @@ describe("MasterExternalCoreProvider", () => {
         verified: true,
         operationalCommunicationPermission: true,
       }],
+    });
+  });
+
+  it("uses the first valid company mobile in approved priority order for SMS OTP", async () => {
+    const master = masterMock();
+    master.findCompanyByNit.mockResolvedValue({
+      nit: "900123456",
+      name: "EMPRESA",
+      status: "ACTIVA",
+      contactMobile: null,
+      contactPhone: null,
+      phone2: "315 111 2233",
+      phone: "300 999 8877",
+    });
+    const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.getCompanyVerificationChannels("900123456")).resolves.toEqual({
+      status: "VERIFIED",
+      data: [
+        expect.objectContaining({
+          id: "company-phone-2",
+          type: "sms",
+          masked: "+57 *** *** 2233",
+        }),
+        expect.objectContaining({
+          id: "company-phone",
+          type: "sms",
+          masked: "+57 *** *** 8877",
+        }),
+      ],
+    });
+  });
+
+  it("returns no SMS channel instead of inventing one when a company has no valid mobile", async () => {
+    const master = masterMock();
+    master.findCompanyByNit.mockResolvedValue({
+      nit: "900000000",
+      name: "SIN CELULAR",
+      status: "ACTIVA",
+      contactMobile: null,
+      contactPhone: null,
+      phone2: null,
+      phone: "6025550101",
+    });
+    const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.getCompanyContactDestinations("900000000")).resolves.toEqual({
+      status: "VERIFIED",
+      data: [],
     });
   });
 
