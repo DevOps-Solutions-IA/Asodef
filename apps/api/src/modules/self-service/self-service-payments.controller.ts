@@ -20,8 +20,5 @@ export class SelfServicePaymentsController {
   @Get("application/:id") @UseGuards(SelfServiceSessionGuard)
   application(@Req() request: SelfServiceRequest, @Param("id") id: string) { const p = this.principal(request); this.gateway.assertScope(p, "payments:read"); return this.gateway.readPayload(() => this.gateway.core.getPaymentApplication(p.subjectRef, id), SELF_SERVICE_PUBLIC_FIELDS.paymentOperation); }
 
-  @Post("reverse") @UseGuards(SelfServiceSessionGuard, SelfServiceCsrfGuard)
-  reverse(@Req() request: SelfServiceRequest, @Body() dto: PaymentOperationDto, @Headers("idempotency-key") key?: string) { const p = this.principal(request); this.gateway.assertScope(p, "payments:reverse"); return this.gateway.mutate(p, "PAYMENT_REVERSE", key, dto, () => this.gateway.core.reversePayment(p.subjectRef, dto.payload, key!)); }
-
   private principal(request: SelfServiceRequest) { if (!request.selfService) throw new BadRequestException("Sesión no disponible."); return request.selfService; }
 }
