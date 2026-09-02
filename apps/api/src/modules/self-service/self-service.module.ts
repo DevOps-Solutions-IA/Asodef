@@ -16,7 +16,7 @@ import { SelfServiceGatewayService } from "./self-service-gateway.service";
 import { SelfServiceProviderController } from "./self-service-provider.controller";
 import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-service-provider.registry";
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
-import { TeleamigoSmsMessageProvider } from "./teleamigo-sms-message.provider";
+import { WhatsAppOtpMessageProvider } from "./whatsapp-otp-message.provider";
 
 @Module({
   imports: [AuthModule, MasterModule],
@@ -34,7 +34,7 @@ import { TeleamigoSmsMessageProvider } from "./teleamigo-sms-message.provider";
     MasterExternalCoreProvider,
     NotConfiguredExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
-    TeleamigoSmsMessageProvider,
+    WhatsAppOtpMessageProvider,
     {
       provide: EXTERNAL_CORE_PROVIDER,
       inject: [ConfigService, NotConfiguredExternalCoreProvider, MasterExternalCoreProvider],
@@ -42,12 +42,12 @@ import { TeleamigoSmsMessageProvider } from "./teleamigo-sms-message.provider";
     },
     {
       provide: SELF_SERVICE_MESSAGE_PROVIDER,
-      inject: [ConfigService, NotConfiguredSelfServiceMessageProvider, TeleamigoSmsMessageProvider],
+      inject: [ConfigService, NotConfiguredSelfServiceMessageProvider, WhatsAppOtpMessageProvider],
       useFactory: (
         config: ConfigService,
         notConfigured: NotConfiguredSelfServiceMessageProvider,
-        teleamigo: TeleamigoSmsMessageProvider,
-      ) => config.get("SELF_SERVICE_MESSAGE_PROVIDER") === "teleamigo" ? teleamigo : notConfigured,
+        whatsapp: WhatsAppOtpMessageProvider,
+      ) => config.get("SELF_SERVICE_MESSAGE_PROVIDER") === "whatsapp" ? whatsapp : notConfigured,
     },
   ],
   exports: [EXTERNAL_CORE_PROVIDER],
