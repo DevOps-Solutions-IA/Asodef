@@ -128,7 +128,7 @@ describe("MasterExternalCoreProvider", () => {
     await expect(provider.getAffiliateObligations(person.personId)).resolves.toEqual(
       expect.objectContaining({ status: "NOT_CONFIGURED" }),
     );
-    await expect(provider.applyConfirmedPayment(person.personId, {}, "idempotency-key-1234")).resolves.toEqual(
+    await expect(provider.applyConfirmedPayment()).resolves.toEqual(
       expect.objectContaining({ status: "NOT_CONFIGURED", error: expect.objectContaining({ code: "MASTER_WRITE_DISABLED" }) }),
     );
   });
