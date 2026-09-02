@@ -108,10 +108,24 @@ $definition.Settings.Enabled = $true
 $definition.Settings.AllowDemandStart = $true
 $definition.Settings.StartWhenAvailable = $true
 
+# Earlier invalid registrations can leave task metadata that survives an
+# update on Windows Server 2016. Replace the task object atomically from a
+# clean registration rather than updating it in place.
+try {
+    $existing = $root.GetTask($TaskName)
+    if ($null -ne $existing) {
+        try { $existing.Stop(0) } catch {}
+        $root.DeleteTask($TaskName, 0)
+    }
+}
+catch {
+    # Missing task is the expected first-install state.
+}
+
 $registered = $root.RegisterTaskDefinition(
     $TaskName,
     $definition,
-    6,       # TASK_CREATE_OR_UPDATE
+    2,       # TASK_CREATE
     'SYSTEM',
     $null,
     5,       # TASK_LOGON_SERVICE_ACCOUNT
