@@ -210,21 +210,21 @@ describe("validateEnv", () => {
     const result = validateEnv({
       ...VALID_ENV,
       SELF_SERVICE_MESSAGE_PROVIDER: "teleamigo",
-      TELEAMIGO_SMS_API_ENDPOINT: "https://provider.example.invalid/sms",
-      TELEAMIGO_SMS_API_KEY: "test-api-key-not-a-real-provider-secret",
+      TELEAMIGO_SMS_API_ENDPOINT: "https://api.infobip.com/sms/3/messages",
+      TELEAMIGO_SMS_API_KEY: "fixture-value-abcdefghijklmnopqrstuvwxyz",
       TELEAMIGO_SMS_FROM: "ASODEF",
     });
     expect(result.SELF_SERVICE_MESSAGE_PROVIDER).toBe("teleamigo");
-    expect(result.TELEAMIGO_SMS_API_ENDPOINT).toBe("https://provider.example.invalid/sms");
+    expect(result.TELEAMIGO_SMS_API_ENDPOINT).toBe("https://api.infobip.com/sms/3/messages");
   });
 
-  it("rejects an insecure Teleamigo API endpoint", () => {
+  it("rejects any Teleamigo endpoint other than the verified SMS v3 route", () => {
     expect(() =>
       validateEnv({
         ...VALID_ENV,
         SELF_SERVICE_MESSAGE_PROVIDER: "teleamigo",
-        TELEAMIGO_SMS_API_ENDPOINT: "http://provider.example.invalid/sms",
-        TELEAMIGO_SMS_API_KEY: "test-api-key-not-a-real-provider-secret",
+        TELEAMIGO_SMS_API_ENDPOINT: "https://example.invalid/sms",
+        TELEAMIGO_SMS_API_KEY: "fixture-value-abcdefghijklmnopqrstuvwxyz",
         TELEAMIGO_SMS_FROM: "ASODEF",
       }),
     ).toThrow(/TELEAMIGO_SMS_API_ENDPOINT/);
