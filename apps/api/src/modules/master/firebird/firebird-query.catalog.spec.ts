@@ -82,6 +82,19 @@ describe("Firebird read-only query catalog", () => {
     expect(() => requireReadyQuery("getContractBeneficiaries")).toThrow(/pertenencia y vigencia/);
   });
 
+  it("defines company lookup with only confirmed NIT and SMS contact columns", () => {
+    const query = requireReadyQuery("findCompanyByNit");
+    expect(query.sql).toContain("FIRST 2");
+    expect(query.sql).toContain("e.CELULARENCARGADO AS CONTACT_MOBILE");
+    expect(query.sql).toContain("e.TELEFONOENCARGADO AS CONTACT_PHONE");
+    expect(query.sql).toContain("e.TELEFONO2 AS PHONE2");
+    expect(query.sql).toContain("e.TELEFONO AS PHONE");
+    expect(query.sql).toContain("WHERE e.NIT = ?");
+    expect(query.parameterCount).toBe(1);
+    expect(query.tables).toEqual(["TBLEMPRESAS"]);
+    expect(() => assertReadOnlyQuery(query)).not.toThrow();
+  });
+
   it("defines the person lookup as bounded parameterized SELECTs", () => {
     const exact = requireReadyQuery("findPersonByDocument");
     const normalizedFallback = requireReadyQuery("findPersonByNormalizedDocument");
