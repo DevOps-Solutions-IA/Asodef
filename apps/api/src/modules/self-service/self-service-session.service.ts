@@ -56,7 +56,6 @@ export class SelfServiceSessionService {
           "payments:quote",
           "payments:apply",
           "payments:read",
-          "payments:reverse",
         ]
       : [
           "company:summary:read",
@@ -69,7 +68,6 @@ export class SelfServiceSessionService {
           "payments:quote",
           "payments:apply",
           "payments:read",
-          "payments:reverse",
         ];
     const session = await this.prisma.selfServiceSession.create({ data: {
       challengeId,
