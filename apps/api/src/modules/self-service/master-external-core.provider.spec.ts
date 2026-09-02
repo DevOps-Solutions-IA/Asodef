@@ -1,5 +1,5 @@
 import type { MasterQueryService } from "../master/application/master-query.service";
-import type { Contract, Payment, Person } from "../master/domain/master.models";
+import type { Contract, Installment, Payment, Person } from "../master/domain/master.models";
 import { MasterExternalCoreProvider } from "./master-external-core.provider";
 
 function masterMock() {
@@ -80,6 +80,24 @@ const payment: Payment = {
   prefix: null,
 };
 
+const payableInstallment: Installment = {
+  installmentId: "I-1",
+  contractId: "100",
+  renewalId: null,
+  dueDate: "2026-08-15",
+  installmentNumber: 8,
+  value: "20000",
+  tax: "0",
+  amountPaid: "12500",
+  balance: "7500",
+  companyContribution: null,
+  workerContribution: null,
+  agreement: null,
+  legacyStatus: "P",
+  agreementDate: null,
+  observation: null,
+};
+
 describe("MasterExternalCoreProvider", () => {
   it("resolves an affiliate document through the Master read service", async () => {
     const master = masterMock();
@@ -99,18 +117,41 @@ describe("MasterExternalCoreProvider", () => {
       .resolves.toEqual({ status: "VERIFIED", data: { subjectRef: "900123456" } });
   });
 
-  it("fails closed instead of treating legacy contact presence as OTP consent", async () => {
-    const provider = new MasterExternalCoreProvider(masterMock());
+  it("uses approved legacy phone/WhatsApp mobile fields as deduplicated SMS OTP destinations", async () => {
+    const master = masterMock();
+    master.findPersonByDocument.mockResolvedValue(person);
+    const provider = new MasterExternalCoreProvider(master);
 
-    const channels = await provider.getAffiliateVerificationChannels(person.personId);
-    expect(channels.status).toBe("NOT_CONFIGURED");
-    expect(channels).not.toHaveProperty("data");
+    await expect(provider.getAffiliateVerificationChannels(person.personId)).resolves.toEqual({
+      status: "VERIFIED",
+      data: [{
+        id: "legacy-phone",
+        type: "sms",
+        masked: "+57 *** *** 0000",
+        enabled: true,
+        verified: true,
+        operationalCommunicationPermission: true,
+      }],
+    });
+
+    await expect(provider.getAffiliateContactDestinations(person.personId)).resolves.toEqual({
+      status: "VERIFIED",
+      data: [{
+        id: "legacy-phone",
+        type: "sms",
+        destination: "573000000000",
+        enabled: true,
+        verified: true,
+        operationalCommunicationPermission: true,
+      }],
+    });
   });
 
-  it("exposes read-only payment history but not an invented payable obligation", async () => {
+  it("exposes read-only payment history and the approved payable installment balance", async () => {
     const master = masterMock();
     master.getContractsByPerson.mockResolvedValue([contract]);
     master.getPaymentHistory.mockResolvedValue([payment]);
+    master.getOutstandingInstallments.mockResolvedValue([payableInstallment]);
     const provider = new MasterExternalCoreProvider(master);
 
     await expect(provider.getAffiliatePayments(person.personId)).resolves.toEqual({
@@ -125,9 +166,18 @@ describe("MasterExternalCoreProvider", () => {
       ],
     });
 
-    await expect(provider.getAffiliateObligations(person.personId)).resolves.toEqual(
-      expect.objectContaining({ status: "NOT_CONFIGURED" }),
-    );
+    await expect(provider.getAffiliateObligations(person.personId)).resolves.toEqual({
+      status: "VERIFIED",
+      data: [{
+        id: "I-1",
+        reference: "100",
+        label: "Cuota 8",
+        amount: "7500",
+        currency: "COP",
+        status: "OVERDUE",
+        dueDate: "2026-08-15",
+      }],
+    });
     await expect(provider.applyConfirmedPayment()).resolves.toEqual(
       expect.objectContaining({ status: "NOT_CONFIGURED", error: expect.objectContaining({ code: "MASTER_WRITE_DISABLED" }) }),
     );
