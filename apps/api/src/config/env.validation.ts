@@ -172,7 +172,7 @@ export const envSchema = z
     SELF_SERVICE_MESSAGE_PROVIDER: z
       .enum(["not_configured", "teleamigo"])
       .default("not_configured"),
-    TELEAMIGO_SMS_BASE_URL: z.string().trim().default(""),
+    TELEAMIGO_SMS_API_ENDPOINT: z.string().trim().default(""),
     TELEAMIGO_SMS_API_KEY: z.string().default(""),
     TELEAMIGO_SMS_FROM: z.string().trim().default(""),
     TELEAMIGO_SMS_TIMEOUT_MS: z.coerce
@@ -537,7 +537,7 @@ export const envSchema = z
     }
     if (config.SELF_SERVICE_MESSAGE_PROVIDER === "teleamigo") {
       const requiredTeleamigoFields: Array<keyof typeof config> = [
-        "TELEAMIGO_SMS_BASE_URL",
+        "TELEAMIGO_SMS_API_ENDPOINT",
         "TELEAMIGO_SMS_API_KEY",
         "TELEAMIGO_SMS_FROM",
       ];
@@ -551,29 +551,21 @@ export const envSchema = z
         }
       }
 
-      if (config.TELEAMIGO_SMS_BASE_URL) {
+      if (config.TELEAMIGO_SMS_API_ENDPOINT) {
         try {
-          const parsed = new URL(config.TELEAMIGO_SMS_BASE_URL);
-          const infobipApiHost =
-            parsed.hostname === "api.infobip.com" ||
-            /^[a-z0-9-]+\.api(?:-[a-z0-9-]+)?\.infobip\.com$/i.test(parsed.hostname);
-          if (
-            parsed.protocol !== "https:" ||
-            !infobipApiHost ||
-            (parsed.pathname !== "/" && parsed.pathname !== "")
-          ) {
+          const parsed = new URL(config.TELEAMIGO_SMS_API_ENDPOINT);
+          if (parsed.protocol !== "https:") {
             context.addIssue({
               code: z.ZodIssueCode.custom,
-              path: ["TELEAMIGO_SMS_BASE_URL"],
-              message:
-                "TELEAMIGO_SMS_BASE_URL must be the HTTPS Infobip API base URL assigned to the Teleamigo account",
+              path: ["TELEAMIGO_SMS_API_ENDPOINT"],
+              message: "TELEAMIGO_SMS_API_ENDPOINT must use HTTPS",
             });
           }
         } catch {
           context.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ["TELEAMIGO_SMS_BASE_URL"],
-            message: "TELEAMIGO_SMS_BASE_URL must be a valid HTTPS URL",
+            path: ["TELEAMIGO_SMS_API_ENDPOINT"],
+            message: "TELEAMIGO_SMS_API_ENDPOINT must be a valid HTTPS URL",
           });
         }
       }
