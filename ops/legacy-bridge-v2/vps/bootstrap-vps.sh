@@ -72,7 +72,7 @@ if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
 fi
 
 if ! getent passwd "$TUNNEL_USER" >/dev/null; then
-  sudo useradd --system --create-home --shell /usr/sbin/nologin "$TUNNEL_USER"
+  sudo useradd --system --create-home --user-group --shell /usr/sbin/nologin "$TUNNEL_USER"
 else
   sudo usermod --shell /usr/sbin/nologin "$TUNNEL_USER"
 fi
@@ -135,11 +135,11 @@ if ! printf '%s\n' "$UFW_STATUS" | grep -Fq "$GATEWAY $TUNNEL_PORT/tcp" || ! pri
   sudo ufw allow in on "$BRIDGE_NAME" from "$API_ADDRESS" to "$GATEWAY" port "$TUNNEL_PORT" proto tcp comment 'ASODEF API to Legacy Bridge V2'
 fi
 UFW_STATUS="$(sudo ufw status)"
-if ! printf '%s\n' "$UFW_STATUS" | grep -Eq "^$FIREBIRD_PORT/tcp .*DENY IN.*$PUBLIC_INTERFACE|^$FIREBIRD_PORT .*DENY IN.*$PUBLIC_INTERFACE"; then
+if ! printf '%s\n' "$UFW_STATUS" | grep -Fq 'DENY public Firebird master'; then
   sudo ufw deny in on "$PUBLIC_INTERFACE" to any port "$FIREBIRD_PORT" proto tcp comment 'DENY public Firebird master'
 fi
 UFW_STATUS="$(sudo ufw status)"
-if ! printf '%s\n' "$UFW_STATUS" | grep -Eq "^$TUNNEL_PORT/tcp .*DENY IN.*$PUBLIC_INTERFACE|^$TUNNEL_PORT .*DENY IN.*$PUBLIC_INTERFACE"; then
+if ! printf '%s\n' "$UFW_STATUS" | grep -Fq 'DENY public ASODEF Legacy Bridge V2'; then
   sudo ufw deny in on "$PUBLIC_INTERFACE" to any port "$TUNNEL_PORT" proto tcp comment 'DENY public ASODEF Legacy Bridge V2'
 fi
 
