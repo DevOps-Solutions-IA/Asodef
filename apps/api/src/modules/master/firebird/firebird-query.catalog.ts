@@ -153,7 +153,16 @@ const READY_QUERIES = {
   },
   findCompanyByNit: {
     name: "findCompanyByNit",
-    sql: `SELECT e.NIT FROM TBLEMPRESAS e WHERE e.NIT = ?`,
+    sql: `SELECT FIRST 2
+      e.NIT,
+      e.EMPRESA AS COMPANY_NAME,
+      e.ESTADOEMP AS COMPANY_STATUS,
+      e.CELULARENCARGADO AS CONTACT_MOBILE,
+      e.TELEFONOENCARGADO AS CONTACT_PHONE,
+      e.TELEFONO2 AS PHONE2,
+      e.TELEFONO AS PHONE
+    FROM TBLEMPRESAS e
+    WHERE e.NIT = ?`,
     tables: ["TBLEMPRESAS"],
     parameterCount: 1,
     purpose: "FUNCTIONAL",
