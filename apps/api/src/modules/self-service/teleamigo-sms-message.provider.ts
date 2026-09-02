@@ -17,13 +17,6 @@ function unavailable(code: string, message: string, retryable: boolean): Provide
   return { status: "UNAVAILABLE", error: { code, message, retryable } };
 }
 
-export function normalizeColombianMobile(value: string): string | null {
-  const digits = value.replace(/\D/g, "");
-  if (/^3\d{9}$/.test(digits)) return `57${digits}`;
-  if (/^573\d{9}$/.test(digits)) return digits;
-  return null;
-}
-
 @Injectable()
 export class TeleamigoSmsMessageProvider implements SelfServiceMessageProvider {
   constructor(private readonly config: ConfigService<EnvConfig, true>) {}
