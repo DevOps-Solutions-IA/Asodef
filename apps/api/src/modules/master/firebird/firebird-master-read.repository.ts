@@ -43,8 +43,11 @@ export class FirebirdMasterReadRepository implements MasterReadRepository {
   }
 
   async findCompanyByNit(nit: string): Promise<Company | null> {
-    const row = await this.queryOne("findCompanyByNit", [nit]);
-    return row ? mapCompany(row) : null;
+    const normalizedNit = nit.trim();
+    if (!normalizedNit) return null;
+    const rows = await this.queryMany("findCompanyByNit", [normalizedNit]);
+    if (rows.length > 1) throw new MasterInvalidResponseError("findCompanyByNit");
+    return rows[0] ? mapCompany(rows[0]) : null;
   }
 
   async getContract(contractId: string): Promise<Contract | null> {
