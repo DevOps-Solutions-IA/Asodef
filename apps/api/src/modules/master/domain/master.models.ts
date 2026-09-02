@@ -47,6 +47,10 @@ export interface Company {
   nit: string;
   name: string | null;
   status: string | null;
+  contactMobile: string | null;
+  contactPhone: string | null;
+  phone2: string | null;
+  phone: string | null;
 }
 
 export interface Plan {
