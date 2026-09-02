@@ -99,6 +99,15 @@ $definition.Principal.RunLevel = 1   # TASK_RUNLEVEL_HIGHEST
 $trigger = $definition.Triggers.Create(8) # TASK_TRIGGER_BOOT
 $trigger.Enabled = $true
 
+# Windows Server 2016 on this host did not honor RestartOnFailure reliably.
+# Add an indefinite one-minute trigger on the same task instead. IgnoreNew
+# prevents duplicate ssh.exe instances while the bridge is healthy; if the
+# ssh process exits, the next trigger starts a fresh instance under SYSTEM.
+$recoveryTrigger = $definition.Triggers.Create(1) # TASK_TRIGGER_TIME
+$recoveryTrigger.StartBoundary = (Get-Date).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss")
+$recoveryTrigger.Enabled = $true
+$recoveryTrigger.Repetition.Interval = 'PT1M'
+
 $action = $definition.Actions.Create(0) # TASK_ACTION_EXEC
 $action.Path = [string]$configuration.sshPath
 $action.Arguments = '-F "{0}" -N asodef-legacy-bridge-v2' -f $sshConfigPath
@@ -106,6 +115,7 @@ $action.Arguments = '-F "{0}" -N asodef-legacy-bridge-v2' -f $sshConfigPath
 $definition.Settings.Enabled = $true
 $definition.Settings.AllowDemandStart = $true
 $definition.Settings.StartWhenAvailable = $true
+$definition.Settings.MultipleInstances = 2 # TASK_INSTANCES_IGNORE_NEW
 
 # Earlier invalid registrations can leave task metadata that survives an
 # update on Windows Server 2016. Replace the task object atomically from a
@@ -142,8 +152,10 @@ if ($null -eq $verified -or $verified.Name -ne $TaskName) {
     principal = 'SYSTEM'
     logonType = 'ServiceAccount'
     runLevel = 'Highest'
-    trigger = 'AtStartup'
+    triggers = @('AtStartup', 'EveryMinute')
     triggerEnabled = $true
+    recoveryInterval = 'PT1M'
+    multipleInstances = 'IgnoreNew'
     action = 'direct_ssh_config'
     sshConfigPath = $sshConfigPath
     systemPrivateKeyPath = $systemKeyPath
