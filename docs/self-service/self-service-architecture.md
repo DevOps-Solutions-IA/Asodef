@@ -1,6 +1,6 @@
 # Arquitectura de autoservicio ASODEF
 
-Estado: implementada localmente, preparada para proveedor externo, cerrada por defecto (`NOT_CONFIGURED`).
+Estado: adaptador Master de solo lectura implementado; OTP preparado para WhatsApp Cloud API y cerrado por defecto hasta provisionar plantilla/token.
 
 ## Dominios de acceso
 
@@ -14,7 +14,7 @@ Los accesos públicos comparten `PublicHeader`. Los portales verificados usan sh
 
 1. El BFF consulta `ExternalCoreProvider`; el navegador nunca llama al sistema externo.
 2. El proveedor entrega canales habilitados, verificados y autorizados. Los destinos completos se conservan cifrados solo en backend; la respuesta pública contiene únicamente máscaras.
-3. ASODEF genera el OTP con aleatoriedad criptográfica, almacena solo su hash y lo entrega mediante `SelfServiceMessageProvider`.
+3. ASODEF genera el OTP con aleatoriedad criptográfica, almacena solo su hash y lo entrega mediante `SelfServiceMessageProvider`. El transporte configurado para autoservicio es WhatsApp Cloud API mediante una plantilla `AUTHENTICATION` aprobada.
 4. El desafío queda ligado al identificador derivado, portal, canal, IP, agente de usuario y vencimiento. Tiene enfriamiento, máximo de intentos, bloqueo y consumo único.
 5. Una validación correcta crea una cookie opaca independiente por portal, `HttpOnly`, `SameSite=Strict`, `Secure` en producción y con vigencia corta.
 6. Las mutaciones exigen alcance, nivel de garantía OTP, idempotencia y un token CSRF rotatorio de un solo uso.
@@ -23,7 +23,7 @@ Las respuestas de lookup son anti-enumeración: salvo autorización explícita d
 
 ## Contrato externo
 
-`ExternalCoreProvider` cubre consulta inicial, canales, afiliación, beneficiarios, estado de cuenta, obligaciones, pagos, comprobantes, documentos, solicitudes, empresas, contratos, reportes, cambios de beneficiarios, aplicación/reversión de pagos y actualización de contactos. El registro de proveedor expone estado de salud estable.
+`ExternalCoreProvider` cubre consulta inicial, canales, afiliación, beneficiarios, estado de cuenta, obligaciones, pagos, comprobantes, documentos, solicitudes, empresas, contratos, reportes, cambios de beneficiarios, aplicación de pagos y actualización de contactos. El adaptador Master actual ejecuta únicamente consultas aprobadas con `ASODEF_READONLY`; las escrituras permanecen fuera de ese canal.
 
 El repositorio no contiene URL ni credenciales de producción ni datos sintéticos. El adaptador incluido devuelve `NOT_CONFIGURED`; seleccionar un adaptador no instalado detiene el arranque de forma explícita.
 
@@ -40,15 +40,15 @@ Namespace: `/api/v1/self-service`.
 - recursos de afiliado y empresa bajo su portal correspondiente.
 - ciclo completo `affiliate/beneficiary-change-requests`.
 - `affiliate/contact-updates/start|request-code|verify|:requestId/status`.
-- `payments/quote|apply-confirmed|application/:id|reverse`.
+- `payments/quote|apply-confirmed|application/:id`. La reversa no forma parte del autoservicio del cliente.
 - `provider-health`.
 
 Los controladores están agrupados en Swagger de desarrollo. Los secretos se suministran únicamente desde el gestor de configuración del entorno.
 
 ## Variables documentadas
 
-`EXTERNAL_CORE_PROVIDER`, `EXTERNAL_CORE_BASE_URL`, `EXTERNAL_CORE_CLIENT_ID`, `EXTERNAL_CORE_CLIENT_SECRET`, `EXTERNAL_CORE_TIMEOUT_MS`, `EXTERNAL_CORE_WEBHOOK_SECRET`, `SELF_SERVICE_MESSAGE_PROVIDER`, `SELF_SERVICE_SESSION_TTL_MINUTES`, `SELF_SERVICE_OTP_TTL_MINUTES`, `SELF_SERVICE_OTP_MAX_ATTEMPTS` y `SELF_SERVICE_OTP_COOLDOWN_SECONDS`.
+`EXTERNAL_CORE_PROVIDER`, `EXTERNAL_CORE_TIMEOUT_MS`, `SELF_SERVICE_MESSAGE_PROVIDER`, `SELF_SERVICE_SESSION_TTL_MINUTES`, `SELF_SERVICE_OTP_TTL_MINUTES`, `SELF_SERVICE_OTP_MAX_ATTEMPTS`, `SELF_SERVICE_OTP_COOLDOWN_SECONDS`, `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_OTP_TEMPLATE_NAME`, `WHATSAPP_OTP_TEMPLATE_LANGUAGE` y `WHATSAPP_TIMEOUT_MS`.
 
 ## Límites reales
 
-No existe todavía un adaptador ni credenciales del sistema externo. Por esa razón el runtime local muestra un estado controlado de proveedor no configurado y jamás fabrica afiliados, beneficiarios, saldos, pagos, empresas, OTP entregados o confirmaciones.
+El adaptador Master existe y permanece limitado a lectura. WhatsApp OTP no se considera operativo hasta que la plantilla `AUTHENTICATION` esté aprobada y el token/Phone Number ID se provisionen por canal secreto. Capacidades de escritura sin regla aprobada continúan fallando cerradas.
