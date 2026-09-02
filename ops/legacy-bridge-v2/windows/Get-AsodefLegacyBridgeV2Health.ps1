@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ConfigurationPath,
-    [string]$TaskName = 'ASODEF Legacy Bridge V2'
+    [string]$TaskName = 'ASODEF-Legacy-Bridge-V2'
 )
 
 Set-StrictMode -Version 2.0
