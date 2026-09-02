@@ -92,7 +92,6 @@ $service = New-Object -ComObject 'Schedule.Service'
 $service.Connect()
 $root = $service.GetFolder('\')
 $definition = $service.NewTask(0)
-$definition.RegistrationInfo.Description = 'Maintains the outbound ASODEF Legacy Bridge V2 reverse SSH tunnel after Windows startup.'
 $definition.Principal.UserId = 'SYSTEM'
 $definition.Principal.LogonType = 5  # TASK_LOGON_SERVICE_ACCOUNT
 $definition.Principal.RunLevel = 1   # TASK_RUNLEVEL_HIGHEST
@@ -125,7 +124,7 @@ catch {
 $registered = $root.RegisterTaskDefinition(
     $TaskName,
     $definition,
-    2,       # TASK_CREATE
+    6,       # TASK_CREATE_OR_UPDATE (validated on this Windows Server 2016 host)
     'SYSTEM',
     $null,
     5,       # TASK_LOGON_SERVICE_ACCOUNT
