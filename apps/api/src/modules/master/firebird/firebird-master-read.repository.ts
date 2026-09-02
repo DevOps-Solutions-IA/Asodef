@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MasterInvalidResponseError } from "../domain/master.errors";
+import { selectPayableInstallments } from "../domain/master-payable-installments";
 import type {
   Company,
   Contract,
@@ -68,9 +69,8 @@ export class FirebirdMasterReadRepository implements MasterReadRepository {
     return (await this.queryMany("getContractInstallments", [contractId])).map(mapInstallment);
   }
 
-  async getOutstandingInstallments(_contractId: string): Promise<readonly Installment[]> {
-    requireReadyQuery("getOutstandingInstallments");
-    return [];
+  async getOutstandingInstallments(contractId: string): Promise<readonly Installment[]> {
+    return selectPayableInstallments(await this.getContractInstallments(contractId));
   }
 
   async getPaymentHistory(contractId: string): Promise<readonly Payment[]> {
