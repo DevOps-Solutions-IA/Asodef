@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
 import type { ProviderResult, SelfServiceMessageProvider } from "./external-core.provider";
+import { normalizeColombianMobile } from "./sms-destination";
 
 type SmsApiResponse = {
   result?: readonly {
