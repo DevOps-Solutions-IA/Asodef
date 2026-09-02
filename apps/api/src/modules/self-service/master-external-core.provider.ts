@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MasterQueryService } from "../master/application/master-query.service";
-import type { Company, Contract, Payment, Person } from "../master/domain/master.models";
+import type { Contract, Payment, Person } from "../master/domain/master.models";
 import type {
   AffiliateLookupInput,
   ContactDestination,
