@@ -116,6 +116,29 @@ if ($registration -notmatch 'MultipleInstances\s*=\s*2') {
     throw 'Startup task must use TASK_INSTANCES_IGNORE_NEW for periodic self-healing.'
 }
 
+
+$provision = Get-Content -LiteralPath (
+    Join-Path $resolvedRuntimePath 'Provision-AsodefLegacyBridgeV2Identity.ps1'
+) -Raw
+if ($provision -notmatch 'ExpectedHostFingerprint' -or
+    $provision -notmatch 'SHA256 OpenSSH fingerprint') {
+    throw 'V2 identity provisioning must support a trusted replacement-VPS host fingerprint.'
+}
+
+$setVpsHost = Get-Content -LiteralPath (
+    Join-Path $resolvedRuntimePath 'Set-AsodefLegacyBridgeV2VpsHost.ps1'
+) -Raw
+foreach ($required in @('ssh-keyscan.exe', 'ExpectedHostFingerprint', 'ssh-keygen', 'known_hosts', 'taskRestarted', 'false')) {
+    if ($setVpsHost -notmatch [regex]::Escape($required)) {
+        throw "Replacement VPS staging control missing: $required"
+    }
+}
+foreach ($forbidden in @('StrictHostKeyChecking no', 'PasswordAuthentication yes', 'SYSDBA')) {
+    if ($setVpsHost -match [regex]::Escape($forbidden)) {
+        throw "Forbidden replacement VPS staging pattern found: $forbidden"
+    }
+}
+
 $health = Get-Content -LiteralPath (
     Join-Path $resolvedRuntimePath 'Get-AsodefLegacyBridgeV2Health.ps1'
 ) -Raw
