@@ -16,6 +16,7 @@ import { SelfServiceGatewayService } from "./self-service-gateway.service";
 import { SelfServiceProviderController } from "./self-service-provider.controller";
 import { selectExternalCoreProvider, SelfServiceProviderRegistry } from "./self-service-provider.registry";
 import { SelfServiceContactUpdateService } from "./self-service-contact-update.service";
+import { TeleamigoSmsMessageProvider } from "./teleamigo-sms-message.provider";
 
 @Module({
   imports: [AuthModule, MasterModule],
@@ -33,12 +34,21 @@ import { SelfServiceContactUpdateService } from "./self-service-contact-update.s
     MasterExternalCoreProvider,
     NotConfiguredExternalCoreProvider,
     NotConfiguredSelfServiceMessageProvider,
+    TeleamigoSmsMessageProvider,
     {
       provide: EXTERNAL_CORE_PROVIDER,
       inject: [ConfigService, NotConfiguredExternalCoreProvider, MasterExternalCoreProvider],
       useFactory: selectExternalCoreProvider,
     },
-    { provide: SELF_SERVICE_MESSAGE_PROVIDER, useExisting: NotConfiguredSelfServiceMessageProvider },
+    {
+      provide: SELF_SERVICE_MESSAGE_PROVIDER,
+      inject: [ConfigService, NotConfiguredSelfServiceMessageProvider, TeleamigoSmsMessageProvider],
+      useFactory: (
+        config: ConfigService,
+        notConfigured: NotConfiguredSelfServiceMessageProvider,
+        teleamigo: TeleamigoSmsMessageProvider,
+      ) => config.get("SELF_SERVICE_MESSAGE_PROVIDER") === "teleamigo" ? teleamigo : notConfigured,
+    },
   ],
   exports: [EXTERNAL_CORE_PROVIDER],
 })
