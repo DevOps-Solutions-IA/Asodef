@@ -107,12 +107,20 @@ describe("FirebirdMasterReadRepository", () => {
     ]);
   });
 
-  it("fails closed for methods whose physical schema or semantics are not confirmed", async () => {
-    const { repository, run } = build();
-    await expect(repository.getOutstandingInstallments("10")).rejects.toBeInstanceOf(MasterQueryNotReadyError);
-    await expect(repository.getPaymentReceipt("R-1")).rejects.toBeInstanceOf(MasterQueryNotReadyError);
-    await expect(repository.getContractBeneficiaries("10")).rejects.toBeInstanceOf(MasterQueryNotReadyError);
-    expect(run).not.toHaveBeenCalled();
+  it("derives payable installments from the approved installment read and keeps unrelated blocked operations closed", async () => {
+    const { repository, run } = build([
+      { IDCUOTA: 1, IDCONTRATO: 10, FECHAVENCE: "2020-01-01", NROCUOTA: 1, SALDO: "50.00" },
+    ]);
+    await expect(repository.getOutstandingInstallments("10")).resolves.toEqual([
+      expect.objectContaining({ installmentId: "1", balance: "50.00" }),
+    ]);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]?.[0].name).toBe("getContractInstallments");
+
+    const blocked = build();
+    await expect(blocked.repository.getPaymentReceipt("R-1")).rejects.toBeInstanceOf(MasterQueryNotReadyError);
+    await expect(blocked.repository.getContractBeneficiaries("10")).rejects.toBeInstanceOf(MasterQueryNotReadyError);
+    expect(blocked.run).not.toHaveBeenCalled();
   });
 
   it("does not query Firebird when blocked operations receive hostile input", async () => {
