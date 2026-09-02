@@ -170,8 +170,18 @@ export const envSchema = z
       .default(5_000),
     EXTERNAL_CORE_WEBHOOK_SECRET: z.string().default(""),
     SELF_SERVICE_MESSAGE_PROVIDER: z
-      .enum(["not_configured"])
+      .enum(["not_configured", "teleamigo"])
       .default("not_configured"),
+    TELEAMIGO_SMS_BASE_URL: z.string().trim().default(""),
+    TELEAMIGO_SMS_USERNAME: z.string().trim().default(""),
+    TELEAMIGO_SMS_API_PASSWORD: z.string().default(""),
+    TELEAMIGO_SMS_FROM: z.string().trim().default(""),
+    TELEAMIGO_SMS_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(30_000)
+      .default(5_000),
 
     // Firebird master-system integration is an internal, read-only bounded
     // context. It remains disabled unless every connection field is supplied
@@ -526,6 +536,58 @@ export const envSchema = z
         }
       }
     }
+    if (config.SELF_SERVICE_MESSAGE_PROVIDER === "teleamigo") {
+      const requiredTeleamigoFields: Array<keyof typeof config> = [
+        "TELEAMIGO_SMS_BASE_URL",
+        "TELEAMIGO_SMS_USERNAME",
+        "TELEAMIGO_SMS_API_PASSWORD",
+        "TELEAMIGO_SMS_FROM",
+      ];
+      for (const field of requiredTeleamigoFields) {
+        if (!config[field]) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: `${field} is required when SELF_SERVICE_MESSAGE_PROVIDER=teleamigo`,
+          });
+        }
+      }
+
+      if (config.TELEAMIGO_SMS_BASE_URL) {
+        try {
+          const parsed = new URL(config.TELEAMIGO_SMS_BASE_URL);
+          const allowedOrigins = new Set([
+            "https://enviosms.teleamigo.com.co",
+            "https://sms.iatechsas.com",
+          ]);
+          if (!allowedOrigins.has(parsed.origin) || parsed.pathname !== "/") {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["TELEAMIGO_SMS_BASE_URL"],
+              message: "TELEAMIGO_SMS_BASE_URL must be an approved Teleamigo SMS portal origin",
+            });
+          }
+        } catch {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["TELEAMIGO_SMS_BASE_URL"],
+            message: "TELEAMIGO_SMS_BASE_URL must be a valid HTTPS URL",
+          });
+        }
+      }
+
+      if (
+        config.TELEAMIGO_SMS_FROM &&
+        !/^(?:[A-Za-z0-9]{1,11}|\d{1,15})$/.test(config.TELEAMIGO_SMS_FROM)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TELEAMIGO_SMS_FROM"],
+          message: "TELEAMIGO_SMS_FROM must be up to 11 alphanumeric characters or 15 digits",
+        });
+      }
+    }
+
     if (config.EXTERNAL_CORE_PROVIDER === "http") {
       const required: Array<keyof typeof config> = [
         "EXTERNAL_CORE_BASE_URL",
