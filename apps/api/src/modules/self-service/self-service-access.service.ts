@@ -329,7 +329,8 @@ export class SelfServiceAccessService {
       if (!item || typeof item !== "object") return false;
       const candidate = item as Record<string, unknown>;
       return typeof candidate.id === "string" && this.isChannel(candidate.type) && typeof candidate.masked === "string" &&
-        typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" && typeof candidate.lastUpdatedAt === "string" &&
+        typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" &&
+        (candidate.lastUpdatedAt === undefined || typeof candidate.lastUpdatedAt === "string") &&
         typeof candidate.operationalCommunicationPermission === "boolean";
     });
   }
@@ -342,7 +343,8 @@ export class SelfServiceAccessService {
         if (!item || typeof item !== "object") return false;
         const candidate = item as Record<string, unknown>;
         return typeof candidate.id === "string" && this.isChannel(candidate.type) && typeof candidate.destination === "string" &&
-          typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" && typeof candidate.lastUpdatedAt === "string" &&
+          typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" &&
+          (candidate.lastUpdatedAt === undefined || typeof candidate.lastUpdatedAt === "string") &&
           typeof candidate.operationalCommunicationPermission === "boolean";
       });
     } catch {
