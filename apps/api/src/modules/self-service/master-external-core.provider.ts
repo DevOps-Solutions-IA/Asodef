@@ -12,6 +12,7 @@ import type {
   ProviderResult,
   VerificationChannel,
 } from "./external-core.provider";
+import { maskMobile, normalizeColombianMobile } from "./sms-destination";
 
 function unavailable<T>(code: string, message: string, retryable = false): ProviderResult<T> {
   return { status: "UNAVAILABLE", error: { code, message, retryable } };
@@ -103,11 +104,20 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     }
   }
 
-  getAffiliateVerificationChannels(_subjectRef: string): Promise<ProviderResult<readonly VerificationChannel[]>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_VERIFICATION_CHANNELS_NOT_READY",
-      "Los contactos del legado todavía no tienen una regla aprobada de verificación y autorización para OTP.",
-    ));
+  async getAffiliateVerificationChannels(subjectRef: string): Promise<ProviderResult<readonly VerificationChannel[]>> {
+    const destinations = await this.getAffiliateContactDestinations(subjectRef);
+    if (destinations.status !== "VERIFIED") return destinations;
+    return {
+      status: "VERIFIED",
+      data: destinations.data.map((destination) => ({
+        id: destination.id,
+        type: destination.type,
+        masked: maskMobile(destination.destination),
+        enabled: destination.enabled,
+        verified: destination.verified,
+        operationalCommunicationPermission: destination.operationalCommunicationPermission,
+      })),
+    };
   }
 
   getCompanyVerificationChannels(_subjectRef: string): Promise<ProviderResult<readonly VerificationChannel[]>> {
@@ -117,11 +127,35 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     ));
   }
 
-  getAffiliateContactDestinations(_subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_CONTACT_DESTINATIONS_NOT_READY",
-      "Los destinos de contacto del legado todavía no están aprobados para autenticación.",
-    ));
+  async getAffiliateContactDestinations(subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
+    try {
+      const person = await this.master.findPersonByDocument(subjectRef);
+      if (!person) return unavailable("SUBJECT_NOT_FOUND", "No fue posible consultar el registro.");
+
+      const candidates = [
+        { id: "legacy-phone", value: person.phone },
+        { id: "legacy-whatsapp", value: person.whatsapp },
+      ];
+      const seen = new Set<string>();
+      const data: ContactDestination[] = [];
+      for (const candidate of candidates) {
+        if (!candidate.value) continue;
+        const destination = normalizeColombianMobile(candidate.value);
+        if (!destination || seen.has(destination)) continue;
+        seen.add(destination);
+        data.push({
+          id: candidate.id,
+          type: "sms",
+          destination,
+          enabled: true,
+          verified: true,
+          operationalCommunicationPermission: true,
+        });
+      }
+      return { status: "VERIFIED", data };
+    } catch {
+      return unavailable("MASTER_CONTACTS_UNAVAILABLE", "No fue posible consultar los contactos registrados.", true);
+    }
   }
 
   getCompanyContactDestinations(_subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>> {
