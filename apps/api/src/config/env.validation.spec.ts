@@ -199,35 +199,35 @@ describe("validateEnv", () => {
     ).toThrow(/SMTP_FROM/);
   });
 
-  it("requires a complete scoped Teleamigo API-key configuration when SMS OTP is enabled", () => {
+  it("requires a complete Teleamigo API-key configuration when SMS OTP is enabled", () => {
     expect(() =>
       validateEnv({
         ...VALID_ENV,
         SELF_SERVICE_MESSAGE_PROVIDER: "teleamigo",
       }),
-    ).toThrow(/TELEAMIGO_SMS_BASE_URL/);
+    ).toThrow(/TELEAMIGO_SMS_API_ENDPOINT/);
 
     const result = validateEnv({
       ...VALID_ENV,
       SELF_SERVICE_MESSAGE_PROVIDER: "teleamigo",
-      TELEAMIGO_SMS_BASE_URL: "https://abc123.api.infobip.com",
+      TELEAMIGO_SMS_API_ENDPOINT: "https://provider.example.invalid/sms",
       TELEAMIGO_SMS_API_KEY: "test-api-key-not-a-real-provider-secret",
       TELEAMIGO_SMS_FROM: "ASODEF",
     });
     expect(result.SELF_SERVICE_MESSAGE_PROVIDER).toBe("teleamigo");
-    expect(result.TELEAMIGO_SMS_BASE_URL).toBe("https://abc123.api.infobip.com");
+    expect(result.TELEAMIGO_SMS_API_ENDPOINT).toBe("https://provider.example.invalid/sms");
   });
 
-  it("rejects using the Teleamigo web portal hostname as the SMS API base URL", () => {
+  it("rejects an insecure Teleamigo API endpoint", () => {
     expect(() =>
       validateEnv({
         ...VALID_ENV,
         SELF_SERVICE_MESSAGE_PROVIDER: "teleamigo",
-        TELEAMIGO_SMS_BASE_URL: "https://sms.iatechsas.com",
+        TELEAMIGO_SMS_API_ENDPOINT: "http://provider.example.invalid/sms",
         TELEAMIGO_SMS_API_KEY: "test-api-key-not-a-real-provider-secret",
         TELEAMIGO_SMS_FROM: "ASODEF",
       }),
-    ).toThrow(/TELEAMIGO_SMS_BASE_URL/);
+    ).toThrow(/TELEAMIGO_SMS_API_ENDPOINT/);
   });
 
   it("keeps Firebird disabled without requiring or resolving any connection fields", () => {
