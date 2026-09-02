@@ -107,6 +107,10 @@ export function mapCompany(row: FirebirdRow): Company {
     nit: requiredString(row.NIT, "findCompanyByNit"),
     name: optionalString(row.COMPANY_NAME),
     status: optionalString(row.COMPANY_STATUS),
+    contactMobile: optionalString(row.CONTACT_MOBILE),
+    contactPhone: optionalString(row.CONTACT_PHONE),
+    phone2: optionalString(row.PHONE2),
+    phone: optionalString(row.PHONE),
   };
 }
 
