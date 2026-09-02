@@ -125,7 +125,7 @@ describe("MasterExternalCoreProvider", () => {
       .resolves.toEqual({ status: "VERIFIED", data: { subjectRef: "900123456" } });
   });
 
-  it("uses approved legacy phone/WhatsApp mobile fields as deduplicated SMS OTP destinations", async () => {
+  it("uses approved legacy phone/WhatsApp mobile fields as deduplicated WhatsApp OTP destinations", async () => {
     const master = masterMock();
     master.findPersonByDocument.mockResolvedValue(person);
     const provider = new MasterExternalCoreProvider(master);
@@ -133,8 +133,8 @@ describe("MasterExternalCoreProvider", () => {
     await expect(provider.getAffiliateVerificationChannels(person.personId)).resolves.toEqual({
       status: "VERIFIED",
       data: [{
-        id: "legacy-phone",
-        type: "sms",
+        id: "legacy-whatsapp",
+        type: "whatsapp",
         masked: "+57 *** *** 0000",
         enabled: true,
         verified: true,
@@ -145,8 +145,8 @@ describe("MasterExternalCoreProvider", () => {
     await expect(provider.getAffiliateContactDestinations(person.personId)).resolves.toEqual({
       status: "VERIFIED",
       data: [{
-        id: "legacy-phone",
-        type: "sms",
+        id: "legacy-whatsapp",
+        type: "whatsapp",
         destination: "573000000000",
         enabled: true,
         verified: true,
@@ -155,7 +155,7 @@ describe("MasterExternalCoreProvider", () => {
     });
   });
 
-  it("uses the first valid company mobile in approved priority order for SMS OTP", async () => {
+  it("uses the first valid company mobile in approved priority order for WhatsApp OTP", async () => {
     const master = masterMock();
     master.findCompanyByNit.mockResolvedValue({
       nit: "900123456",
@@ -173,19 +173,19 @@ describe("MasterExternalCoreProvider", () => {
       data: [
         expect.objectContaining({
           id: "company-phone-2",
-          type: "sms",
+          type: "whatsapp",
           masked: "+57 *** *** 2233",
         }),
         expect.objectContaining({
           id: "company-phone",
-          type: "sms",
+          type: "whatsapp",
           masked: "+57 *** *** 8877",
         }),
       ],
     });
   });
 
-  it("returns no SMS channel instead of inventing one when a company has no valid mobile", async () => {
+  it("returns no WhatsApp channel instead of inventing one when a company has no valid mobile", async () => {
     const master = masterMock();
     master.findCompanyByNit.mockResolvedValue({
       nit: "900000000",
