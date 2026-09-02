@@ -170,12 +170,14 @@ export const envSchema = z
       .default(5_000),
     EXTERNAL_CORE_WEBHOOK_SECRET: z.string().default(""),
     SELF_SERVICE_MESSAGE_PROVIDER: z
-      .enum(["not_configured", "teleamigo"])
+      .enum(["not_configured", "whatsapp"])
       .default("not_configured"),
-    TELEAMIGO_SMS_API_ENDPOINT: z.string().trim().default(""),
-    TELEAMIGO_SMS_API_KEY: z.string().default(""),
-    TELEAMIGO_SMS_FROM: z.string().trim().default(""),
-    TELEAMIGO_SMS_TIMEOUT_MS: z.coerce
+    WHATSAPP_GRAPH_API_VERSION: z.string().trim().default(""),
+    WHATSAPP_PHONE_NUMBER_ID: z.string().trim().default(""),
+    WHATSAPP_ACCESS_TOKEN: z.string().default(""),
+    WHATSAPP_OTP_TEMPLATE_NAME: z.string().trim().default(""),
+    WHATSAPP_OTP_TEMPLATE_LANGUAGE: z.string().trim().default(""),
+    WHATSAPP_TIMEOUT_MS: z.coerce
       .number()
       .int()
       .min(500)
@@ -535,55 +537,77 @@ export const envSchema = z
         }
       }
     }
-    if (config.SELF_SERVICE_MESSAGE_PROVIDER === "teleamigo") {
-      const requiredTeleamigoFields: Array<keyof typeof config> = [
-        "TELEAMIGO_SMS_API_ENDPOINT",
-        "TELEAMIGO_SMS_API_KEY",
-        "TELEAMIGO_SMS_FROM",
+    if (config.SELF_SERVICE_MESSAGE_PROVIDER === "whatsapp") {
+      const requiredWhatsAppFields: Array<keyof typeof config> = [
+        "WHATSAPP_GRAPH_API_VERSION",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_OTP_TEMPLATE_NAME",
+        "WHATSAPP_OTP_TEMPLATE_LANGUAGE",
       ];
-      for (const field of requiredTeleamigoFields) {
+      for (const field of requiredWhatsAppFields) {
         if (!config[field]) {
           context.addIssue({
             code: z.ZodIssueCode.custom,
             path: [field],
-            message: `${field} is required when SELF_SERVICE_MESSAGE_PROVIDER=teleamigo`,
+            message: `${field} is required when SELF_SERVICE_MESSAGE_PROVIDER=whatsapp`,
           });
         }
       }
 
       if (
-        config.TELEAMIGO_SMS_API_ENDPOINT &&
-        config.TELEAMIGO_SMS_API_ENDPOINT !==
-          "https://api.infobip.com/sms/3/messages"
+        config.WHATSAPP_GRAPH_API_VERSION &&
+        !/^v\d+\.\d+$/.test(config.WHATSAPP_GRAPH_API_VERSION)
       ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["TELEAMIGO_SMS_API_ENDPOINT"],
-          message:
-            "TELEAMIGO_SMS_API_ENDPOINT must match the verified SMS v3 endpoint",
+          path: ["WHATSAPP_GRAPH_API_VERSION"],
+          message: "WHATSAPP_GRAPH_API_VERSION must use the vNN.N format",
         });
       }
 
       if (
-        config.TELEAMIGO_SMS_API_KEY &&
-        (config.TELEAMIGO_SMS_API_KEY.length < 20 ||
-          /[\r\n]/.test(config.TELEAMIGO_SMS_API_KEY))
+        config.WHATSAPP_PHONE_NUMBER_ID &&
+        !/^\d{5,30}$/.test(config.WHATSAPP_PHONE_NUMBER_ID)
       ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["TELEAMIGO_SMS_API_KEY"],
-          message: "TELEAMIGO_SMS_API_KEY is invalid",
+          path: ["WHATSAPP_PHONE_NUMBER_ID"],
+          message: "WHATSAPP_PHONE_NUMBER_ID must be numeric",
         });
       }
 
       if (
-        config.TELEAMIGO_SMS_FROM &&
-        !/^(?:[A-Za-z0-9]{1,11}|\d{1,15})$/.test(config.TELEAMIGO_SMS_FROM)
+        config.WHATSAPP_ACCESS_TOKEN &&
+        (config.WHATSAPP_ACCESS_TOKEN.length < 20 ||
+          /[\r\n]/.test(config.WHATSAPP_ACCESS_TOKEN))
       ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["TELEAMIGO_SMS_FROM"],
-          message: "TELEAMIGO_SMS_FROM must be up to 11 alphanumeric characters or 15 digits",
+          path: ["WHATSAPP_ACCESS_TOKEN"],
+          message: "WHATSAPP_ACCESS_TOKEN is invalid",
+        });
+      }
+
+      if (
+        config.WHATSAPP_OTP_TEMPLATE_NAME &&
+        !/^[a-z0-9_]{1,512}$/.test(config.WHATSAPP_OTP_TEMPLATE_NAME)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_OTP_TEMPLATE_NAME"],
+          message: "WHATSAPP_OTP_TEMPLATE_NAME must contain lowercase letters, digits or underscores",
+        });
+      }
+
+      if (
+        config.WHATSAPP_OTP_TEMPLATE_LANGUAGE &&
+        !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(config.WHATSAPP_OTP_TEMPLATE_LANGUAGE)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_OTP_TEMPLATE_LANGUAGE"],
+          message: "WHATSAPP_OTP_TEMPLATE_LANGUAGE is invalid",
         });
       }
     }
