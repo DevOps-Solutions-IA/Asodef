@@ -5,7 +5,9 @@ const LABELS: Record<string, string> = {
   id: "Referencia", status: "Estado", state: "Estado", displayName: "Nombre", name: "Nombre", title: "Detalle",
   description: "Descripción", date: "Fecha", createdAt: "Creado", updatedAt: "Actualizado", amount: "Valor",
   reference: "Referencia", relationship: "Parentesco", companyName: "Empresa", planName: "Plan", effectiveDate: "Vigencia",
-  balance: "Saldo", cutoffDate: "Fecha de corte", operation: "Operación", reason: "Motivo", type: "Tipo",
+  balance: "Saldo", overdueBalance: "Saldo vencido", currentBalance: "Cuota vigente", overdueCount: "Cuotas vencidas",
+  currentCount: "Cuotas vigentes", contractCount: "Contratos", currency: "Moneda", cutoffDate: "Fecha de corte",
+  operation: "Operación", reason: "Motivo", type: "Tipo",
 };
 
 function readable(value: unknown): string | null {
