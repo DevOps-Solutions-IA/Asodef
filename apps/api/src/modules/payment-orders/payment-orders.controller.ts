@@ -3,8 +3,11 @@ import { ApiTags } from "@nestjs/swagger";
 import { Public } from "../auth/decorators/public.decorator";
 import { buildRequestContext } from "../../common/http/request-context.util";
 import type { AuthenticatedRequest } from "../auth/types/request-user.type";
-import { PaymentOrdersService } from "./payment-orders.service";
 import { CreatePaymentOrderDto } from "./dto/create-payment-order.dto";
+import { PreflightMasterPaymentDto } from "./dto/preflight-master-payment.dto";
+import { MasterPaymentPreflightService } from "./master-payment-preflight.service";
+import { toPublicMasterPaymentPreflightResponse } from "./master-payment-preflight.types";
+import { PaymentOrdersService } from "./payment-orders.service";
 import { toPaymentOrderResponse } from "./payment-order.types";
 
 /**
@@ -17,7 +20,27 @@ import { toPaymentOrderResponse } from "./payment-order.types";
 @ApiTags("payment-orders")
 @Controller("payment-orders")
 export class PaymentOrdersController {
-  constructor(private readonly paymentOrdersService: PaymentOrdersService) {}
+  constructor(
+    private readonly paymentOrdersService: PaymentOrdersService,
+    private readonly masterPaymentPreflight: MasterPaymentPreflightService,
+  ) {}
+
+  /**
+   * Read-only boundary for Master-originated obligations. It decrypts the
+   * opaque selector, re-reads the current payable installment from Firebird and
+   * returns only public-safe fields. It deliberately creates no PaymentOrder and
+   * cannot start Bold while the legacy write/application contract is unresolved.
+   */
+  @Public()
+  @Post("master/preflight")
+  @HttpCode(HttpStatus.OK)
+  async preflightMaster(@Body() dto: PreflightMasterPaymentDto) {
+    const source = await this.masterPaymentPreflight.verify(dto.selectionToken);
+    if (!source) {
+      throw new NotFoundException("No se encontraron resultados.");
+    }
+    return toPublicMasterPaymentPreflightResponse(source);
+  }
 
   @Public()
   @Post()
