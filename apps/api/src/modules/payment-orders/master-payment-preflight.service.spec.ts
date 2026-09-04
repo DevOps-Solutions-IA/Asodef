@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MasterQueryService } from "../master/application/master-query.service";
+import type { MasterPaymentQuoteService } from "../master/application/master-payment-quote.service";
 import type { Contract, Installment, Person } from "../master/domain/master.models";
 import type { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 import { MasterPaymentPreflightService } from "./master-payment-preflight.service";
@@ -63,22 +63,33 @@ const installment: Installment = {
   observation: null,
 };
 
-function harness(options?: { tokenValid?: boolean; contracts?: Contract[]; installments?: Installment[] }) {
+function harness(options?: { tokenValid?: boolean; rejected?: boolean; throws?: boolean }) {
   const selection = { personId: person.personId, contractId: contract.contractId, installmentId: installment.installmentId };
   const tokens = {
     verify: vi.fn(() => options?.tokenValid === false ? null : selection),
   } as unknown as MasterPaymentSelectionTokenService;
-  const master = {
-    findPersonByDocument: vi.fn(async () => person),
-    getContractsByPerson: vi.fn(async () => options?.contracts ?? [contract]),
-    getOutstandingInstallments: vi.fn(async () => options?.installments ?? [installment]),
-  } as unknown as MasterQueryService;
-  return { service: new MasterPaymentPreflightService(master, tokens), master, tokens };
+  const quotes = {
+    quote: vi.fn(async () => {
+      if (options?.throws) throw new Error("Master unavailable");
+      if (options?.rejected) return { status: "REJECTED", reason: "INSTALLMENT_NOT_PAYABLE" } as const;
+      return {
+        status: "VERIFIED",
+        data: {
+          person,
+          contract,
+          installment,
+          amountCents: 5_000_000,
+          dueDate: new Date("2026-09-10T12:00:00.000Z"),
+        },
+      } as const;
+    }),
+  } as unknown as MasterPaymentQuoteService;
+  return { service: new MasterPaymentPreflightService(quotes, tokens), quotes, tokens };
 }
 
 describe("MasterPaymentPreflightService", () => {
-  it("re-reads Master and returns the current payable amount", async () => {
-    const { service } = harness();
+  it("uses the centralized Master quote and returns the current payable amount", async () => {
+    const { service, quotes } = harness();
 
     await expect(service.verify("master.v1.opaque")).resolves.toEqual({
       personId: person.personId,
@@ -93,24 +104,24 @@ describe("MasterPaymentPreflightService", () => {
       dueDate: new Date("2026-09-10T12:00:00.000Z"),
       status: expect.any(String),
     });
+    expect(quotes.quote).toHaveBeenCalledWith(person.personId, contract.contractId, installment.installmentId);
   });
 
   it("does not query Master for an invalid or expired selector", async () => {
-    const { service, master } = harness({ tokenValid: false });
+    const { service, quotes } = harness({ tokenValid: false });
 
     await expect(service.verify("tampered")).resolves.toBeNull();
-    expect(master.findPersonByDocument).not.toHaveBeenCalled();
+    expect(quotes.quote).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the selected contract does not belong to the person", async () => {
-    const { service, master } = harness({ contracts: [] });
+  it("fails closed when the centralized quote rejects a no-longer-payable selection", async () => {
+    const { service } = harness({ rejected: true });
 
     await expect(service.verify("master.v1.opaque")).resolves.toBeNull();
-    expect(master.getOutstandingInstallments).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the installment is no longer outstanding", async () => {
-    const { service } = harness({ installments: [] });
+  it("maps Master infrastructure failure to the public preflight's fail-closed null", async () => {
+    const { service } = harness({ throws: true });
 
     await expect(service.verify("master.v1.opaque")).resolves.toBeNull();
   });
