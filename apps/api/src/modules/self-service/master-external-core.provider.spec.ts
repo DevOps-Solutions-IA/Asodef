@@ -204,12 +204,24 @@ describe("MasterExternalCoreProvider", () => {
     });
   });
 
-  it("exposes read-only payment history and the approved payable installment balance", async () => {
+  it("exposes affiliate contracts, payment history and the approved payable installment balance", async () => {
     const master = masterMock();
     master.getContractsByPerson.mockResolvedValue([contract]);
     master.getPaymentHistory.mockResolvedValue([payment]);
     master.getOutstandingInstallments.mockResolvedValue([payableInstallment]);
     const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.getAffiliateContracts(person.personId)).resolves.toEqual({
+      status: "VERIFIED",
+      data: [{
+        id: "100",
+        reference: "100",
+        title: "Plan 10",
+        status: "ACTIVO",
+        effectiveDate: "2025-01-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      }],
+    });
 
     await expect(provider.getAffiliatePayments(person.personId)).resolves.toEqual({
       status: "VERIFIED",
