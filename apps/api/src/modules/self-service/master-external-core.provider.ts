@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MasterQueryService } from "../master/application/master-query.service";
+import { positiveMasterDecimalToCents } from "../master/domain/master-money";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import type { Contract, Payment, Person } from "../master/domain/master.models";
 import type {
@@ -58,6 +59,11 @@ function paymentPayload(payment: Payment): ProviderPayload {
   };
 }
 
+function payloadString(payload: ProviderPayload, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
 /**
  * Read-only adapter from the public/self-service boundary to the certified
  * Firebird Master bounded context.
@@ -104,7 +110,7 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
         return {
           status: "NOT_FOUND",
           disclosureAllowed: false,
-          error: { code: "COMPANY_NOT_FOUND", message: "No fue posible validar el registro.", retryable: false },
+          error: { code: "COMPANY_NOT_FOUND", message: "No fue posible validar la empresa.", retryable: false },
         };
       }
       return { status: "VERIFIED", data: { subjectRef: company.nit } };
@@ -402,8 +408,54 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     return Promise.resolve(notConfigured("MASTER_COMPANY_REPORTS_NOT_READY", "Los reportes de empresa todavía no están integrados."));
   }
 
-  quotePayment(): Promise<ProviderResult<ProviderPayload>> {
-    return Promise.resolve(notConfigured("MASTER_PAYMENT_RULE_NOT_READY", "La regla de obligación cobrable todavía no está aprobada."));
+  /**
+   * Read-only quote for the certified payable-installment rule. The caller must
+   * supply a contractId + installmentId that was previously listed for the
+   * authenticated subject. Ownership and current payability are always re-read
+   * from Master; amountCents is derived exactly from the current Firebird
+   * decimal, never from browser/client input.
+   */
+  async quotePayment(subjectRef: string, payload: ProviderPayload): Promise<ProviderResult<ProviderPayload>> {
+    const contractId = payloadString(payload, "contractId");
+    const installmentId = payloadString(payload, "installmentId");
+    if (!contractId || !installmentId) {
+      return unavailable("MASTER_PAYMENT_SELECTION_INVALID", "No fue posible validar la obligación seleccionada.");
+    }
+
+    try {
+      const contracts = await this.master.getContractsByPerson(subjectRef);
+      const contract = contracts.find((candidate) => candidate.contractId === contractId);
+      if (!contract) {
+        return unavailable("MASTER_PAYMENT_SELECTION_INVALID", "No fue posible validar la obligación seleccionada.");
+      }
+
+      const installments = await this.master.getOutstandingInstallments(contract.contractId);
+      const installment = installments.find((candidate) => candidate.installmentId === installmentId);
+      if (!installment) {
+        return unavailable("MASTER_PAYMENT_NOT_PAYABLE", "La obligación seleccionada ya no está disponible para pago.");
+      }
+
+      const amountCents = positiveMasterDecimalToCents(installment.balance);
+      if (amountCents === null || !installment.dueDate) {
+        return unavailable("MASTER_PAYMENT_QUOTE_INVALID", "No fue posible calcular el valor actual de la obligación.");
+      }
+
+      return {
+        status: "VERIFIED",
+        data: {
+          id: installment.installmentId,
+          reference: contract.contractId,
+          label: installment.installmentNumber === null ? "Cuota ASODEF" : `Cuota ${installment.installmentNumber}`,
+          amount: installment.balance,
+          amountCents,
+          currency: "COP",
+          status: payableInstallmentStatus(installment),
+          dueDate: installment.dueDate,
+        },
+      };
+    } catch {
+      return unavailable("MASTER_PAYMENT_QUOTE_UNAVAILABLE", "No fue posible verificar la obligación en el sistema maestro.", true);
+    }
   }
 
   applyConfirmedPayment(): Promise<ProviderResult<ProviderPayload>> {
