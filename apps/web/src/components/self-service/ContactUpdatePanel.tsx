@@ -24,6 +24,10 @@ function ResultAlert({ result }: { result?: ResourceResult<ProviderPayload> }) {
  * provider to apply the change. */
 export function ContactUpdatePanel() {
   const { state } = useAffiliateSelfService();
+  const canManageContact = Boolean(
+    state.scopes?.includes("affiliate:contact:manage") &&
+    state.scopes?.includes("affiliate:profile:update"),
+  );
   const [channel, setChannel] = useState<SelfServiceChannelKind>("email");
   const [destination, setDestination] = useState("");
   const [requestId, setRequestId] = useState<string>();
@@ -60,12 +64,24 @@ export function ContactUpdatePanel() {
 
   function submitStart(event: FormEvent) {
     event.preventDefault();
-    if (state.status === "verified" && state.csrfToken) start.mutate();
+    if (state.status === "verified" && state.csrfToken && canManageContact) start.mutate();
   }
 
   function submitCode(event: FormEvent) {
     event.preventDefault();
-    if (requestId && code.length === 6 && state.csrfToken) verify.mutate();
+    if (requestId && code.length === 6 && state.csrfToken && canManageContact) verify.mutate();
+  }
+
+  if (!canManageContact) {
+    return (
+      <Card className="space-y-4" aria-labelledby="contact-update-title">
+        <div>
+          <h2 id="contact-update-title" className="font-display text-xl font-semibold text-brand-dark">Actualizar correo o teléfono</h2>
+          <p className="mt-2 text-sm leading-6 text-text-muted">La consulta de tu información ya está habilitada. La actualización de datos se activará cuando esté disponible el canal controlado de escritura.</p>
+        </div>
+        <Alert variant="info">Tus datos actuales no serán modificados desde este modo de consulta.</Alert>
+      </Card>
+    );
   }
 
   return (
