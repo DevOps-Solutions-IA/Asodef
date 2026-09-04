@@ -32,6 +32,7 @@ export class SelfServiceAccessService {
   private readonly otpMinutes: number;
   private readonly otpMaxAttempts: number;
   private readonly deliveryCooldownSeconds: number;
+  private readonly otpEnabled: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -45,6 +46,7 @@ export class SelfServiceAccessService {
     this.otpMinutes = config.get("SELF_SERVICE_OTP_TTL_MINUTES", { infer: true });
     this.otpMaxAttempts = config.get("SELF_SERVICE_OTP_MAX_ATTEMPTS", { infer: true });
     this.deliveryCooldownSeconds = config.get("SELF_SERVICE_OTP_COOLDOWN_SECONDS", { infer: true });
+    this.otpEnabled = config.get("SELF_SERVICE_MESSAGE_PROVIDER", { infer: true }) === "whatsapp";
   }
 
   startAffiliate(input: AffiliateLookupInput, context: RequestContext) {
@@ -69,6 +71,10 @@ export class SelfServiceAccessService {
       if (lookup.status === "NOT_CONFIGURED") return { status: lookup.status, error: lookup.error };
       if (lookup.disclosureAllowed) return { status: "UNAVAILABLE" as const, error: lookup.error };
       return this.unavailable("ACCESS_UNAVAILABLE");
+    }
+
+    if (!this.otpEnabled) {
+      return this.createLookupSession(portal, lookupHash, lookup.data.subjectRef, context, ipHash);
     }
 
     const [channels, destinations] = portal === SelfServicePortal.AFFILIATE
@@ -315,6 +321,67 @@ export class SelfServiceAccessService {
     return { status: "VERIFIED" as const, ...session, portal };
   }
 
+  private async createLookupSession(
+    portal: SelfServicePortal,
+    lookupHash: string,
+    subjectRef: string,
+    context: RequestContext,
+    ipHash: string,
+  ) {
+    const lookupId = randomUUID();
+    const challengeId = randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + LOOKUP_MINUTES * 60_000);
+    const subjectRefEncrypted = this.crypto.encrypt(subjectRef);
+    const browserBindingHash = this.browserBindingHash(context);
+
+    await this.prisma.selfServiceAccessLookup.create({
+      data: {
+        id: lookupId,
+        portal,
+        lookupHash,
+        subjectRefEncrypted,
+        browserBindingHash,
+        channels: [],
+        destinationsEncrypted: this.crypto.encrypt("[]"),
+        expiresAt,
+      },
+    });
+
+    await this.prisma.selfServiceOtpChallenge.create({
+      data: {
+        id: challengeId,
+        accessLookupId: lookupId,
+        portal,
+        lookupHash,
+        subjectRefEncrypted,
+        browserBindingHash,
+        channel: "lookup",
+        channelReference: "lookup",
+        destinationMasked: "",
+        codeHash: this.crypto.hashOtp(challengeId, randomUUID()),
+        status: SelfServiceChallengeStatus.VERIFIED,
+        attempts: 0,
+        maxAttempts: 1,
+        expiresAt,
+        retryAvailableAt: now,
+        verifiedAt: now,
+      },
+    });
+
+    const session = await this.sessions.createLookup(challengeId, portal, subjectRef, {
+      ipAddress: context.ipAddress ?? null,
+      userAgent: context.userAgent ?? null,
+    });
+    await this.audit(portal, "LOOKUP_ACCESS", "VERIFIED", {
+      challengeId,
+      sessionId: session.sessionId,
+      ipHash,
+      subjectHash: this.crypto.fingerprint(subjectRef),
+    });
+    return { status: "VERIFIED" as const, ...session, portal };
+  }
+
   private matchChannels(channels: readonly VerificationChannel[], destinations: readonly ContactDestination[]) {
     return channels.flatMap((channel) => {
       if (!channel.enabled || !channel.verified || !channel.operationalCommunicationPermission) return [];
@@ -329,7 +396,8 @@ export class SelfServiceAccessService {
       if (!item || typeof item !== "object") return false;
       const candidate = item as Record<string, unknown>;
       return typeof candidate.id === "string" && this.isChannel(candidate.type) && typeof candidate.masked === "string" &&
-        typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" && typeof candidate.lastUpdatedAt === "string" &&
+        typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" &&
+        (candidate.lastUpdatedAt === undefined || typeof candidate.lastUpdatedAt === "string") &&
         typeof candidate.operationalCommunicationPermission === "boolean";
     });
   }
@@ -342,7 +410,8 @@ export class SelfServiceAccessService {
         if (!item || typeof item !== "object") return false;
         const candidate = item as Record<string, unknown>;
         return typeof candidate.id === "string" && this.isChannel(candidate.type) && typeof candidate.destination === "string" &&
-          typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" && typeof candidate.lastUpdatedAt === "string" &&
+          typeof candidate.enabled === "boolean" && typeof candidate.verified === "boolean" &&
+          (candidate.lastUpdatedAt === undefined || typeof candidate.lastUpdatedAt === "string") &&
           typeof candidate.operationalCommunicationPermission === "boolean";
       });
     } catch {

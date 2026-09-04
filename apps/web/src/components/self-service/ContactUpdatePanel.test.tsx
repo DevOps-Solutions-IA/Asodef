@@ -9,13 +9,14 @@ const api = vi.hoisted(() => ({
   verifyContactUpdate: vi.fn(),
   getContactUpdateStatus: vi.fn(),
 }));
+const session = vi.hoisted(() => ({ assurance: "OTP" as "OTP" | "LOOKUP" }));
 
 vi.mock("../../lib/self-service", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../lib/self-service")>();
   return {
     ...original,
     selfServiceApi: api,
-    useAffiliateSelfService: () => ({ state: { status: "verified", csrfToken: "csrf", scopes: ["affiliate:contact:manage"] } }),
+    useAffiliateSelfService: () => ({ state: { status: "verified", assurance: session.assurance, csrfToken: "csrf", scopes: ["affiliate:contact:manage", "affiliate:profile:update"] } }),
   };
 });
 
@@ -27,7 +28,8 @@ function renderPanel() {
 }
 
 describe("ContactUpdatePanel", () => {
-  it("verifies the new destination and waits for provider confirmation before saying applied", async () => {
+  it("verifies the new destination and waits for provider confirmation before saying applied in OTP mode", async () => {
+    session.assurance = "OTP";
     api.startContactUpdate.mockResolvedValue({ status: "success", data: { requestId: "request-1", status: "DRAFT", maskedDestination: "n***@dominio.com" } });
     api.requestContactUpdateCode.mockResolvedValue({ status: "success", data: { requestId: "request-1", status: "CHALLENGE_PENDING", maskedDestination: "n***@dominio.com" } });
     api.verifyContactUpdate.mockResolvedValue({ status: "success", data: { requestId: "request-1", status: "SUBMITTED" } });
@@ -45,5 +47,13 @@ describe("ContactUpdatePanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Consultar estado" }));
     expect(await screen.findByText("El proveedor confirmó la actualización.")).toBeInTheDocument();
+  });
+
+  it("does not pretend a Master contact write exists in LOOKUP mode", () => {
+    session.assurance = "LOOKUP";
+    renderPanel();
+
+    expect(screen.getByText(/write bridge certificado hacia AdaSys/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nuevo destino")).not.toBeInTheDocument();
   });
 });

@@ -199,6 +199,42 @@ describe("validateEnv", () => {
     ).toThrow(/SMTP_FROM/);
   });
 
+  it("requires a complete WhatsApp OTP configuration when the provider is enabled", () => {
+    expect(() =>
+      validateEnv({
+        ...VALID_ENV,
+        SELF_SERVICE_MESSAGE_PROVIDER: "whatsapp",
+      }),
+    ).toThrow(/WHATSAPP_GRAPH_API_VERSION/);
+
+    const result = validateEnv({
+      ...VALID_ENV,
+      SELF_SERVICE_MESSAGE_PROVIDER: "whatsapp",
+      WHATSAPP_GRAPH_API_VERSION: "v24.0",
+      WHATSAPP_PHONE_NUMBER_ID: "123456789012345",
+      WHATSAPP_ACCESS_TOKEN: "fixture-value-abcdefghijklmnopqrstuvwxyz",
+      WHATSAPP_OTP_TEMPLATE_NAME: "asodef_otp",
+      WHATSAPP_OTP_TEMPLATE_LANGUAGE: "es",
+    });
+    expect(result.SELF_SERVICE_MESSAGE_PROVIDER).toBe("whatsapp");
+    expect(result.WHATSAPP_PHONE_NUMBER_ID).toBe("123456789012345");
+    expect(result.WHATSAPP_OTP_TEMPLATE_NAME).toBe("asodef_otp");
+  });
+
+  it("rejects invalid WhatsApp Graph versions, phone ids and template names", () => {
+    expect(() =>
+      validateEnv({
+        ...VALID_ENV,
+        SELF_SERVICE_MESSAGE_PROVIDER: "whatsapp",
+        WHATSAPP_GRAPH_API_VERSION: "latest",
+        WHATSAPP_PHONE_NUMBER_ID: "not-numeric",
+        WHATSAPP_ACCESS_TOKEN: "fixture-value-abcdefghijklmnopqrstuvwxyz",
+        WHATSAPP_OTP_TEMPLATE_NAME: "ASODEF OTP",
+        WHATSAPP_OTP_TEMPLATE_LANGUAGE: "es",
+      }),
+    ).toThrow(/WHATSAPP_/);
+  });
+
   it("keeps Firebird disabled without requiring or resolving any connection fields", () => {
     const result = validateEnv({
       ...VALID_ENV,

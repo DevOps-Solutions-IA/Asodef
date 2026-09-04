@@ -153,7 +153,16 @@ const READY_QUERIES = {
   },
   findCompanyByNit: {
     name: "findCompanyByNit",
-    sql: `SELECT e.NIT FROM TBLEMPRESAS e WHERE e.NIT = ?`,
+    sql: `SELECT FIRST 2
+      e.NIT,
+      e.EMPRESA AS COMPANY_NAME,
+      e.ESTADOEMP AS COMPANY_STATUS,
+      e.CELULARENCARGADO AS CONTACT_MOBILE,
+      e.TELEFONOENCARGADO AS CONTACT_PHONE,
+      e.TELEFONO2 AS PHONE2,
+      e.TELEFONO AS PHONE
+    FROM TBLEMPRESAS e
+    WHERE e.NIT = ?`,
     tables: ["TBLEMPRESAS"],
     parameterCount: 1,
     purpose: "FUNCTIONAL",
@@ -247,14 +256,17 @@ const READY_QUERIES = {
   },
 } as const satisfies Partial<Record<MasterQueryName, FirebirdQueryDefinition>>;
 
-export const BLOCKED_MASTER_QUERIES = {
+export const DERIVED_MASTER_OPERATIONS = {
   getOutstandingInstallments: {
     name: "getOutstandingInstallments",
-    readiness: "BLOCKED_WITH_EVIDENCE",
-    reason:
-      "TBLCUOTASCONTRATO expone SALDO, ESTADO, ACUERDO y FECHAVENCE, pero no existe una regla aprobada que determine cuáles combinaciones representan una obligación pendiente",
-    tables: ["TBLCUOTASCONTRATO"],
+    readiness: "DERIVED_FROM_READY_QUERY",
+    sourceQuery: "getContractInstallments",
+    rule:
+      "saldo positivo; todas las cuotas vencidas más la cuota vigente (primera no vencida); pagos parciales conservan únicamente el saldo restante",
   },
+} as const;
+
+export const BLOCKED_MASTER_QUERIES = {
   getPaymentReceipt: {
     name: "getPaymentReceipt",
     readiness: "BLOCKED_WITH_EVIDENCE",
@@ -325,6 +337,13 @@ for (const definition of Object.values(MASTER_QUERY_CATALOG)) {
 export function requireReadyQuery(name: MasterQueryName): FirebirdQueryDefinition {
   const definition = MASTER_QUERY_CATALOG[name];
   if (definition) return definition;
+  const derived = DERIVED_MASTER_OPERATIONS[name as keyof typeof DERIVED_MASTER_OPERATIONS];
+  if (derived) {
+    throw new MasterQueryNotReadyError(
+      name,
+      `la operación es derivada en aplicación desde ${derived.sourceQuery}; no debe ejecutar SQL independiente`,
+    );
+  }
   const blocked = BLOCKED_MASTER_QUERIES[name as keyof typeof BLOCKED_MASTER_QUERIES];
   throw new MasterQueryNotReadyError(name, blocked?.reason ?? "no existe una consulta aprobada");
 }

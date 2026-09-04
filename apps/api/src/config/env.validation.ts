@@ -157,7 +157,7 @@ export const envSchema = z
       .max(600)
       .default(60),
     EXTERNAL_CORE_PROVIDER: z
-      .enum(["not_configured", "http"])
+      .enum(["not_configured", "http", "master"])
       .default("not_configured"),
     EXTERNAL_CORE_BASE_URL: z.string().default(""),
     EXTERNAL_CORE_CLIENT_ID: z.string().default(""),
@@ -170,8 +170,19 @@ export const envSchema = z
       .default(5_000),
     EXTERNAL_CORE_WEBHOOK_SECRET: z.string().default(""),
     SELF_SERVICE_MESSAGE_PROVIDER: z
-      .enum(["not_configured"])
+      .enum(["not_configured", "whatsapp"])
       .default("not_configured"),
+    WHATSAPP_GRAPH_API_VERSION: z.string().trim().default(""),
+    WHATSAPP_PHONE_NUMBER_ID: z.string().trim().default(""),
+    WHATSAPP_ACCESS_TOKEN: z.string().default(""),
+    WHATSAPP_OTP_TEMPLATE_NAME: z.string().trim().default(""),
+    WHATSAPP_OTP_TEMPLATE_LANGUAGE: z.string().trim().default(""),
+    WHATSAPP_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(30_000)
+      .default(5_000),
 
     // Firebird master-system integration is an internal, read-only bounded
     // context. It remains disabled unless every connection field is supplied
@@ -526,6 +537,81 @@ export const envSchema = z
         }
       }
     }
+    if (config.SELF_SERVICE_MESSAGE_PROVIDER === "whatsapp") {
+      const requiredWhatsAppFields: Array<keyof typeof config> = [
+        "WHATSAPP_GRAPH_API_VERSION",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_OTP_TEMPLATE_NAME",
+        "WHATSAPP_OTP_TEMPLATE_LANGUAGE",
+      ];
+      for (const field of requiredWhatsAppFields) {
+        if (!config[field]) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: `${field} is required when SELF_SERVICE_MESSAGE_PROVIDER=whatsapp`,
+          });
+        }
+      }
+
+      if (
+        config.WHATSAPP_GRAPH_API_VERSION &&
+        !/^v\d+\.\d+$/.test(config.WHATSAPP_GRAPH_API_VERSION)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_GRAPH_API_VERSION"],
+          message: "WHATSAPP_GRAPH_API_VERSION must use the vNN.N format",
+        });
+      }
+
+      if (
+        config.WHATSAPP_PHONE_NUMBER_ID &&
+        !/^\d{5,30}$/.test(config.WHATSAPP_PHONE_NUMBER_ID)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_PHONE_NUMBER_ID"],
+          message: "WHATSAPP_PHONE_NUMBER_ID must be numeric",
+        });
+      }
+
+      if (
+        config.WHATSAPP_ACCESS_TOKEN &&
+        (config.WHATSAPP_ACCESS_TOKEN.length < 20 ||
+          /[\r\n]/.test(config.WHATSAPP_ACCESS_TOKEN))
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_ACCESS_TOKEN"],
+          message: "WHATSAPP_ACCESS_TOKEN is invalid",
+        });
+      }
+
+      if (
+        config.WHATSAPP_OTP_TEMPLATE_NAME &&
+        !/^[a-z0-9_]{1,512}$/.test(config.WHATSAPP_OTP_TEMPLATE_NAME)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_OTP_TEMPLATE_NAME"],
+          message: "WHATSAPP_OTP_TEMPLATE_NAME must contain lowercase letters, digits or underscores",
+        });
+      }
+
+      if (
+        config.WHATSAPP_OTP_TEMPLATE_LANGUAGE &&
+        !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(config.WHATSAPP_OTP_TEMPLATE_LANGUAGE)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["WHATSAPP_OTP_TEMPLATE_LANGUAGE"],
+          message: "WHATSAPP_OTP_TEMPLATE_LANGUAGE is invalid",
+        });
+      }
+    }
+
     if (config.EXTERNAL_CORE_PROVIDER === "http") {
       const required: Array<keyof typeof config> = [
         "EXTERNAL_CORE_BASE_URL",

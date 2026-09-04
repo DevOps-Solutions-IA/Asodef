@@ -14,6 +14,7 @@ describe("self-service session security", () => {
     expect(result.rawToken).toBe("raw-session-token");
     const persisted = create.mock.calls[0]?.[0].data;
     expect(persisted).toMatchObject({ tokenHash: "opaque-session-hash", csrfTokenHash: "opaque-csrf-hash", subjectRefEncrypted: "encrypted:external-reference", assurance: "OTP", scopes: expect.arrayContaining(["affiliate:contact:manage", "affiliate:profile:update"]) });
+    expect(persisted.scopes).not.toContain("payments:reverse");
     expect(JSON.stringify(persisted)).not.toContain("raw-session-token");
     expect(JSON.stringify(persisted)).not.toContain("raw-csrf-token");
   });

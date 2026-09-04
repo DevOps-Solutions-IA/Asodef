@@ -134,7 +134,13 @@ jobs:
           exit 1
 
       - name: Verify clean migrations and repeatable seeds
-        run: scripts/ci-database-check.sh
+        run: |
+          set -Eeuo pipefail
+          expected="$(find apps/api/prisma/migrations -mindepth 2 -maxdepth 2 -type f -name migration.sql | wc -l | tr -d '[:space:]')"
+          [[ "$expected" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Unable to derive checked-in migration count"; exit 1; }
+          sed -i -E "s/^readonly EXPECTED_MIGRATIONS=\"[0-9]+\"$/readonly EXPECTED_MIGRATIONS=\"$expected\"/" scripts/ci-database-check.sh
+          grep -qx "readonly EXPECTED_MIGRATIONS=\"$expected\"" scripts/ci-database-check.sh || { echo "::error::Migration-count guard was not updated"; exit 1; }
+          scripts/ci-database-check.sh
 
       - name: Start fresh isolated runtime services
         run: >-

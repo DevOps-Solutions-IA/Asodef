@@ -21,11 +21,14 @@ export class AffiliateSelfServiceController {
   constructor(private readonly access: SelfServiceAccessService, private readonly sessions: SelfServiceSessionService, private readonly cookies: SelfServiceCookieService, private readonly gateway: SelfServiceGatewayService, private readonly contactUpdates: SelfServiceContactUpdateService) {}
 
   @Post("access/start") @HttpCode(HttpStatus.OK)
-  start(@Body() dto: AffiliateAccessStartDto, @Req() request: SelfServiceRequest) {
+  async start(@Body() dto: AffiliateAccessStartDto, @Req() request: SelfServiceRequest, @Res({ passthrough: true }) response: Response) {
     const input = dto.identifierMode === "DOCUMENT"
       ? { identifierMode: dto.identifierMode, documentType: dto.documentType!, identifier: dto.identifier } as const
       : { identifierMode: dto.identifierMode, identifier: dto.identifier } as const;
-    return this.access.startAffiliate(input, buildRequestContext(request));
+    const result = await this.access.startAffiliate(input, buildRequestContext(request));
+    if (result.status !== "VERIFIED") return result;
+    this.cookies.set(response, SelfServicePortal.AFFILIATE, result.rawToken, result.expiresAt);
+    return { status: result.status, sessionId: result.sessionId, csrfToken: result.csrfToken, expiresAt: result.expiresAt, scopes: result.scopes, assurance: result.assurance, portal: result.portal };
   }
 
   @Post("access/request-code") @HttpCode(HttpStatus.OK)
@@ -58,6 +61,7 @@ export class AffiliateSelfServiceController {
   async logout(@Req() request: SelfServiceRequest, @Res({ passthrough: true }) response: Response) { await this.sessions.revoke(this.principal(request).sessionId); this.cookies.clear(response, SelfServicePortal.AFFILIATE); return { status: "VERIFIED" }; }
 
   @Get("summary") @UseGuards(SelfServiceSessionGuard) summary(@Req() request: SelfServiceRequest) { return this.affiliatePayload(request, "affiliate:summary:read", (ref) => this.gateway.core.getAffiliateSummary(ref), SELF_SERVICE_PUBLIC_FIELDS.affiliateSummary); }
+  @Get("contracts") @UseGuards(SelfServiceSessionGuard) contracts(@Req() request: SelfServiceRequest) { return this.affiliateCollection(request, "affiliate:contracts:read", (ref) => this.gateway.core.getAffiliateContracts(ref), SELF_SERVICE_PUBLIC_FIELDS.contracts); }
   @Get("beneficiaries") @UseGuards(SelfServiceSessionGuard) beneficiaries(@Req() request: SelfServiceRequest) { return this.affiliateCollection(request, "affiliate:beneficiaries:read", (ref) => this.gateway.core.getAffiliateBeneficiaries(ref), SELF_SERVICE_PUBLIC_FIELDS.beneficiaries); }
   @Get("account-statement") @UseGuards(SelfServiceSessionGuard) statement(@Req() request: SelfServiceRequest) { return this.affiliatePayload(request, "affiliate:account:read", (ref) => this.gateway.core.getAffiliateAccountStatement(ref), SELF_SERVICE_PUBLIC_FIELDS.accountStatement); }
   @Get("obligations") @UseGuards(SelfServiceSessionGuard) obligations(@Req() request: SelfServiceRequest) { return this.affiliateCollection(request, "affiliate:account:read", (ref) => this.gateway.core.getAffiliateObligations(ref), SELF_SERVICE_PUBLIC_FIELDS.obligations); }

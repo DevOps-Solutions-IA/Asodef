@@ -1,6 +1,6 @@
 # Arquitectura de autoservicio ASODEF
 
-Estado: implementada localmente, preparada para proveedor externo, cerrada por defecto (`NOT_CONFIGURED`).
+Estado: adaptador Master de solo lectura implementado; acceso temporal por lookup habilitado para no detener la integración; OTP preparado para WhatsApp Cloud API y aplazado hasta provisionar plantilla/token.
 
 ## Dominios de acceso
 
@@ -10,26 +10,37 @@ Estado: implementada localmente, preparada para proveedor externo, cerrada por d
 
 Los accesos públicos comparten `PublicHeader`. Los portales verificados usan shells propios. El Centro Legal mantiene su layout congelado.
 
-## Flujo de verificación
+## Flujo de acceso actual y OTP futuro
 
 1. El BFF consulta `ExternalCoreProvider`; el navegador nunca llama al sistema externo.
-2. El proveedor entrega canales habilitados, verificados y autorizados. Los destinos completos se conservan cifrados solo en backend; la respuesta pública contiene únicamente máscaras.
-3. ASODEF genera el OTP con aleatoriedad criptográfica, almacena solo su hash y lo entrega mediante `SelfServiceMessageProvider`.
-4. El desafío queda ligado al identificador derivado, portal, canal, IP, agente de usuario y vencimiento. Tiene enfriamiento, máximo de intentos, bloqueo y consumo único.
-5. Una validación correcta crea una cookie opaca independiente por portal, `HttpOnly`, `SameSite=Strict`, `Secure` en producción y con vigencia corta.
-6. Las mutaciones exigen alcance, nivel de garantía OTP, idempotencia y un token CSRF rotatorio de un solo uso.
+2. Mientras `SELF_SERVICE_MESSAGE_PROVIDER=not_configured`, un lookup válido crea una sesión corta con garantía `LOOKUP`, ligada al navegador y separada de las sesiones administrativas.
+3. La sesión `LOOKUP` mantiene las operaciones ordinarias aprobadas para esta fase: lectura, actualización de contacto/perfil y cotización de pagos. Cambios de beneficiarios y carga de documentos sensibles permanecen reservados para OTP.
+4. La aplicación de un pago confirmado no es una operación del navegador: solo una confirmación confiable del proveedor de pagos podrá activar el futuro write bridge hacia el legado.
+5. Cuando WhatsApp OTP se active, el proveedor entregará canales habilitados, verificados y autorizados. Los destinos completos se conservarán cifrados solo en backend; la respuesta pública contendrá únicamente máscaras.
+6. ASODEF generará el OTP con aleatoriedad criptográfica, almacenará solo su hash y lo entregará mediante `SelfServiceMessageProvider`. El transporte preparado para autoservicio es WhatsApp Cloud API mediante una plantilla `AUTHENTICATION` aprobada.
+7. Tanto `LOOKUP` como `OTP` crean cookies opacas independientes por portal, `HttpOnly`, `SameSite=Strict`, `Secure` en producción y con vigencia corta. Las mutaciones autorizadas exigen alcance, idempotencia y token CSRF rotatorio de un solo uso.
 
 Las respuestas de lookup son anti-enumeración: salvo autorización explícita del proveedor, “no existe” y “no disponible” no se distinguen ante el navegador.
 
 ## Contrato externo
 
-`ExternalCoreProvider` cubre consulta inicial, canales, afiliación, beneficiarios, estado de cuenta, obligaciones, pagos, comprobantes, documentos, solicitudes, empresas, contratos, reportes, cambios de beneficiarios, aplicación/reversión de pagos y actualización de contactos. El registro de proveedor expone estado de salud estable.
+`ExternalCoreProvider` cubre consulta inicial, canales, afiliación, beneficiarios, estado de cuenta, obligaciones, pagos, comprobantes, documentos, solicitudes, empresas, contratos, reportes, cambios de beneficiarios, aplicación de pagos y actualización de contactos. El adaptador Master actual ejecuta únicamente consultas aprobadas con `ASODEF_READONLY`; las escrituras permanecen fuera de ese canal hasta disponer de un mecanismo legado certificado.
 
-El repositorio no contiene URL ni credenciales de producción ni datos sintéticos. El adaptador incluido devuelve `NOT_CONFIGURED`; seleccionar un adaptador no instalado detiene el arranque de forma explícita.
+El estado de cuenta del afiliado se deriva exclusivamente de los contratos y del conjunto de cuotas pagables certificado: saldo vencido positivo más la cuota vigente (la fecha no vencida más temprana, incluyendo empates). Los pagos parciales usan únicamente el `SALDO` restante y los importes se convierten a centavos COP sin punto flotante.
 
-## Actualización sensible de contacto
+El Centro de Pagos también revalida las obligaciones Master contra esa misma autoridad antes de cualquier paso futuro de checkout. La selección enviada al navegador es opaca y no constituye prueba del valor financiero; el backend vuelve a leer Firebird antes del preflight.
 
-La sesión OTP prueba primero el canal actualmente registrado. La persona informa el nuevo destino, ASODEF verifica ese nuevo destino con otro OTP y después solicita el cambio al core externo. Los estados `VERIFIED` y `SUBMITTED` no significan que el dato fue aplicado. Solo una confirmación `APPLIED` del proveedor permite mostrar el cambio como aplicado. Las notificaciones al destino anterior y al nuevo son fail-closed y requieren permisos operativos expresos del proveedor.
+## Actualización de contacto
+
+La interfaz y los scopes permiten continuar el flujo de actualización aun cuando WhatsApp OTP esté aplazado. Sin embargo, el adaptador Master de producción sigue siendo de solo lectura: un cambio solo podrá mostrarse como aplicado cuando un futuro write bridge certificado confirme `APPLIED`. No se ejecutan `UPDATE`, `INSERT` o `DELETE` arbitrarios contra Firebird.
+
+Cuando OTP se active, la verificación por WhatsApp podrá elevar el mismo flujo sin alterar la autoridad de datos ni la separación de capas.
+
+## Pagos
+
+El cliente puede consultar y cotizar una obligación, y posteriormente iniciar checkout cuando la integración esté completa. No existe un endpoint de cliente para “marcar” un pago como confirmado o aplicado. La confirmación monetaria debe provenir de Bold por un canal autenticado/verificado; únicamente después de esa confirmación el backend podrá invocar el write bridge idempotente del legado.
+
+La reversa tampoco forma parte del autoservicio del cliente.
 
 ## Endpoints
 
@@ -38,17 +49,19 @@ Namespace: `/api/v1/self-service`.
 - `affiliate|company/access/start`, `request-code`, `resend`, `verify`.
 - `affiliate|company/session` (`GET`, `DELETE`).
 - recursos de afiliado y empresa bajo su portal correspondiente.
-- ciclo completo `affiliate/beneficiary-change-requests`.
+- ciclo `affiliate/beneficiary-change-requests` (mutaciones sensibles reservadas para OTP y además sujetas al proveedor legado).
 - `affiliate/contact-updates/start|request-code|verify|:requestId/status`.
-- `payments/quote|apply-confirmed|application/:id|reverse`.
+- `payments/quote|application/:id`; la aplicación confirmada es backend-only y la reversa no forma parte del autoservicio.
 - `provider-health`.
+
+El Centro de Pagos público añade `POST /api/v1/payment-orders/master/preflight` para revalidar una obligación Master sin crear una orden ni iniciar Bold mientras la aplicación al legado no esté certificada.
 
 Los controladores están agrupados en Swagger de desarrollo. Los secretos se suministran únicamente desde el gestor de configuración del entorno.
 
 ## Variables documentadas
 
-`EXTERNAL_CORE_PROVIDER`, `EXTERNAL_CORE_BASE_URL`, `EXTERNAL_CORE_CLIENT_ID`, `EXTERNAL_CORE_CLIENT_SECRET`, `EXTERNAL_CORE_TIMEOUT_MS`, `EXTERNAL_CORE_WEBHOOK_SECRET`, `SELF_SERVICE_MESSAGE_PROVIDER`, `SELF_SERVICE_SESSION_TTL_MINUTES`, `SELF_SERVICE_OTP_TTL_MINUTES`, `SELF_SERVICE_OTP_MAX_ATTEMPTS` y `SELF_SERVICE_OTP_COOLDOWN_SECONDS`.
+`EXTERNAL_CORE_PROVIDER`, `EXTERNAL_CORE_TIMEOUT_MS`, `SELF_SERVICE_MESSAGE_PROVIDER`, `SELF_SERVICE_SESSION_TTL_MINUTES`, `SELF_SERVICE_OTP_TTL_MINUTES`, `SELF_SERVICE_OTP_MAX_ATTEMPTS`, `SELF_SERVICE_OTP_COOLDOWN_SECONDS`, `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_OTP_TEMPLATE_NAME`, `WHATSAPP_OTP_TEMPLATE_LANGUAGE` y `WHATSAPP_TIMEOUT_MS`.
 
 ## Límites reales
 
-No existe todavía un adaptador ni credenciales del sistema externo. Por esa razón el runtime local muestra un estado controlado de proveedor no configurado y jamás fabrica afiliados, beneficiarios, saldos, pagos, empresas, OTP entregados o confirmaciones.
+El adaptador Master existe y permanece limitado a lectura. WhatsApp OTP no se considera operativo hasta que la plantilla `AUTHENTICATION` esté aprobada y el token/Phone Number ID se provisionen por canal secreto. La ausencia temporal de OTP no deshabilita las funciones ordinarias definidas por scopes, pero cualquier operación que requiera escritura real en el legado continúa fallando cerrada hasta que exista un write bridge certificado e idempotente.

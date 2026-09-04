@@ -7,7 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { FileSearch, LockKeyhole, ReceiptText, ShieldCheck } from "lucide-react";
 import { Alert, Button, Card, EmptyState, FormField, Input, StatusBadge } from "@asodef/ui";
 import { ApiError } from "../../lib/api-error";
-import { createPaymentOrder, lookupPayments } from "../../lib/payments/payments-api";
+import { createPaymentOrder, lookupPayments, preflightMasterPayment } from "../../lib/payments/payments-api";
 import type { PaymentsLookupResponse } from "../../lib/payments/payments-types";
 import { formatCurrency } from "./format-currency";
 import { getObligationStatusLabel } from "./obligation-status-labels";
@@ -33,6 +33,7 @@ export function PaymentLookupPage() {
   const [result, setResult] = useState<PaymentsLookupResponse | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [verifiedMasterSelections, setVerifiedMasterSelections] = useState<Record<string, true>>({});
 
   const {
     register,
@@ -47,6 +48,7 @@ export function PaymentLookupPage() {
     mutationFn: lookupPayments,
     onSuccess: (data) => {
       setFormError(null);
+      setVerifiedMasterSelections({});
       if (data.type === "order") {
         // A reference always resolves to exactly one order - go straight
         // to its summary (US-030) rather than rendering it inline here.
@@ -59,6 +61,7 @@ export function PaymentLookupPage() {
     },
     onError: (error) => {
       setResult(null);
+      setVerifiedMasterSelections({});
       if (error instanceof ApiError && error.kind === "not_found") {
         setNotFound(true);
         setFormError(null);
@@ -79,14 +82,47 @@ export function PaymentLookupPage() {
     },
   });
 
+  const masterPreflightMutation = useMutation({
+    mutationFn: preflightMasterPayment,
+    onSuccess: (verified, selectionToken) => {
+      setFormError(null);
+      setVerifiedMasterSelections((current) => ({ ...current, [selectionToken]: true }));
+      setResult((current) => {
+        if (!current || current.type !== "customer") return current;
+        return {
+          ...current,
+          obligations: current.obligations.map((obligation) =>
+            obligation.obligationId === selectionToken
+              ? {
+                  ...obligation,
+                  concept: verified.obligation.concept,
+                  amountCents: verified.obligation.amountCents,
+                  currency: verified.obligation.currency,
+                  dueDate: verified.obligation.dueDate,
+                  status: verified.obligation.status,
+                  source: "master",
+                  onlinePaymentAvailable: false,
+                }
+              : obligation,
+          ),
+        };
+      });
+    },
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "No fue posible verificar el saldo en este momento.");
+    },
+  });
+
   const onSubmit = handleSubmit((values) => {
     setResult(null);
     setNotFound(false);
     setFormError(null);
+    setVerifiedMasterSelections({});
     lookupMutation.mutate({ documentType: values.documentType.trim(), documentNumber: values.documentNumber.trim() });
   });
 
   const isBusy = isSubmitting || lookupMutation.isPending || createOrderMutation.isPending;
+  const hasMasterObligations = result?.type === "customer" && result.obligations.some((obligation) => obligation.source === "master");
 
   return (
     <div className="mx-auto w-full max-w-[75rem]">
@@ -150,36 +186,63 @@ export function PaymentLookupPage() {
             {result.customer.documentType} {result.customer.maskedDocumentNumber}
           </p>
 
+          {hasMasterObligations && (
+            <Alert variant="info" className="mt-5">
+              Obligaciones consultadas directamente en el sistema maestro de ASODEF. El cobro en línea permanecerá deshabilitado hasta completar la aplicación automática y trazable del pago en el sistema maestro.
+            </Alert>
+          )}
+
           <ul className="mt-6 flex flex-col gap-3">
-            {result.obligations.map((obligation) => (
-              <li
-                key={obligation.obligationId}
-                className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-all duration-enterprise hover:-translate-y-0.5 hover:border-border-strong hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-text-main">{obligation.concept}</p>
-                  <p className="text-sm text-text-muted">Vence: {new Date(obligation.dueDate).toLocaleDateString("es-CO")}</p>
-                  <StatusBadge
-                    tone={obligation.status === "OVERDUE" ? "rejected" : "pending"}
-                    label={getObligationStatusLabel(obligation.status)}
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-display text-lg font-semibold tabular-nums text-brand-dark">
-                    {formatCurrency(obligation.amountCents, obligation.currency)}
-                  </p>
-                  <Button
-                    type="button"
-                    loading={createOrderMutation.isPending && createOrderMutation.variables === obligation.obligationId}
-                    disabled={isBusy}
-                    onClick={() => createOrderMutation.mutate(obligation.obligationId)}
-                  >
-                    Pagar
-                  </Button>
-                </div>
-              </li>
-            ))}
+            {result.obligations.map((obligation) => {
+              const onlinePaymentAvailable = obligation.onlinePaymentAvailable !== false;
+              const masterVerified = verifiedMasterSelections[obligation.obligationId] === true;
+              const isVerifyingThisMaster = masterPreflightMutation.isPending && masterPreflightMutation.variables === obligation.obligationId;
+              return (
+                <li
+                  key={obligation.obligationId}
+                  className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-all duration-enterprise hover:-translate-y-0.5 hover:border-border-strong hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium text-text-main">{obligation.concept}</p>
+                    <p className="text-sm text-text-muted">Vence: {new Date(obligation.dueDate).toLocaleDateString("es-CO")}</p>
+                    <StatusBadge
+                      tone={obligation.status === "OVERDUE" ? "rejected" : "pending"}
+                      label={getObligationStatusLabel(obligation.status)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <div className="flex items-center gap-4">
+                      <p className="font-display text-lg font-semibold tabular-nums text-brand-dark">
+                        {formatCurrency(obligation.amountCents, obligation.currency)}
+                      </p>
+                      {onlinePaymentAvailable ? (
+                        <Button
+                          type="button"
+                          loading={createOrderMutation.isPending && createOrderMutation.variables === obligation.obligationId}
+                          disabled={isBusy}
+                          onClick={() => createOrderMutation.mutate(obligation.obligationId)}
+                        >
+                          Pagar
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          loading={isVerifyingThisMaster}
+                          disabled={masterVerified || masterPreflightMutation.isPending}
+                          onClick={() => masterPreflightMutation.mutate(obligation.obligationId)}
+                        >
+                          {masterVerified ? "Saldo verificado" : "Verificar saldo"}
+                        </Button>
+                      )}
+                    </div>
+                    {!onlinePaymentAvailable && (
+                      <span className="text-xs font-medium text-text-muted">Pago en línea en integración</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}

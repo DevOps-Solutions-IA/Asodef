@@ -13,7 +13,16 @@ type PublicProviderPayload = Readonly<Record<string, PublicScalar>>;
 export const SELF_SERVICE_PUBLIC_FIELDS = {
   affiliateSummary: ["displayName", "identifierMasked", "status", "updatedAt"],
   beneficiaries: ["id", "displayName", "relationship", "status", "updatedAt"],
-  accountStatement: ["reference", "label", "amount", "currency", "status", "dueDate", "updatedAt"],
+  accountStatement: [
+    "status",
+    "balance",
+    "currency",
+    "overdueBalance",
+    "currentBalance",
+    "overdueCount",
+    "currentCount",
+    "contractCount",
+  ],
   obligations: ["id", "reference", "label", "amount", "currency", "status", "dueDate"],
   payments: ["id", "reference", "amount", "currency", "status", "date"],
   receipts: ["id", "reference", "status", "date", "downloadUrl"],
@@ -35,8 +44,6 @@ const MUTATION_PUBLIC_FIELDS: Readonly<Record<string, readonly string[]>> = {
   BENEFICIARY_CHANGE_DOCUMENT: SELF_SERVICE_PUBLIC_FIELDS.changeRequest,
   BENEFICIARY_CHANGE_SUBMIT: SELF_SERVICE_PUBLIC_FIELDS.changeRequest,
   BENEFICIARY_CHANGE_CANCEL: SELF_SERVICE_PUBLIC_FIELDS.changeRequest,
-  PAYMENT_APPLY_CONFIRMED: SELF_SERVICE_PUBLIC_FIELDS.paymentOperation,
-  PAYMENT_REVERSE: SELF_SERVICE_PUBLIC_FIELDS.paymentOperation,
   CONTACT_UPDATE_START: SELF_SERVICE_PUBLIC_FIELDS.contactUpdate,
   CONTACT_UPDATE_REQUEST_CODE: SELF_SERVICE_PUBLIC_FIELDS.contactUpdate,
   CONTACT_UPDATE_VERIFY: SELF_SERVICE_PUBLIC_FIELDS.contactUpdate,
@@ -56,7 +63,7 @@ export class SelfServiceGatewayService {
   }
 
   assertScope(principal: SelfServicePrincipal, scope: string): void {
-    if (principal.assurance !== "OTP" || !principal.scopes.includes(scope)) throw new ServiceUnavailableException("La sesión no autoriza esta operación.");
+    if (!principal.scopes.includes(scope)) throw new ServiceUnavailableException("La sesión no autoriza esta operación.");
   }
 
   async read<T>(operation: () => Promise<ProviderResult<T>>, options: { retry?: boolean } = {}): Promise<ProviderResult<T>> {

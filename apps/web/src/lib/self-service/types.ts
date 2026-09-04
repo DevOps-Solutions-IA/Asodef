@@ -18,6 +18,7 @@ export type SelfServiceResourceStatus =
   | "success";
 
 export type SelfServiceChannelKind = "sms" | "email" | "whatsapp";
+export type SelfServiceAssurance = "OTP" | "LOOKUP";
 
 export interface MaskedChallengeChannel {
   id: string;
@@ -39,10 +40,12 @@ export interface SelfServiceSessionState {
   expiresAt?: string;
   scopes?: readonly string[];
   csrfToken?: string;
+  assurance?: SelfServiceAssurance;
   message?: string;
 }
 
 export type AccessStartResult =
+  | { status: "VERIFIED"; expiresAt: string; scopes: readonly string[]; csrfToken: string; assurance: SelfServiceAssurance }
   | { status: "CHALLENGE_REQUIRED"; providerReference: string; channels: readonly { providerReference: string; channel: SelfServiceChannelKind; maskedDestination: string; availability: string; cooldownSeconds?: number }[]; expiresAt?: string }
   | { status: "LOCKED" | "EXPIRED"; message?: string }
   | { status: "NOT_CONFIGURED" | "UNAVAILABLE"; error: ProviderError };
@@ -53,12 +56,12 @@ export type ChallengeRequestResult =
   | { status: "NOT_CONFIGURED" | "UNAVAILABLE"; error: ProviderError };
 
 export type AccessVerifyResult =
-  | { status: "VERIFIED"; expiresAt: string; scopes: readonly string[]; csrfToken: string }
+  | { status: "VERIFIED"; expiresAt: string; scopes: readonly string[]; csrfToken: string; assurance: SelfServiceAssurance }
   | { status: "LOCKED" | "EXPIRED"; message?: string }
   | { status: "NOT_CONFIGURED" | "UNAVAILABLE"; error: ProviderError };
 
 export type SessionResult =
-  | { status: "VERIFIED"; expiresAt: string; scopes: readonly string[]; csrfToken?: string }
+  | { status: "VERIFIED"; expiresAt: string; scopes: readonly string[]; csrfToken?: string; assurance: SelfServiceAssurance }
   | { status: "ANONYMOUS" | "EXPIRED" | "LOCKED"; message?: string }
   | { status: "NOT_CONFIGURED" | "UNAVAILABLE"; error: ProviderError };
 

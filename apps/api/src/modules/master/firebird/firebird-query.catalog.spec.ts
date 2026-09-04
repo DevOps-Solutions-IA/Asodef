@@ -1,6 +1,7 @@
 import {
   assertReadOnlyQuery,
   BLOCKED_MASTER_QUERIES,
+  DERIVED_MASTER_OPERATIONS,
   MASTER_FUNCTIONAL_TABLES,
   MASTER_QUERY_CATALOG,
   normalizeSqlForInspection,
@@ -63,9 +64,9 @@ describe("Firebird read-only query catalog", () => {
   });
 
   it("keeps only operations with unconfirmed business semantics blocked", () => {
-    expect(BLOCKED_MASTER_QUERIES.getOutstandingInstallments).toMatchObject({
-      readiness: "BLOCKED_WITH_EVIDENCE",
-      tables: ["TBLCUOTASCONTRATO"],
+    expect(DERIVED_MASTER_OPERATIONS.getOutstandingInstallments).toMatchObject({
+      readiness: "DERIVED_FROM_READY_QUERY",
+      sourceQuery: "getContractInstallments",
     });
     expect(BLOCKED_MASTER_QUERIES.getPaymentReceipt).toMatchObject({
       readiness: "BLOCKED_WITH_EVIDENCE",
@@ -76,9 +77,22 @@ describe("Firebird read-only query catalog", () => {
       tables: ["TBLPERSONA", "TBLCONTRATO"],
     });
 
-    expect(() => requireReadyQuery("getOutstandingInstallments")).toThrow(/obligación pendiente/);
+    expect(() => requireReadyQuery("getOutstandingInstallments")).toThrow(/operación es derivada/);
     expect(() => requireReadyQuery("getPaymentReceipt")).toThrow(/catálogo aprobado/);
     expect(() => requireReadyQuery("getContractBeneficiaries")).toThrow(/pertenencia y vigencia/);
+  });
+
+  it("defines company lookup with only confirmed NIT and SMS contact columns", () => {
+    const query = requireReadyQuery("findCompanyByNit");
+    expect(query.sql).toContain("FIRST 2");
+    expect(query.sql).toContain("e.CELULARENCARGADO AS CONTACT_MOBILE");
+    expect(query.sql).toContain("e.TELEFONOENCARGADO AS CONTACT_PHONE");
+    expect(query.sql).toContain("e.TELEFONO2 AS PHONE2");
+    expect(query.sql).toContain("e.TELEFONO AS PHONE");
+    expect(query.sql).toContain("WHERE e.NIT = ?");
+    expect(query.parameterCount).toBe(1);
+    expect(query.tables).toEqual(["TBLEMPRESAS"]);
+    expect(() => assertReadOnlyQuery(query)).not.toThrow();
   });
 
   it("defines the person lookup as bounded parameterized SELECTs", () => {

@@ -109,7 +109,15 @@ describe("Firebird domain mappers", () => {
   });
 
   it("maps minimal company and plan rows without inventing descriptive fields", () => {
-    expect(mapCompany({ NIT: "900123" })).toEqual({ nit: "900123", name: null, status: null });
+    expect(mapCompany({ NIT: "900123" })).toEqual({
+      nit: "900123",
+      name: null,
+      status: null,
+      contactMobile: null,
+      contactPhone: null,
+      phone2: null,
+      phone: null,
+    });
     expect(mapPlan({ IDPLAN: 7 })).toEqual({
       planId: "7",
       name: null,

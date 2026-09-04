@@ -17,7 +17,7 @@ describe("SelfServiceAccessService security boundary", () => {
   const delivered = { status: "VERIFIED", data: { delivered: true } } as const;
   const operationalChannel = { enabled: true, verified: true, lastUpdatedAt: "2026-08-06T12:00:00.000Z", operationalCommunicationPermission: true } as const;
 
-  function build(coreOverrides: Record<string, unknown> = {}, messageResult: unknown = delivered) {
+  function build(coreOverrides: Record<string, unknown> = {}, messageResult: unknown = delivered, messageProvider: "whatsapp" | "not_configured" = "whatsapp") {
     const prisma = {
       selfServiceAccessLookup: {
         create: jest.fn(async (input: { data: Record<string, unknown> }) => input.data),
@@ -41,16 +41,32 @@ describe("SelfServiceAccessService security boundary", () => {
       ...coreOverrides,
     } as unknown as ExternalCoreProvider;
     const messages = { deliverOtp: jest.fn(async () => messageResult) } as unknown as SelfServiceMessageProvider;
+    const sessions = {
+      create: jest.fn(),
+      createLookup: jest.fn(async () => ({
+        sessionId: "lookup-session",
+        rawToken: "lookup-token",
+        csrfToken: "lookup-csrf",
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: ["affiliate:summary:read"],
+        assurance: "LOOKUP" as const,
+      })),
+    };
     const service = new SelfServiceAccessService(
       prisma as never,
       crypto,
-      { create: jest.fn() } as never,
+      sessions as never,
       { checkAndIncrement: jest.fn(async () => ({ limited: false, remaining: 2, retryAfterSeconds: 0 })) } as never,
       core,
       messages,
-      { get: (key: string) => ({ SELF_SERVICE_OTP_TTL_MINUTES: 10, SELF_SERVICE_OTP_MAX_ATTEMPTS: 5, SELF_SERVICE_OTP_COOLDOWN_SECONDS: 60 })[key as "SELF_SERVICE_OTP_TTL_MINUTES"] } as never,
+      { get: (key: string) => ({
+        SELF_SERVICE_OTP_TTL_MINUTES: 10,
+        SELF_SERVICE_OTP_MAX_ATTEMPTS: 5,
+        SELF_SERVICE_OTP_COOLDOWN_SECONDS: 60,
+        SELF_SERVICE_MESSAGE_PROVIDER: messageProvider,
+      })[key as "SELF_SERVICE_OTP_TTL_MINUTES"] } as never,
     );
-    return { service, prisma, messages };
+    return { service, prisma, messages, sessions, core };
   }
 
   it("propagates NOT_CONFIGURED without persisting a lookup or delivering a code", async () => {
@@ -72,6 +88,23 @@ describe("SelfServiceAccessService security boundary", () => {
     }).service;
     const input = { identifierMode: "TITULAR_NUMBER", identifier: "10000001" } as const;
     await expect(notFound.startAffiliate(input, context)).resolves.toEqual(await unavailable.startAffiliate(input, context));
+  });
+
+  it("creates a lookup-assurance session directly while the OTP transport is deferred", async () => {
+    const { service, prisma, messages, sessions, core } = build({
+      startAffiliateLookup: jest.fn(async () => ({ status: "VERIFIED", data: { subjectRef: "subject-1" } })),
+    }, delivered, "not_configured");
+
+    const result = await service.startAffiliate({ identifierMode: "DOCUMENT", documentType: "CC", identifier: "10000001" }, context);
+
+    expect(result).toMatchObject({ status: "VERIFIED", assurance: "LOOKUP", sessionId: "lookup-session" });
+    expect(core.getAffiliateVerificationChannels).not.toHaveBeenCalled();
+    expect(messages.deliverOtp).not.toHaveBeenCalled();
+    expect(prisma.selfServiceAccessLookup.create).toHaveBeenCalled();
+    expect(prisma.selfServiceOtpChallenge.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ channel: "lookup", status: "VERIFIED" }),
+    }));
+    expect(sessions.createLookup).toHaveBeenCalledWith(expect.any(String), SelfServicePortal.AFFILIATE, "subject-1", expect.objectContaining({ ipAddress: "127.0.0.1" }));
   });
 
   it("discovers masked channels while keeping full destinations encrypted and backend-only", async () => {

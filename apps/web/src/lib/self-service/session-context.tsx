@@ -28,6 +28,9 @@ interface SessionProviderProps<LookupInput> {
 const initialState: SelfServiceSessionState = { status: "lookup_pending" };
 
 function stateFromStart(result: AccessStartResult): SelfServiceSessionState {
+  if (result.status === "VERIFIED") {
+    return { status: "verified", expiresAt: result.expiresAt, scopes: result.scopes, csrfToken: result.csrfToken, assurance: result.assurance };
+  }
   if (result.status === "CHALLENGE_REQUIRED") {
     return {
       status: "challenge_required",
@@ -44,7 +47,7 @@ function stateFromStart(result: AccessStartResult): SelfServiceSessionState {
 
 function stateFromVerify(result: AccessVerifyResult): SelfServiceSessionState {
   if (result.status === "VERIFIED") {
-    return { status: "verified", expiresAt: result.expiresAt, scopes: result.scopes, csrfToken: result.csrfToken };
+    return { status: "verified", expiresAt: result.expiresAt, scopes: result.scopes, csrfToken: result.csrfToken, assurance: result.assurance };
   }
   if (result.status === "LOCKED") return { status: "locked", message: result.message };
   if (result.status === "EXPIRED") return { status: "expired", message: result.message };
@@ -57,7 +60,7 @@ function stateFromVerify(result: AccessVerifyResult): SelfServiceSessionState {
 }
 
 function stateFromSession(result: SessionResult, storedCsrfToken?: string): SelfServiceSessionState {
-  if (result.status === "VERIFIED") return { status: "verified", expiresAt: result.expiresAt, scopes: result.scopes, csrfToken: result.csrfToken ?? storedCsrfToken };
+  if (result.status === "VERIFIED") return { status: "verified", expiresAt: result.expiresAt, scopes: result.scopes, csrfToken: result.csrfToken ?? storedCsrfToken, assurance: result.assurance };
   if (result.status === "ANONYMOUS") return { status: "anonymous", message: result.message };
   if (result.status === "EXPIRED") return { status: "expired", message: result.message };
   if (result.status === "LOCKED") return { status: "locked", message: result.message };
@@ -84,9 +87,13 @@ export function SessionProvider<LookupInput>({ children, startAccess, requestCha
 
   const startLookup = useCallback(async (input: LookupInput) => {
     setState({ status: "lookup_pending" });
-    try { setState(stateFromStart(await startAccess(input))); }
+    try {
+      const result = await startAccess(input);
+      if (result.status === "VERIFIED") sessionStorage.setItem(storageKey, result.csrfToken);
+      setState(stateFromStart(result));
+    }
     catch { setState({ status: "provider_unavailable", message: "No pudimos iniciar la verificación. Intenta nuevamente más tarde." }); }
-  }, [startAccess]);
+  }, [startAccess, storageKey]);
 
   const requestCode = useCallback(async (channelId: string) => {
     const providerReference = state.providerReference;

@@ -11,6 +11,8 @@ const SELF_SERVICE_COOKIES: Record<SelfServicePortal, string> = {
   [SelfServicePortal.COMPANY]: "asodef_company_ss",
 };
 
+export type SelfServiceAssurance = "OTP" | "LOOKUP";
+
 export function selfServiceCookieName(portal: SelfServicePortal): string {
   return SELF_SERVICE_COOKIES[portal];
 }
@@ -20,7 +22,7 @@ export interface SelfServicePrincipal {
   portal: SelfServicePortal;
   subjectRef: string;
   scopes: readonly string[];
-  assurance: "OTP";
+  assurance: SelfServiceAssurance;
   csrfTokenHash: string;
   expiresAt: Date;
 }
@@ -37,26 +39,44 @@ export class SelfServiceSessionService {
     this.ttlMinutes = config.get("SELF_SERVICE_SESSION_TTL_MINUTES", { infer: true });
   }
 
-  async create(challengeId: string, portal: SelfServicePortal, subjectRef: string, context: { ipAddress: string | null; userAgent: string | null }) {
+  create(challengeId: string, portal: SelfServicePortal, subjectRef: string, context: { ipAddress: string | null; userAgent: string | null }) {
+    return this.createSession(challengeId, portal, subjectRef, context, "OTP");
+  }
+
+  createLookup(challengeId: string, portal: SelfServicePortal, subjectRef: string, context: { ipAddress: string | null; userAgent: string | null }) {
+    return this.createSession(challengeId, portal, subjectRef, context, "LOOKUP");
+  }
+
+  private async createSession(
+    challengeId: string,
+    portal: SelfServicePortal,
+    subjectRef: string,
+    context: { ipAddress: string | null; userAgent: string | null },
+    assurance: SelfServiceAssurance,
+  ) {
     const rawToken = this.crypto.generateToken();
     const csrfToken = this.crypto.generateToken();
     const expiresAt = new Date(Date.now() + this.ttlMinutes * 60_000);
-    const scopes = portal === SelfServicePortal.AFFILIATE
+
+    // The current business decision is that lack of the WhatsApp OTP transport
+    // must not disable ordinary portal operations. LOOKUP sessions therefore
+    // retain approved read/contact/profile and payment-quote capabilities,
+    // while beneficiary changes and sensitive-document upload remain OTP-only.
+    // Settled-payment application is never a browser scope: only the trusted
+    // provider-confirmation path may invoke the future legacy write bridge.
+    const lookupScopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:summary:read",
+          "affiliate:contracts:read",
           "affiliate:beneficiaries:read",
           "affiliate:account:read",
           "affiliate:payments:read",
           "affiliate:documents:read",
           "affiliate:requests:read",
-          "affiliate:beneficiaries:manage",
-          "affiliate:documents:upload",
           "affiliate:contact:manage",
           "affiliate:profile:update",
-          "payments:quote",
-          "payments:apply",
           "payments:read",
-          "payments:reverse",
+          "payments:quote",
         ]
       : [
           "company:summary:read",
@@ -66,11 +86,16 @@ export class SelfServiceSessionService {
           "company:documents:read",
           "company:requests:read",
           "company:reports:read",
-          "payments:quote",
-          "payments:apply",
           "payments:read",
-          "payments:reverse",
+          "payments:quote",
         ];
+    const otpOnlyScopes = portal === SelfServicePortal.AFFILIATE
+      ? [
+          "affiliate:beneficiaries:manage",
+          "affiliate:documents:upload",
+        ]
+      : [];
+    const scopes = assurance === "OTP" ? [...lookupScopes, ...otpOnlyScopes] : lookupScopes;
     const session = await this.prisma.selfServiceSession.create({ data: {
       challengeId,
       portal,
@@ -78,18 +103,20 @@ export class SelfServiceSessionService {
       tokenHash: this.crypto.hash(rawToken),
       csrfTokenHash: this.crypto.hash(csrfToken),
       scopes,
-      assurance: "OTP",
+      assurance,
       ipHash: context.ipAddress ? this.crypto.fingerprint(context.ipAddress) : null,
       userAgentHash: context.userAgent ? this.crypto.fingerprint(context.userAgent) : null,
       expiresAt,
     } });
-    return { sessionId: session.id, rawToken, csrfToken, expiresAt, scopes, assurance: "OTP" as const };
+    return { sessionId: session.id, rawToken, csrfToken, expiresAt, scopes, assurance };
   }
 
   async resolve(rawToken: string | undefined, context?: { ipAddress: string | null; userAgent: string | null }): Promise<SelfServicePrincipal | null> {
     if (!rawToken) return null;
     const session = await this.prisma.selfServiceSession.findUnique({ where: { tokenHash: this.crypto.hash(rawToken) } });
     if (!session || session.revokedAt || session.expiresAt <= new Date()) return null;
+    const assurance = session.assurance === "OTP" || session.assurance === "LOOKUP" ? session.assurance : null;
+    if (!assurance) return null;
     if (context) {
       const currentIpHash = context.ipAddress ? this.crypto.fingerprint(context.ipAddress) : null;
       const currentAgentHash = context.userAgent ? this.crypto.fingerprint(context.userAgent) : null;
@@ -101,7 +128,7 @@ export class SelfServiceSessionService {
       portal: session.portal,
       subjectRef: this.crypto.decrypt(session.subjectRefEncrypted),
       scopes: session.scopes,
-      assurance: "OTP",
+      assurance,
       csrfTokenHash: session.csrfTokenHash,
       expiresAt: session.expiresAt,
     };

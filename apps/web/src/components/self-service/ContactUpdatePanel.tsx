@@ -19,11 +19,19 @@ function ResultAlert({ result }: { result?: ResourceResult<ProviderPayload> }) {
   return <Alert variant="warning">{result.message ?? "El servicio externo no está disponible para completar este cambio."}</Alert>;
 }
 
-/** Step-up flow: the existing OTP session proves the current registered
- * channel; ASODEF then verifies the new destination before asking the core
- * provider to apply the change. */
+/**
+ * OTP remains the implemented step-up variant for contact changes. LOOKUP
+ * sessions may keep the contact/profile scopes, but this panel must not imply
+ * that a write is already available while the Master write bridge is still
+ * fail-closed.
+ */
 export function ContactUpdatePanel() {
   const { state } = useAffiliateSelfService();
+  const canManageContact = Boolean(
+    state.scopes?.includes("affiliate:contact:manage") &&
+    state.scopes?.includes("affiliate:profile:update"),
+  );
+  const otpFlowAvailable = canManageContact && state.assurance === "OTP";
   const [channel, setChannel] = useState<SelfServiceChannelKind>("email");
   const [destination, setDestination] = useState("");
   const [requestId, setRequestId] = useState<string>();
@@ -60,12 +68,24 @@ export function ContactUpdatePanel() {
 
   function submitStart(event: FormEvent) {
     event.preventDefault();
-    if (state.status === "verified" && state.csrfToken) start.mutate();
+    if (state.status === "verified" && state.csrfToken && otpFlowAvailable) start.mutate();
   }
 
   function submitCode(event: FormEvent) {
     event.preventDefault();
-    if (requestId && code.length === 6 && state.csrfToken) verify.mutate();
+    if (requestId && code.length === 6 && state.csrfToken && otpFlowAvailable) verify.mutate();
+  }
+
+  if (!otpFlowAvailable) {
+    return (
+      <Card className="space-y-4" aria-labelledby="contact-update-title">
+        <div>
+          <h2 id="contact-update-title" className="font-display text-xl font-semibold text-brand-dark">Actualizar correo o teléfono</h2>
+          <p className="mt-2 text-sm leading-6 text-text-muted">La consulta de tus datos ya está conectada al sistema maestro. La escritura de correo y teléfono se habilitará al conectar el canal oficial de actualización del legado.</p>
+        </div>
+        <Alert variant="info">El aplazamiento del OTP no detiene las demás consultas. Esta operación permanece cerrada porque todavía no existe un write bridge certificado hacia AdaSys.</Alert>
+      </Card>
+    );
   }
 
   return (

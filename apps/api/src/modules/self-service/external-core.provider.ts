@@ -15,7 +15,7 @@ export type VerificationChannel = {
   masked: string;
   enabled: boolean;
   verified: boolean;
-  lastUpdatedAt: string;
+  lastUpdatedAt?: string;
   operationalCommunicationPermission: boolean;
 };
 export type ContactDestination = {
@@ -24,7 +24,7 @@ export type ContactDestination = {
   destination: string;
   enabled: boolean;
   verified: boolean;
-  lastUpdatedAt: string;
+  lastUpdatedAt?: string;
   operationalCommunicationPermission: boolean;
 };
 export type LookupResult = { subjectRef: string };
@@ -57,6 +57,7 @@ export interface ExternalCoreProvider {
   getCompanyContactDestinations(subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>>;
 
   getAffiliateSummary(subjectRef: string): Promise<ProviderResult<ProviderPayload>>;
+  getAffiliateContracts(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
   getAffiliateBeneficiaries(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
   getAffiliateAccountStatement(subjectRef: string): Promise<ProviderResult<ProviderPayload>>;
   getAffiliateObligations(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
