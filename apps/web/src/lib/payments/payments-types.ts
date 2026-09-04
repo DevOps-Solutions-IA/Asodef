@@ -16,6 +16,8 @@ export interface LookupObligation {
   currency: string;
   dueDate: string;
   status: string;
+  source?: "modern" | "master";
+  onlinePaymentAvailable?: boolean;
 }
 
 export interface PaymentOrderSummary {
