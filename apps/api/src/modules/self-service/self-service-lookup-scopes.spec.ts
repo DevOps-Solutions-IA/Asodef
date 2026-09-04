@@ -15,7 +15,7 @@ function serviceFor(create: jest.Mock) {
 }
 
 describe("self-service LOOKUP scopes", () => {
-  it("keeps normal affiliate operations available while OTP-only sensitive actions stay blocked", async () => {
+  it("keeps normal affiliate operations available while sensitive and backend-only actions stay blocked", async () => {
     const create = jest.fn(async ({ data }) => ({ id: "lookup-session", ...data }));
     const service = serviceFor(create);
 
@@ -31,14 +31,14 @@ describe("self-service LOOKUP scopes", () => {
       "affiliate:contact:manage",
       "affiliate:profile:update",
       "payments:quote",
-      "payments:apply",
     ]));
     expect(result.scopes).not.toContain("affiliate:beneficiaries:manage");
     expect(result.scopes).not.toContain("affiliate:documents:upload");
+    expect(result.scopes).not.toContain("payments:apply");
     expect(result.scopes).not.toContain("payments:reverse");
   });
 
-  it("keeps company payment quote/apply available without granting reversal", async () => {
+  it("keeps company payment quote available without granting application or reversal", async () => {
     const create = jest.fn(async ({ data }) => ({ id: "lookup-session", ...data }));
     const service = serviceFor(create);
 
@@ -50,7 +50,8 @@ describe("self-service LOOKUP scopes", () => {
     );
 
     expect(result.assurance).toBe("LOOKUP");
-    expect(result.scopes).toEqual(expect.arrayContaining(["payments:quote", "payments:apply"]));
+    expect(result.scopes).toContain("payments:quote");
+    expect(result.scopes).not.toContain("payments:apply");
     expect(result.scopes).not.toContain("payments:reverse");
   });
 });
