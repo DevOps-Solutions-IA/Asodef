@@ -1,5 +1,5 @@
 import { SelfServicePortal } from "@prisma/client";
-import { SelfServiceGatewayService } from "./self-service-gateway.service";
+import { SELF_SERVICE_PUBLIC_FIELDS, SelfServiceGatewayService } from "./self-service-gateway.service";
 
 describe("SelfServiceGatewayService", () => {
   const principal = { sessionId: "session-1", portal: SelfServicePortal.AFFILIATE, subjectRef: "subject", scopes: ["affiliate:beneficiaries:request"], assurance: "OTP" as const, csrfTokenHash: "hash", expiresAt: new Date() };
@@ -28,5 +28,38 @@ describe("SelfServiceGatewayService", () => {
     const gateway = new SelfServiceGatewayService({} as never, {} as never, {} as never, { get: () => 5_000 } as never);
     const operation = async () => ({ status: "VERIFIED" as const, data: { displayName: "Persona", status: "ACTIVE", destination: "person@example.com", clientSecret: "hidden" } });
     await expect(gateway.readPayload(operation, ["displayName", "status"])).resolves.toEqual({ status: "VERIFIED", data: { displayName: "Persona", status: "ACTIVE" } });
+  });
+
+  it("exposes only the certified aggregate account-statement fields", async () => {
+    const gateway = new SelfServiceGatewayService({} as never, {} as never, {} as never, { get: () => 5_000 } as never);
+    const operation = async () => ({
+      status: "VERIFIED" as const,
+      data: {
+        status: "EN_MORA",
+        balance: "12500",
+        currency: "COP",
+        overdueBalance: "7500",
+        currentBalance: "5000",
+        overdueCount: 1,
+        currentCount: 1,
+        contractCount: 1,
+        internalContractIds: ["100"],
+        secret: "hidden",
+      },
+    });
+
+    await expect(gateway.readPayload(operation, SELF_SERVICE_PUBLIC_FIELDS.accountStatement)).resolves.toEqual({
+      status: "VERIFIED",
+      data: {
+        status: "EN_MORA",
+        balance: "12500",
+        currency: "COP",
+        overdueBalance: "7500",
+        currentBalance: "5000",
+        overdueCount: 1,
+        currentCount: 1,
+        contractCount: 1,
+      },
+    });
   });
 });
