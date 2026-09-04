@@ -20,6 +20,23 @@ export interface LookupObligation {
   onlinePaymentAvailable?: boolean;
 }
 
+export interface MasterPaymentPreflightResponse {
+  source: "master";
+  customer: {
+    fullName: string;
+    documentType: string | null;
+    maskedDocumentNumber: string;
+  };
+  obligation: {
+    concept: string;
+    amountCents: number;
+    currency: "COP";
+    dueDate: string;
+    status: string;
+  };
+  onlinePaymentAvailable: false;
+}
+
 export interface PaymentOrderSummary {
   publicReference: string;
   amountCents: number;
