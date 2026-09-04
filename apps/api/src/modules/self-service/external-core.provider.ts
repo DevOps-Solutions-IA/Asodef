@@ -57,6 +57,7 @@ export interface ExternalCoreProvider {
   getCompanyContactDestinations(subjectRef: string): Promise<ProviderResult<readonly ContactDestination[]>>;
 
   getAffiliateSummary(subjectRef: string): Promise<ProviderResult<ProviderPayload>>;
+  getAffiliateContracts(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
   getAffiliateBeneficiaries(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
   getAffiliateAccountStatement(subjectRef: string): Promise<ProviderResult<ProviderPayload>>;
   getAffiliateObligations(subjectRef: string): Promise<ProviderResult<ProviderCollection>>;
