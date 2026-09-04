@@ -22,7 +22,7 @@ describe("normalizeBoldWebhookPayload", () => {
       id: "notification-2",
       type: "VOID_APPROVED",
       data: { payment_id: "payment-2", metadata: { reference: "public-ref" } },
-    }))?.toMatchObject({ providerStatus: null, eventType: "VOID_APPROVED" });
+    })).toMatchObject({ providerStatus: null, eventType: "VOID_APPROVED" });
   });
 
   it("retains legacy reference_id/status only as compatibility input", () => {

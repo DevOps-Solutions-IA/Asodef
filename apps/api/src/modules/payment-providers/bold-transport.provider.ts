@@ -7,12 +7,6 @@ import { BOLD_TRANSPORT } from "./bold-transport.interface";
 import { MockBoldTransport } from "./mock-bold.transport";
 import { HttpBoldTransport } from "./http-bold.transport";
 
-/** Thrown at module-init time (effectively a startup failure, the same
- * way a NestFactory.create()/app.init() failure surfaces) - the AC's
- * own negative case: "instantiating BoldPaymentProvider without
- * BOLD_MODE=mock and without real credentials configured throws a
- * clear startup/config error rather than silently attempting a live
- * call." Never includes the (absent) credential value itself. */
 export class BoldConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -20,25 +14,13 @@ export class BoldConfigurationError extends Error {
   }
 }
 
-/**
- * Selection order mirrors mailTransportProvider's own pattern:
- *  - BOLD_MODE=mock (the default) -> MockBoldTransport, always, no
- *    credential requirement at all - this is what every test and local
- *    dev run uses.
- *  - BOLD_MODE=sandbox|production -> HttpBoldTransport, which requires
- *    BOLD_IDENTITY_KEY to be a non-empty, real-looking value; missing
- *    it fails fast here rather than silently falling through to a
- *    live call with an empty/invalid Authorization header.
- */
 export const boldTransportProvider: FactoryProvider = {
   provide: BOLD_TRANSPORT,
   inject: [ConfigService, MockBoldTransport, PrismaService],
   useFactory: async (configService: ConfigService<EnvConfig, true>, mockTransport: MockBoldTransport, prisma: PrismaService) => {
     const mode = configService.get("BOLD_MODE", { infer: true });
 
-    if (mode === "mock") {
-      return mockTransport;
-    }
+    if (mode === "mock") return mockTransport;
 
     const identityKey = configService.get("BOLD_IDENTITY_KEY", { infer: true });
     if (!identityKey) {
@@ -47,13 +29,14 @@ export const boldTransportProvider: FactoryProvider = {
       );
     }
 
-    // US-058 negative case, verbatim: "attempting to force BOLD_MODE=live
-    // via config while any gate is not APPROVED causes the API to fail
-    // startup/config validation rather than silently allowing live
-    // payments." Only BOLD_MODE=production represents real customer
-    // money moving - sandbox exercises Bold's real API with test
-    // credentials, no business-approval gates implicated.
     if (mode === "production") {
+      const webhookSecret = configService.get("BOLD_WEBHOOK_SECRET", { infer: true });
+      if (!webhookSecret) {
+        throw new BoldConfigurationError(
+          "BOLD_MODE=production requires BOLD_WEBHOOK_SECRET to verify payment notifications - refusing to start with an unverifiable live-money webhook",
+        );
+      }
+
       const allGatesApproved = await isProductionPaymentsEnabled(prisma);
       if (!allGatesApproved) {
         throw new BoldConfigurationError(
