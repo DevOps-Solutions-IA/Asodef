@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
+import { DisabledMasterPaymentApplicationService } from "./application/disabled-master-payment-application.service";
 import { MasterQueryService } from "./application/master-query.service";
 import { MasterPaymentQuoteService } from "./application/master-payment-quote.service";
 import { MasterContractSummaryService } from "./application/master-contract-summary.service";
@@ -18,6 +19,7 @@ import { MasterHealthController } from "./health/master-health.controller";
 import { MasterContractsController } from "./http/master-contracts.controller";
 import { MasterHealthService } from "./health/master-health.service";
 import { FIREBIRD_READ_CLIENT } from "./ports/firebird-read-client";
+import { MASTER_PAYMENT_APPLICATION_PORT } from "./ports/master-payment-application.port";
 import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/master-read.repository";
 
 @Module({
@@ -32,9 +34,11 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
     NodeFirebirdReadClient,
     NodeFirebirdPoolFactory,
     DisabledMasterReadRepository,
+    DisabledMasterPaymentApplicationService,
     FirebirdMasterReadRepository,
     { provide: NODE_FIREBIRD_POOL_FACTORY, useExisting: NodeFirebirdPoolFactory },
     { provide: FIREBIRD_READ_CLIENT, useExisting: NodeFirebirdReadClient },
+    { provide: MASTER_PAYMENT_APPLICATION_PORT, useExisting: DisabledMasterPaymentApplicationService },
     {
       provide: MASTER_READ_REPOSITORY,
       inject: [ConfigService, DisabledMasterReadRepository, FirebirdMasterReadRepository],
@@ -45,6 +49,13 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
       ): MasterReadRepository => getMasterFirebirdRuntimeConfig(config).enabled ? firebird : disabled,
     },
   ],
-  exports: [MasterQueryService, MasterPaymentQuoteService, MasterConnectionGateService, MasterHealthService, MASTER_READ_REPOSITORY],
+  exports: [
+    MasterQueryService,
+    MasterPaymentQuoteService,
+    MasterConnectionGateService,
+    MasterHealthService,
+    MASTER_READ_REPOSITORY,
+    MASTER_PAYMENT_APPLICATION_PORT,
+  ],
 })
 export class MasterModule {}
