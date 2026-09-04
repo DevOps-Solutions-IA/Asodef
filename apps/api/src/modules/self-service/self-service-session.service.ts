@@ -60,6 +60,7 @@ export class SelfServiceSessionService {
     const readScopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:summary:read",
+          "affiliate:contracts:read",
           "affiliate:beneficiaries:read",
           "affiliate:account:read",
           "affiliate:payments:read",
