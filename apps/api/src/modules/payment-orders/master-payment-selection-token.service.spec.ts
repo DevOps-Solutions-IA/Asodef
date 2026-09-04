@@ -35,10 +35,12 @@ describe("MasterPaymentSelectionTokenService", () => {
   it("fails closed when the encrypted token is modified", () => {
     const tokens = service();
     const token = tokens.issue({ personId: "1", contractId: "2", installmentId: "3" });
-    const last = token.at(-1)!;
-    const replacement = last === "A" ? "B" : "A";
+    const encoded = token.slice("master.v1.".length);
+    const packed = Buffer.from(encoded, "base64url");
+    packed[packed.length - 1] ^= 0x01;
+    const tampered = `master.v1.${packed.toString("base64url")}`;
 
-    expect(tokens.verify(`${token.slice(0, -1)}${replacement}`)).toBeNull();
+    expect(tokens.verify(tampered)).toBeNull();
   });
 
   it("rejects an expired selection", () => {
