@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
 import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
@@ -16,7 +15,7 @@ function service(ttlMinutes = 30): MasterPaymentSelectionTokenService {
 
 describe("MasterPaymentSelectionTokenService", () => {
   afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
   });
 
   it("round-trips a Master selection without exposing legacy identifiers", () => {
@@ -37,19 +36,20 @@ describe("MasterPaymentSelectionTokenService", () => {
     const token = tokens.issue({ personId: "1", contractId: "2", installmentId: "3" });
     const encoded = token.slice("master.v1.".length);
     const packed = Buffer.from(encoded, "base64url");
-    packed[packed.length - 1] ^= 0x01;
+    const lastIndex = packed.length - 1;
+    packed[lastIndex] = packed[lastIndex]! ^ 0x01;
     const tampered = `master.v1.${packed.toString("base64url")}`;
 
     expect(tokens.verify(tampered)).toBeNull();
   });
 
   it("rejects an expired selection", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-04T03:00:00.000Z"));
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-09-04T03:00:00.000Z"));
     const tokens = service(1);
     const token = tokens.issue({ personId: "1", contractId: "2", installmentId: "3" });
 
-    vi.setSystemTime(new Date("2026-09-04T03:01:01.000Z"));
+    jest.setSystemTime(new Date("2026-09-04T03:01:01.000Z"));
     expect(tokens.verify(token)).toBeNull();
   });
 
