@@ -19,7 +19,12 @@ export class CompanySelfServiceController {
   constructor(private readonly access: SelfServiceAccessService, private readonly sessions: SelfServiceSessionService, private readonly cookies: SelfServiceCookieService, private readonly gateway: SelfServiceGatewayService) {}
 
   @Post("access/start") @HttpCode(HttpStatus.OK)
-  start(@Body() dto: CompanyAccessStartDto, @Req() request: SelfServiceRequest) { return this.access.startCompany(dto.nit, buildRequestContext(request)); }
+  async start(@Body() dto: CompanyAccessStartDto, @Req() request: SelfServiceRequest, @Res({ passthrough: true }) response: Response) {
+    const result = await this.access.startCompany(dto.nit, buildRequestContext(request));
+    if (result.status !== "VERIFIED") return result;
+    this.cookies.set(response, SelfServicePortal.COMPANY, result.rawToken, result.expiresAt);
+    return { status: result.status, sessionId: result.sessionId, csrfToken: result.csrfToken, expiresAt: result.expiresAt, scopes: result.scopes, assurance: result.assurance, portal: result.portal };
+  }
   @Post("access/request-code") @HttpCode(HttpStatus.OK)
   requestCode(@Body() dto: AccessRequestCodeDto, @Req() request: SelfServiceRequest) {
     return this.access.requestCode(SelfServicePortal.COMPANY, dto.providerReference, dto.channelReference, buildRequestContext(request));
