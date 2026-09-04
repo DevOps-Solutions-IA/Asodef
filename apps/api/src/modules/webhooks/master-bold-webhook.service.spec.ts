@@ -34,6 +34,10 @@ describe("MasterBoldWebhookService", () => {
     duplicate?: boolean;
     legacyState?: string;
     transactionId?: string | null;
+    providerStatus?: string | null;
+    status?: string;
+    reconciliationResult?: string | null;
+    failureCode?: string | null;
   }) {
     const orders = {
       find: jest.fn().mockResolvedValue((options?.found ?? true) ? order : null),
@@ -44,7 +48,11 @@ describe("MasterBoldWebhookService", () => {
         .mockResolvedValueOnce(options?.duplicate ? [] : [{ id: "event-id" }])
         .mockResolvedValueOnce([{
           provider_transaction_id: options?.transactionId ?? null,
+          provider_status: options?.providerStatus ?? null,
+          status: options?.status ?? "PROCESSING",
           legacy_application_state: options?.legacyState ?? "NOT_APPLIED",
+          reconciliation_result: options?.reconciliationResult ?? null,
+          failure_code: options?.failureCode ?? null,
         }]),
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
@@ -99,6 +107,18 @@ describe("MasterBoldWebhookService", () => {
   it("never auto-reverses AdaSys when VOID_APPROVED arrives after legacy APPLIED", async () => {
     const { service, tx } = harness({ legacyState: "APPLIED" });
     await expect(service.receive(payload, normalized("VOID_APPROVED"), true)).resolves.toBe(true);
+    await settle();
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("never revives a Master order when SALE_APPROVED arrives after a verified VOID_APPROVED", async () => {
+    const { service, tx } = harness({
+      providerStatus: "VOID_APPROVED",
+      status: "CANCELLED",
+      failureCode: "BOLD_VOID_APPROVED",
+      reconciliationResult: "BOLD_VOID_VERIFIED",
+    });
+    await expect(service.receive(payload, normalized("SALE_APPROVED"), true)).resolves.toBe(true);
     await settle();
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });

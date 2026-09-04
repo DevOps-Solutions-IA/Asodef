@@ -75,9 +75,18 @@ export class MasterBoldWebhookService {
     await this.prisma.$transaction(async (tx) => {
       const locked = (await tx.$queryRaw<{
         provider_transaction_id: string | null;
+        provider_status: string | null;
+        status: string;
         legacy_application_state: string;
+        reconciliation_result: string | null;
+        failure_code: string | null;
       }[]>`
-        SELECT provider_transaction_id, legacy_application_state
+        SELECT provider_transaction_id,
+               provider_status,
+               status,
+               legacy_application_state,
+               reconciliation_result,
+               failure_code
         FROM legacy_bridge.master_payment_orders
         WHERE id = ${orderId}::uuid
         FOR UPDATE
@@ -116,18 +125,32 @@ export class MasterBoldWebhookService {
       const voidApproved = normalized.eventType === "VOID_APPROVED";
 
       if (approved) {
-        await tx.$executeRaw`
-          UPDATE legacy_bridge.master_payment_orders
-          SET provider_status = 'APPROVED',
-              provider_transaction_id = COALESCE(provider_transaction_id, ${transactionId}),
-              provider_raw = ${JSON.stringify(payload)}::jsonb,
-              status = CASE WHEN legacy_application_state = 'APPLIED' THEN status ELSE 'PROCESSING' END,
-              legacy_application_state = CASE WHEN legacy_application_state = 'APPLIED' THEN 'APPLIED' ELSE 'PENDING_WRITE_BRIDGE' END,
-              reconciliation_result = 'BOLD_WEBHOOK_VERIFIED',
-              failure_code = NULL,
-              updated_at = now()
-          WHERE id = ${orderId}::uuid
-        `;
+        const alreadyVoided = locked.provider_status === "VOID_APPROVED"
+          || locked.failure_code === "BOLD_VOID_APPROVED"
+          || locked.reconciliation_result === "BOLD_VOID_AFTER_LEGACY_APPLIED";
+
+        if (alreadyVoided) {
+          await tx.$executeRaw`
+            UPDATE legacy_bridge.master_payment_orders
+            SET provider_raw = ${JSON.stringify(payload)}::jsonb,
+                reconciliation_result = 'BOLD_APPROVED_AFTER_VOID',
+                updated_at = now()
+            WHERE id = ${orderId}::uuid
+          `;
+        } else {
+          await tx.$executeRaw`
+            UPDATE legacy_bridge.master_payment_orders
+            SET provider_status = 'APPROVED',
+                provider_transaction_id = COALESCE(provider_transaction_id, ${transactionId}),
+                provider_raw = ${JSON.stringify(payload)}::jsonb,
+                status = CASE WHEN legacy_application_state = 'APPLIED' THEN status ELSE 'PROCESSING' END,
+                legacy_application_state = CASE WHEN legacy_application_state = 'APPLIED' THEN 'APPLIED' ELSE 'PENDING_WRITE_BRIDGE' END,
+                reconciliation_result = 'BOLD_WEBHOOK_VERIFIED',
+                failure_code = NULL,
+                updated_at = now()
+            WHERE id = ${orderId}::uuid
+          `;
+        }
       } else if (rejected) {
         if (["PENDING_WRITE_BRIDGE", "APPLIED"].includes(locked.legacy_application_state)) {
           await tx.$executeRaw`
