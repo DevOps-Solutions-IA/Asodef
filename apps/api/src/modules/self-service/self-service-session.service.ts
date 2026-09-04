@@ -57,7 +57,13 @@ export class SelfServiceSessionService {
     const rawToken = this.crypto.generateToken();
     const csrfToken = this.crypto.generateToken();
     const expiresAt = new Date(Date.now() + this.ttlMinutes * 60_000);
-    const readScopes = portal === SelfServicePortal.AFFILIATE
+
+    // The current business decision is that lack of the WhatsApp OTP transport
+    // must not disable ordinary portal operations. LOOKUP sessions therefore
+    // retain the approved operational scopes below, while beneficiary changes
+    // and sensitive-document upload remain OTP-only. The session is still
+    // short-lived, browser-bound, HttpOnly and CSRF-protected.
+    const lookupScopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:summary:read",
           "affiliate:contracts:read",
@@ -66,7 +72,11 @@ export class SelfServiceSessionService {
           "affiliate:payments:read",
           "affiliate:documents:read",
           "affiliate:requests:read",
+          "affiliate:contact:manage",
+          "affiliate:profile:update",
           "payments:read",
+          "payments:quote",
+          "payments:apply",
         ]
       : [
           "company:summary:read",
@@ -77,21 +87,16 @@ export class SelfServiceSessionService {
           "company:requests:read",
           "company:reports:read",
           "payments:read",
+          "payments:quote",
+          "payments:apply",
         ];
-    const elevatedScopes = portal === SelfServicePortal.AFFILIATE
+    const otpOnlyScopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:beneficiaries:manage",
           "affiliate:documents:upload",
-          "affiliate:contact:manage",
-          "affiliate:profile:update",
-          "payments:quote",
-          "payments:apply",
         ]
-      : [
-          "payments:quote",
-          "payments:apply",
-        ];
-    const scopes = assurance === "OTP" ? [...readScopes, ...elevatedScopes] : readScopes;
+      : [];
+    const scopes = assurance === "OTP" ? [...lookupScopes, ...otpOnlyScopes] : lookupScopes;
     const session = await this.prisma.selfServiceSession.create({ data: {
       challengeId,
       portal,
