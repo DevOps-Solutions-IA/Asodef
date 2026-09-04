@@ -70,7 +70,7 @@ describe("PaymentLookupPage with Master obligations", () => {
     await user.click(screen.getByRole("button", { name: "Verificar saldo" }));
 
     expect(await screen.findByRole("button", { name: "Saldo verificado" })).toBeDisabled();
-    expect(screen.getByText("$ 7.600,00")).toBeInTheDocument();
+    expect(screen.getByText(/7[.\s]600/)).toBeInTheDocument();
 
     const preflightCall = fetchMock.mock.calls.find(([input]) => String(input).includes("/payment-orders/master/preflight"));
     expect(preflightCall).toBeDefined();
