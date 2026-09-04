@@ -21,11 +21,14 @@ export class AffiliateSelfServiceController {
   constructor(private readonly access: SelfServiceAccessService, private readonly sessions: SelfServiceSessionService, private readonly cookies: SelfServiceCookieService, private readonly gateway: SelfServiceGatewayService, private readonly contactUpdates: SelfServiceContactUpdateService) {}
 
   @Post("access/start") @HttpCode(HttpStatus.OK)
-  start(@Body() dto: AffiliateAccessStartDto, @Req() request: SelfServiceRequest) {
+  async start(@Body() dto: AffiliateAccessStartDto, @Req() request: SelfServiceRequest, @Res({ passthrough: true }) response: Response) {
     const input = dto.identifierMode === "DOCUMENT"
       ? { identifierMode: dto.identifierMode, documentType: dto.documentType!, identifier: dto.identifier } as const
       : { identifierMode: dto.identifierMode, identifier: dto.identifier } as const;
-    return this.access.startAffiliate(input, buildRequestContext(request));
+    const result = await this.access.startAffiliate(input, buildRequestContext(request));
+    if (result.status !== "VERIFIED") return result;
+    this.cookies.set(response, SelfServicePortal.AFFILIATE, result.rawToken, result.expiresAt);
+    return { status: result.status, sessionId: result.sessionId, csrfToken: result.csrfToken, expiresAt: result.expiresAt, scopes: result.scopes, assurance: result.assurance, portal: result.portal };
   }
 
   @Post("access/request-code") @HttpCode(HttpStatus.OK)
