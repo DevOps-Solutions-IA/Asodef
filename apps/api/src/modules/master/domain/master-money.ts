@@ -15,6 +15,7 @@ export function positiveMasterDecimalToCents(value: MasterDecimal | null): numbe
   if (!match) return null;
 
   const integerPart = match[1];
+  if (!integerPart) return null;
   const fraction = match[2] ?? "";
   if (fraction.length > 2 && /[^0]/.test(fraction.slice(2))) return null;
 
