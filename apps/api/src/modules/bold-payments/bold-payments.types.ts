@@ -9,11 +9,8 @@ export interface CreateBoldPaymentResponse {
    * Whatever the provider returned as the outcome of createPayment()
    * (US-022's own CreatePaymentResult.raw) - the customer-facing next
    * step (e.g. a hosted-checkout redirect) in a real Bold integration.
-   * Deliberately untyped/opaque: only `status` is a confirmed field on
-   * any Bold response body (bold-transport.interface.ts's own comment),
-   * so no specific "redirectUrl"-shaped field is asserted here - this
-   * relays the provider's actual response verbatim rather than
-   * inventing a schema for it.
+   * Deliberately untyped/opaque for the modern provider path. The Master
+   * hosted-link adapter narrows this to a safe checkout redirect object.
    */
   providerNextAction: unknown;
 }
@@ -23,6 +20,8 @@ export interface BoldPaymentStatusResponse {
   orderStatus: string;
   orderStatusLabel: string;
   attemptStatus: string | null;
+  /** False for Master-originated payments until a public receipt contract is approved. */
+  receiptAvailable?: boolean;
 }
 
 function toStatusLabel(status: PaymentOrderStatus | string): string {
@@ -52,5 +51,6 @@ export function toBoldPaymentStatusResponse(
     orderStatus,
     orderStatusLabel: toStatusLabel(orderStatus),
     attemptStatus,
+    receiptAvailable: true,
   };
 }
