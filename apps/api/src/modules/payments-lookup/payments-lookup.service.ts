@@ -8,6 +8,7 @@ import { OUTSTANDING_OBLIGATION_STATUSES, PaymentOrdersService } from "../paymen
 import { toPaymentOrderResponse } from "../payment-orders/payment-order.types";
 import type { PaymentsLookupDto } from "./dto/payments-lookup.dto";
 import { maskDocumentNumber } from "./mask-document-number";
+import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 import { toLookupCustomerResponse, toLookupObligationResponse, type LookupObligationResponse, type PaymentsLookupResponse } from "./payments-lookup.types";
 
 /** Identical message regardless of *why* nothing was found - "no
@@ -41,6 +42,7 @@ export class PaymentsLookupService {
     private readonly prisma: PrismaService,
     private readonly paymentOrdersService: PaymentOrdersService,
     private readonly master: MasterQueryService,
+    private readonly masterSelectionTokens: MasterPaymentSelectionTokenService,
     config: ConfigService<EnvConfig, true>,
   ) {
     this.useMaster = config.get("EXTERNAL_CORE_PROVIDER", { infer: true }) === "master";
@@ -138,7 +140,11 @@ export class PaymentsLookupService {
         const dueDate = masterDueDate(installment.dueDate);
         if (amountCents === null || dueDate === null) return [];
         return [{
-          obligationId: `master:${contract.contractId}:${installment.installmentId}`,
+          obligationId: this.masterSelectionTokens.issue({
+            personId: person.personId,
+            contractId: contract.contractId,
+            installmentId: installment.installmentId,
+          }),
           concept: installment.installmentNumber === null
             ? "Cuota ASODEF"
             : `Cuota ${installment.installmentNumber}`,
