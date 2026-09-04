@@ -21,7 +21,7 @@ describe("PaymentLookupPage with Master obligations", () => {
 
   it("revalidates Master debt but never opens the modern payment-order create path before write-back is ready", async () => {
     const selectionToken = "master.v1.opaque-test-token";
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/payments/lookup")) {
         return jsonResponse(200, {
