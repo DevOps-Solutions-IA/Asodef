@@ -1,20 +1,50 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../database/prisma.service";
+import type { EnvConfig } from "../../config/env.validation";
+import { MasterQueryService } from "../master/application/master-query.service";
+import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import { OUTSTANDING_OBLIGATION_STATUSES, PaymentOrdersService } from "../payment-orders/payment-orders.service";
 import { toPaymentOrderResponse } from "../payment-orders/payment-order.types";
 import type { PaymentsLookupDto } from "./dto/payments-lookup.dto";
-import { toLookupCustomerResponse, toLookupObligationResponse, type PaymentsLookupResponse } from "./payments-lookup.types";
+import { maskDocumentNumber } from "./mask-document-number";
+import { toLookupCustomerResponse, toLookupObligationResponse, type LookupObligationResponse, type PaymentsLookupResponse } from "./payments-lookup.types";
 
 /** Identical message regardless of *why* nothing was found - "no
  * information leakage about which identifier failed" (AC, verbatim). */
 const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
 
+function normalizeDocumentType(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function masterAmountToCents(value: string | null): number | null {
+  if (!value) return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const cents = Math.round(amount * 100);
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+function masterDueDate(value: string | null): Date | null {
+  if (!value) return null;
+  const day = /^(\d{4}-\d{2}-\d{2})/.exec(value)?.[1];
+  const date = new Date(day ? `${day}T12:00:00.000Z` : value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 @Injectable()
 export class PaymentsLookupService {
+  private readonly useMaster: boolean;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentOrdersService: PaymentOrdersService,
-  ) {}
+    private readonly master: MasterQueryService,
+    config: ConfigService<EnvConfig, true>,
+  ) {
+    this.useMaster = config.get("EXTERNAL_CORE_PROVIDER", { infer: true }) === "master";
+  }
 
   async lookup(dto: PaymentsLookupDto): Promise<PaymentsLookupResponse> {
     if (dto.reference) {
@@ -34,7 +64,13 @@ export class PaymentsLookupService {
     return { type: "order", order: toPaymentOrderResponse(order) };
   }
 
-  private async lookupByDocument(documentType: string, documentNumber: string): Promise<PaymentsLookupResponse> {
+  private lookupByDocument(documentType: string, documentNumber: string): Promise<PaymentsLookupResponse> {
+    return this.useMaster
+      ? this.lookupMasterByDocument(documentType, documentNumber)
+      : this.lookupModernByDocument(documentType, documentNumber);
+  }
+
+  private async lookupModernByDocument(documentType: string, documentNumber: string): Promise<PaymentsLookupResponse> {
     const customer = await this.prisma.customer.findUnique({
       where: { documentType_documentNumber: { documentType, documentNumber } },
     });
@@ -60,6 +96,75 @@ export class PaymentsLookupService {
       type: "customer",
       customer: toLookupCustomerResponse(customer),
       obligations: obligations.map(toLookupObligationResponse),
+    };
+  }
+
+  private async lookupMasterByDocument(documentType: string, documentNumber: string): Promise<PaymentsLookupResponse> {
+    let person;
+    try {
+      person = await this.master.findPersonByDocument(documentNumber.trim());
+    } catch {
+      // Keep the same external shape as an unavailable/non-matching lookup.
+      // The public endpoint must never leak Firebird or network details.
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+    if (!person) throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+
+    const requestedType = normalizeDocumentType(documentType);
+    if (person.documentType && normalizeDocumentType(person.documentType) !== requestedType) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+
+    let contracts;
+    try {
+      contracts = await this.master.getContractsByPerson(person.personId);
+    } catch {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+
+    const groups = await Promise.all(
+      contracts.map(async (contract) => {
+        try {
+          return { contract, installments: await this.master.getOutstandingInstallments(contract.contractId) };
+        } catch {
+          return { contract, installments: [] };
+        }
+      }),
+    );
+
+    const obligations: LookupObligationResponse[] = groups.flatMap(({ contract, installments }) =>
+      installments.flatMap((installment) => {
+        const amountCents = masterAmountToCents(installment.balance);
+        const dueDate = masterDueDate(installment.dueDate);
+        if (amountCents === null || dueDate === null) return [];
+        return [{
+          obligationId: `master:${contract.contractId}:${installment.installmentId}`,
+          concept: installment.installmentNumber === null
+            ? "Cuota ASODEF"
+            : `Cuota ${installment.installmentNumber}`,
+          amountCents,
+          currency: "COP",
+          dueDate,
+          status: payableInstallmentStatus(installment),
+          source: "master" as const,
+          onlinePaymentAvailable: false,
+        }];
+      }),
+    );
+
+    if (obligations.length === 0) {
+      throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
+    }
+
+    const fullName = [person.names, person.surnames].filter(Boolean).join(" ").trim() || "Afiliado ASODEF";
+    return {
+      type: "customer",
+      customer: {
+        fullName,
+        documentType: person.documentType ?? requestedType,
+        maskedDocumentNumber: maskDocumentNumber(person.document ?? documentNumber.trim()),
+      },
+      obligations,
     };
   }
 }
