@@ -4,11 +4,11 @@ import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { MasterQueryService } from "../master/application/master-query.service";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
+import { MasterPaymentSelectionTokenService } from "../payment-orders/master-payment-selection-token.service";
 import { OUTSTANDING_OBLIGATION_STATUSES, PaymentOrdersService } from "../payment-orders/payment-orders.service";
 import { toPaymentOrderResponse } from "../payment-orders/payment-order.types";
 import type { PaymentsLookupDto } from "./dto/payments-lookup.dto";
 import { maskDocumentNumber } from "./mask-document-number";
-import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 import { toLookupCustomerResponse, toLookupObligationResponse, type LookupObligationResponse, type PaymentsLookupResponse } from "./payments-lookup.types";
 
 /** Identical message regardless of *why* nothing was found - "no
