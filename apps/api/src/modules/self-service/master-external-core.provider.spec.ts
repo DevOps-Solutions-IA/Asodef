@@ -247,7 +247,71 @@ describe("MasterExternalCoreProvider", () => {
         dueDate: "2026-08-15",
       }],
     });
+  });
+
+  it("quotes a certified payable installment by re-reading ownership and current Master balance", async () => {
+    const master = masterMock();
+    master.getContractsByPerson.mockResolvedValue([contract]);
+    master.getOutstandingInstallments.mockResolvedValue([payableInstallment]);
+    const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.quotePayment(person.personId, {
+      contractId: contract.contractId,
+      installmentId: payableInstallment.installmentId,
+      amountCents: 1,
+    })).resolves.toEqual({
+      status: "VERIFIED",
+      data: {
+        id: "I-1",
+        reference: "100",
+        label: "Cuota 8",
+        amount: "7500",
+        amountCents: 750000,
+        currency: "COP",
+        status: "OVERDUE",
+        dueDate: "2026-08-15",
+      },
+    });
+  });
+
+  it("refuses a payment quote when the contract is not owned by the authenticated subject", async () => {
+    const master = masterMock();
+    master.getContractsByPerson.mockResolvedValue([]);
+    const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.quotePayment(person.personId, {
+      contractId: contract.contractId,
+      installmentId: payableInstallment.installmentId,
+    })).resolves.toEqual(expect.objectContaining({
+      status: "UNAVAILABLE",
+      error: expect.objectContaining({ code: "MASTER_PAYMENT_SELECTION_INVALID", retryable: false }),
+    }));
+    expect(master.getOutstandingInstallments).not.toHaveBeenCalled();
+  });
+
+  it("refuses a payment quote when the selected installment is no longer payable", async () => {
+    const master = masterMock();
+    master.getContractsByPerson.mockResolvedValue([contract]);
+    master.getOutstandingInstallments.mockResolvedValue([]);
+    const provider = new MasterExternalCoreProvider(master);
+
+    await expect(provider.quotePayment(person.personId, {
+      contractId: contract.contractId,
+      installmentId: payableInstallment.installmentId,
+    })).resolves.toEqual(expect.objectContaining({
+      status: "UNAVAILABLE",
+      error: expect.objectContaining({ code: "MASTER_PAYMENT_NOT_PAYABLE", retryable: false }),
+    }));
+  });
+
+  it("never enables Master payment application or reversal writes", async () => {
+    const master = masterMock();
+    const provider = new MasterExternalCoreProvider(master);
+
     await expect(provider.applyConfirmedPayment()).resolves.toEqual(
+      expect.objectContaining({ status: "NOT_CONFIGURED", error: expect.objectContaining({ code: "MASTER_WRITE_DISABLED" }) }),
+    );
+    await expect(provider.reversePayment()).resolves.toEqual(
       expect.objectContaining({ status: "NOT_CONFIGURED", error: expect.objectContaining({ code: "MASTER_WRITE_DISABLED" }) }),
     );
   });
