@@ -3,6 +3,7 @@ import type { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
 import type { MasterQueryService } from "../master/application/master-query.service";
 import type { Contract, Installment, Person } from "../master/domain/master.models";
+import type { MasterPaymentSelectionTokenService } from "../payment-orders/master-payment-selection-token.service";
 import { PaymentsLookupService } from "./payments-lookup.service";
 
 const person: Person = {
@@ -71,6 +72,9 @@ function service(masterOverrides: Partial<MasterQueryService> = {}) {
     getOutstandingInstallments: jest.fn(async () => [installment]),
     ...masterOverrides,
   } as unknown as MasterQueryService;
+  const tokens = {
+    issue: jest.fn(() => "master.v1.opaque-selection-token"),
+  } as unknown as MasterPaymentSelectionTokenService;
   const config = {
     get: jest.fn(() => "master"),
   } as unknown as ConfigService<EnvConfig, true>;
@@ -78,14 +82,15 @@ function service(masterOverrides: Partial<MasterQueryService> = {}) {
     {} as never,
     { findByPublicReference: jest.fn() } as never,
     master,
+    tokens,
     config,
   );
-  return { lookup, master };
+  return { lookup, master, tokens };
 }
 
 describe("PaymentsLookupService Master boundary", () => {
-  it("returns the certified outstanding Master installment as a read-only online-payment candidate", async () => {
-    const { lookup } = service();
+  it("returns the certified outstanding Master installment with an opaque selector", async () => {
+    const { lookup, tokens } = service();
 
     await expect(lookup.lookup({ documentType: "CC", documentNumber: person.document! })).resolves.toEqual({
       type: "customer",
@@ -95,7 +100,7 @@ describe("PaymentsLookupService Master boundary", () => {
         maskedDocumentNumber: "•••••6789",
       },
       obligations: [{
-        obligationId: "master:100:I-8",
+        obligationId: "master.v1.opaque-selection-token",
         concept: "Cuota 8",
         amountCents: 750000,
         currency: "COP",
@@ -104,6 +109,11 @@ describe("PaymentsLookupService Master boundary", () => {
         source: "master",
         onlinePaymentAvailable: false,
       }],
+    });
+    expect(tokens.issue).toHaveBeenCalledWith({
+      personId: person.personId,
+      contractId: contract.contractId,
+      installmentId: installment.installmentId,
     });
   });
 
