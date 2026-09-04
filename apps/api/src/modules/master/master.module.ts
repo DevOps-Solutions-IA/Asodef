@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
 import { MasterQueryService } from "./application/master-query.service";
+import { MasterPaymentQuoteService } from "./application/master-payment-quote.service";
 import { MasterContractSummaryService } from "./application/master-contract-summary.service";
 import { MasterConnectionGateService } from "./application/master-connection-gate.service";
 import { NodeFirebirdReadClient } from "./firebird/firebird.client";
@@ -23,6 +24,7 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
   controllers: [MasterHealthController, MasterContractsController],
   providers: [
     MasterQueryService,
+    MasterPaymentQuoteService,
     MasterContractSummaryService,
     MasterConnectionGateService,
     MasterHealthService,
@@ -43,6 +45,6 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
       ): MasterReadRepository => getMasterFirebirdRuntimeConfig(config).enabled ? firebird : disabled,
     },
   ],
-  exports: [MasterQueryService, MasterConnectionGateService, MasterHealthService, MASTER_READ_REPOSITORY],
+  exports: [MasterQueryService, MasterPaymentQuoteService, MasterConnectionGateService, MasterHealthService, MASTER_READ_REPOSITORY],
 })
 export class MasterModule {}
