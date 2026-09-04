@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { EnvConfig } from "../../config/env.validation";
 import { DisabledMasterPaymentApplicationService } from "./application/disabled-master-payment-application.service";
+import { MasterConfirmedPaymentService } from "./application/master-confirmed-payment.service";
 import { MasterQueryService } from "./application/master-query.service";
 import { MasterPaymentQuoteService } from "./application/master-payment-quote.service";
 import { MasterContractSummaryService } from "./application/master-contract-summary.service";
@@ -27,6 +28,7 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
   providers: [
     MasterQueryService,
     MasterPaymentQuoteService,
+    MasterConfirmedPaymentService,
     MasterContractSummaryService,
     MasterConnectionGateService,
     MasterHealthService,
@@ -52,6 +54,7 @@ import { MASTER_READ_REPOSITORY, type MasterReadRepository } from "./ports/maste
   exports: [
     MasterQueryService,
     MasterPaymentQuoteService,
+    MasterConfirmedPaymentService,
     MasterConnectionGateService,
     MasterHealthService,
     MASTER_READ_REPOSITORY,
