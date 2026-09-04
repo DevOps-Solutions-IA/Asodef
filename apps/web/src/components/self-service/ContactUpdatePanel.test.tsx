@@ -15,7 +15,7 @@ vi.mock("../../lib/self-service", async (importOriginal) => {
   return {
     ...original,
     selfServiceApi: api,
-    useAffiliateSelfService: () => ({ state: { status: "verified", csrfToken: "csrf", scopes: ["affiliate:contact:manage"] } }),
+    useAffiliateSelfService: () => ({ state: { status: "verified", csrfToken: "csrf", scopes: ["affiliate:contact:manage", "affiliate:profile:update"] } }),
   };
 });
 
