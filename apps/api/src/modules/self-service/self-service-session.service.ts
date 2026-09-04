@@ -60,9 +60,10 @@ export class SelfServiceSessionService {
 
     // The current business decision is that lack of the WhatsApp OTP transport
     // must not disable ordinary portal operations. LOOKUP sessions therefore
-    // retain the approved operational scopes below, while beneficiary changes
-    // and sensitive-document upload remain OTP-only. The session is still
-    // short-lived, browser-bound, HttpOnly and CSRF-protected.
+    // retain approved read/contact/profile and payment-quote capabilities,
+    // while beneficiary changes and sensitive-document upload remain OTP-only.
+    // Settled-payment application is never a browser scope: only the trusted
+    // provider-confirmation path may invoke the future legacy write bridge.
     const lookupScopes = portal === SelfServicePortal.AFFILIATE
       ? [
           "affiliate:summary:read",
@@ -76,7 +77,6 @@ export class SelfServiceSessionService {
           "affiliate:profile:update",
           "payments:read",
           "payments:quote",
-          "payments:apply",
         ]
       : [
           "company:summary:read",
@@ -88,7 +88,6 @@ export class SelfServiceSessionService {
           "company:reports:read",
           "payments:read",
           "payments:quote",
-          "payments:apply",
         ];
     const otpOnlyScopes = portal === SelfServicePortal.AFFILIATE
       ? [
