@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { MasterPaymentQuoteService, type MasterPaymentQuoteFailure } from "../master/application/master-payment-quote.service";
 import { MasterQueryService } from "../master/application/master-query.service";
+import { positiveMasterDecimalToCents } from "../master/domain/master-money";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import type { Contract, Payment, Person } from "../master/domain/master.models";
 import type {
@@ -74,6 +75,13 @@ function quoteRejection(reason: MasterPaymentQuoteFailure): ProviderResult<Provi
     case "INVALID_FINANCIAL_VALUE":
       return unavailable("MASTER_PAYMENT_QUOTE_INVALID", "No fue posible calcular el valor actual de la obligación.");
   }
+}
+
+function centsToCopAmount(cents: number): string {
+  if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("Invalid COP cents");
+  const whole = Math.floor(cents / 100);
+  const fraction = cents % 100;
+  return fraction === 0 ? String(whole) : `${whole}.${String(fraction).padStart(2, "0")}`;
 }
 
 /**
@@ -268,11 +276,66 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     ));
   }
 
-  getAffiliateAccountStatement(_subjectRef: string): Promise<ProviderResult<ProviderPayload>> {
-    return Promise.resolve(notConfigured(
-      "MASTER_ACCOUNT_STATEMENT_NOT_READY",
-      "La regla financiera del estado de cuenta todavía no está aprobada.",
-    ));
+  async getAffiliateAccountStatement(subjectRef: string): Promise<ProviderResult<ProviderPayload>> {
+    try {
+      const contracts = await this.master.getContractsByPerson(subjectRef);
+      const groups = await Promise.all(
+        contracts.map(async (contract) => this.master.getOutstandingInstallments(contract.contractId)),
+      );
+
+      let overdueCents = 0;
+      let currentCents = 0;
+      let overdueCount = 0;
+      let currentCount = 0;
+
+      for (const installment of groups.flat()) {
+        const cents = positiveMasterDecimalToCents(installment.balance);
+        const state = payableInstallmentStatus(installment);
+        if (cents === null || state === null) {
+          return unavailable(
+            "MASTER_ACCOUNT_STATEMENT_INVALID",
+            "No fue posible consolidar el estado de cuenta con los datos actuales.",
+          );
+        }
+        if (state === "OVERDUE") {
+          overdueCents += cents;
+          overdueCount += 1;
+        } else {
+          currentCents += cents;
+          currentCount += 1;
+        }
+        if (!Number.isSafeInteger(overdueCents) || !Number.isSafeInteger(currentCents)) {
+          return unavailable(
+            "MASTER_ACCOUNT_STATEMENT_INVALID",
+            "No fue posible consolidar el estado de cuenta con los datos actuales.",
+          );
+        }
+      }
+
+      const totalCents = overdueCents + currentCents;
+      if (!Number.isSafeInteger(totalCents)) {
+        return unavailable(
+          "MASTER_ACCOUNT_STATEMENT_INVALID",
+          "No fue posible consolidar el estado de cuenta con los datos actuales.",
+        );
+      }
+
+      return {
+        status: "VERIFIED",
+        data: {
+          status: overdueCents > 0 ? "EN_MORA" : currentCents > 0 ? "VIGENTE" : "AL_DIA",
+          balance: centsToCopAmount(totalCents),
+          currency: "COP",
+          overdueBalance: centsToCopAmount(overdueCents),
+          currentBalance: centsToCopAmount(currentCents),
+          overdueCount,
+          currentCount,
+          contractCount: contracts.length,
+        },
+      };
+    } catch {
+      return unavailable("MASTER_ACCOUNT_STATEMENT_UNAVAILABLE", "No fue posible consultar el estado de cuenta.", true);
+    }
   }
 
   async getAffiliateObligations(subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
