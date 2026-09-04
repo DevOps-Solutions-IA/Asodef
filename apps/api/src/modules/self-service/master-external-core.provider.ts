@@ -36,6 +36,17 @@ function contractStatus(contract: Contract): string {
   return contract.legacyStatus ?? "SIN_CLASIFICAR";
 }
 
+function contractPayload(contract: Contract): ProviderPayload {
+  return {
+    id: contract.contractId,
+    reference: contract.contractId,
+    title: contract.planId ? `Plan ${contract.planId}` : "Contrato ASODEF",
+    status: contractStatus(contract),
+    effectiveDate: contract.validFrom,
+    updatedAt: contract.lastPaymentAt ?? contract.createdAt,
+  };
+}
+
 function paymentPayload(payment: Payment): ProviderPayload {
   return {
     id: payment.receiptNumber,
@@ -220,6 +231,15 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     }
   }
 
+  async getAffiliateContracts(subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
+    try {
+      const contracts = await this.master.getContractsByPerson(subjectRef);
+      return { status: "VERIFIED", data: contracts.map(contractPayload) };
+    } catch {
+      return unavailable("MASTER_AFFILIATE_CONTRACTS_UNAVAILABLE", "No fue posible consultar los contratos del afiliado.", true);
+    }
+  }
+
   getAffiliateBeneficiaries(_subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
     return Promise.resolve(notConfigured(
       "MASTER_BENEFICIARIES_NOT_READY",
@@ -354,17 +374,7 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
   async getCompanyContracts(subjectRef: string): Promise<ProviderResult<ProviderCollection>> {
     try {
       const contracts = await this.master.getCompanyContracts(subjectRef);
-      return {
-        status: "VERIFIED",
-        data: contracts.map((contract) => ({
-          id: contract.contractId,
-          reference: contract.contractId,
-          title: contract.planId ? `Plan ${contract.planId}` : "Contrato ASODEF",
-          status: contractStatus(contract),
-          effectiveDate: contract.validFrom,
-          updatedAt: contract.lastPaymentAt ?? contract.createdAt,
-        })),
-      };
+      return { status: "VERIFIED", data: contracts.map(contractPayload) };
     } catch {
       return unavailable("MASTER_COMPANY_CONTRACTS_UNAVAILABLE", "No fue posible consultar los contratos de la empresa.", true);
     }
