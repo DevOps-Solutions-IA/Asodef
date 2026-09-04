@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import { MasterPaymentQuoteService, type MasterPaymentQuoteFailure } from "../master/application/master-payment-quote.service";
 import { MasterQueryService } from "../master/application/master-query.service";
-import { positiveMasterDecimalToCents } from "../master/domain/master-money";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import type { Contract, Payment, Person } from "../master/domain/master.models";
 import type {
@@ -64,6 +64,18 @@ function payloadString(payload: ProviderPayload, key: string): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function quoteRejection(reason: MasterPaymentQuoteFailure): ProviderResult<ProviderPayload> {
+  switch (reason) {
+    case "SUBJECT_NOT_FOUND":
+    case "CONTRACT_NOT_OWNED":
+      return unavailable("MASTER_PAYMENT_SELECTION_INVALID", "No fue posible validar la obligación seleccionada.");
+    case "INSTALLMENT_NOT_PAYABLE":
+      return unavailable("MASTER_PAYMENT_NOT_PAYABLE", "La obligación seleccionada ya no está disponible para pago.");
+    case "INVALID_FINANCIAL_VALUE":
+      return unavailable("MASTER_PAYMENT_QUOTE_INVALID", "No fue posible calcular el valor actual de la obligación.");
+  }
+}
+
 /**
  * Read-only adapter from the public/self-service boundary to the certified
  * Firebird Master bounded context.
@@ -76,7 +88,10 @@ function payloadString(payload: ProviderPayload, key: string): string | null {
  */
 @Injectable()
 export class MasterExternalCoreProvider implements ExternalCoreProvider {
-  constructor(private readonly master: MasterQueryService) {}
+  constructor(
+    private readonly master: MasterQueryService,
+    private readonly paymentQuotes: MasterPaymentQuoteService,
+  ) {}
 
   async startAffiliateLookup(input: AffiliateLookupInput): Promise<LookupProviderResult> {
     if (input.identifierMode !== "DOCUMENT") {
@@ -411,9 +426,8 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
   /**
    * Read-only quote for the certified payable-installment rule. The caller must
    * supply a contractId + installmentId that was previously listed for the
-   * authenticated subject. Ownership and current payability are always re-read
-   * from Master; amountCents is derived exactly from the current Firebird
-   * decimal, never from browser/client input.
+   * authenticated subject. All financial/ownership checks are delegated to the
+   * same MasterPaymentQuoteService used by public /pagos preflight.
    */
   async quotePayment(subjectRef: string, payload: ProviderPayload): Promise<ProviderResult<ProviderPayload>> {
     const contractId = payloadString(payload, "contractId");
@@ -423,23 +437,10 @@ export class MasterExternalCoreProvider implements ExternalCoreProvider {
     }
 
     try {
-      const contracts = await this.master.getContractsByPerson(subjectRef);
-      const contract = contracts.find((candidate) => candidate.contractId === contractId);
-      if (!contract) {
-        return unavailable("MASTER_PAYMENT_SELECTION_INVALID", "No fue posible validar la obligación seleccionada.");
-      }
+      const result = await this.paymentQuotes.quote(subjectRef, contractId, installmentId);
+      if (result.status !== "VERIFIED") return quoteRejection(result.reason);
 
-      const installments = await this.master.getOutstandingInstallments(contract.contractId);
-      const installment = installments.find((candidate) => candidate.installmentId === installmentId);
-      if (!installment) {
-        return unavailable("MASTER_PAYMENT_NOT_PAYABLE", "La obligación seleccionada ya no está disponible para pago.");
-      }
-
-      const amountCents = positiveMasterDecimalToCents(installment.balance);
-      if (amountCents === null || !installment.dueDate) {
-        return unavailable("MASTER_PAYMENT_QUOTE_INVALID", "No fue posible calcular el valor actual de la obligación.");
-      }
-
+      const { contract, installment, amountCents } = result.data;
       return {
         status: "VERIFIED",
         data: {
