@@ -4,6 +4,7 @@ import { LegalDocumentsModule } from "../legal-documents/legal-documents.module"
 import { ConsentModule } from "../consent/consent.module";
 import { PaymentOrdersController } from "./payment-orders.controller";
 import { AdminPaymentOrdersController } from "./admin-payment-orders.controller";
+import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 import { PaymentOrdersService } from "./payment-orders.service";
 
 /** US-024 adds the controller; US-023 already shipped the domain
@@ -13,7 +14,7 @@ import { PaymentOrdersService } from "./payment-orders.service";
 @Module({
   imports: [AuditModule, LegalDocumentsModule, ConsentModule],
   controllers: [PaymentOrdersController, AdminPaymentOrdersController],
-  providers: [PaymentOrdersService],
-  exports: [PaymentOrdersService],
+  providers: [PaymentOrdersService, MasterPaymentSelectionTokenService],
+  exports: [PaymentOrdersService, MasterPaymentSelectionTokenService],
 })
 export class PaymentOrdersModule {}
