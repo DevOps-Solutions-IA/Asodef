@@ -19,7 +19,8 @@ function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
 describe("PaymentLookupPage with Master obligations", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("shows real Master debt but never opens the modern payment-order path before write-back is ready", async () => {
+  it("revalidates Master debt but never opens the modern payment-order create path before write-back is ready", async () => {
+    const selectionToken = "master.v1.opaque-test-token";
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/payments/lookup")) {
@@ -27,7 +28,7 @@ describe("PaymentLookupPage with Master obligations", () => {
           type: "customer",
           customer: { fullName: "ANA PEREZ", documentType: "CC", maskedDocumentNumber: "•••••6789" },
           obligations: [{
-            obligationId: "master:100:I-8",
+            obligationId: selectionToken,
             concept: "Cuota 8",
             amountCents: 750000,
             currency: "COP",
@@ -36,6 +37,20 @@ describe("PaymentLookupPage with Master obligations", () => {
             source: "master",
             onlinePaymentAvailable: false,
           }],
+        });
+      }
+      if (url.includes("/payment-orders/master/preflight")) {
+        return jsonResponse(200, {
+          source: "master",
+          customer: { fullName: "ANA PEREZ", documentType: "CC", maskedDocumentNumber: "•••••6789" },
+          obligation: {
+            concept: "Cuota 8",
+            amountCents: 760000,
+            currency: "COP",
+            dueDate: "2026-08-15T12:00:00.000Z",
+            status: "OVERDUE",
+          },
+          onlinePaymentAvailable: false,
         });
       }
       return jsonResponse(500, { message: "unexpected request" });
@@ -48,9 +63,20 @@ describe("PaymentLookupPage with Master obligations", () => {
 
     expect(await screen.findByText("ANA PEREZ")).toBeInTheDocument();
     expect(screen.getByText("Cuota 8")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pago en integración" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Pagar" })).not.toBeInTheDocument();
     expect(screen.getByText(/consultadas directamente en el sistema maestro/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/payment-orders"))).toBe(false);
+    expect(screen.getByText(/pago en línea en integración/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Verificar saldo" }));
+
+    expect(await screen.findByRole("button", { name: "Saldo verificado" })).toBeDisabled();
+    expect(screen.getByText("$ 7.600,00")).toBeInTheDocument();
+
+    const preflightCall = fetchMock.mock.calls.find(([input]) => String(input).includes("/payment-orders/master/preflight"));
+    expect(preflightCall).toBeDefined();
+    const preflightBody = JSON.parse((preflightCall![1] as RequestInit).body as string) as { selectionToken: string };
+    expect(preflightBody).toEqual({ selectionToken });
+
+    expect(fetchMock.mock.calls.some(([input]) => /\/payment-orders$/.test(String(input)))).toBe(false);
   });
 });
