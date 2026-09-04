@@ -12,7 +12,6 @@ import { generatePublicReference } from "./public-reference";
 import type { PaymentOrderResponse } from "./payment-order.types";
 
 const PAYMENT_TERMS_POLICY_SLUG = "terminos-de-pago";
-const ACTIVE_STATUSES = ["PENDING", "PROCESSING"] as const;
 
 export interface MasterPaymentOrderRow {
   id: string;
