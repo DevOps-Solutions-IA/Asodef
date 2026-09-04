@@ -30,6 +30,7 @@ export class NotConfiguredExternalCoreProvider implements ExternalCoreProvider {
   getAffiliateContactDestinations(): Promise<ProviderResult<readonly ContactDestination[]>> { return notConfigured(); }
   getCompanyContactDestinations(): Promise<ProviderResult<readonly ContactDestination[]>> { return notConfigured(); }
   getAffiliateSummary(): Promise<ProviderResult<ProviderPayload>> { return notConfigured(); }
+  getAffiliateContracts(): Promise<ProviderResult<ProviderCollection>> { return notConfigured(); }
   getAffiliateBeneficiaries(): Promise<ProviderResult<ProviderCollection>> { return notConfigured(); }
   getAffiliateAccountStatement(): Promise<ProviderResult<ProviderPayload>> { return notConfigured(); }
   getAffiliateObligations(): Promise<ProviderResult<ProviderCollection>> { return notConfigured(); }
