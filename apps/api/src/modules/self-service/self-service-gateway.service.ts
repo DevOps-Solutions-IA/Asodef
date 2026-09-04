@@ -55,7 +55,7 @@ export class SelfServiceGatewayService {
   }
 
   assertScope(principal: SelfServicePrincipal, scope: string): void {
-    if (principal.assurance !== "OTP" || !principal.scopes.includes(scope)) throw new ServiceUnavailableException("La sesión no autoriza esta operación.");
+    if (!principal.scopes.includes(scope)) throw new ServiceUnavailableException("La sesión no autoriza esta operación.");
   }
 
   async read<T>(operation: () => Promise<ProviderResult<T>>, options: { retry?: boolean } = {}): Promise<ProviderResult<T>> {
