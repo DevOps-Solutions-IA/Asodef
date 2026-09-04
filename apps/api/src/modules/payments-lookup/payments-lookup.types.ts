@@ -12,14 +12,11 @@ export interface LookupCustomerResponse {
 }
 
 /**
- * obligationId is the internal Obligation uuid - exposed deliberately.
- * Unlike PaymentOrder, Obligation has no dedicated public-reference
- * field in the PRD's own dataModel, and the frontend needs *something*
- * to pass back to POST /payment-orders (which literally takes
- * `obligationId`, per US-023's own signature). A v4 uuid is still
- * cryptographically random/non-sequential, so this doesn't violate the
- * "never expose a guessable sequence" rule - it's conditioned on
- * exposing a *sequential* id, which this isn't.
+ * obligationId is an opaque selection identifier for the current payment
+ * lookup result. Modern obligations use their v4 UUID. Master obligations
+ * are explicitly marked as read-only until the confirmed-payment write
+ * bridge is available, so their identifier is never accepted by the modern
+ * POST /payment-orders path.
  */
 export interface LookupObligationResponse {
   obligationId: string;
@@ -28,6 +25,8 @@ export interface LookupObligationResponse {
   currency: string;
   dueDate: Date;
   status: string;
+  source: "modern" | "master";
+  onlinePaymentAvailable: boolean;
 }
 
 export type PaymentsLookupResponse =
@@ -50,5 +49,7 @@ export function toLookupObligationResponse(obligation: Obligation): LookupObliga
     currency: obligation.currency,
     dueDate: obligation.dueDate,
     status: obligation.status,
+    source: "modern",
+    onlinePaymentAvailable: true,
   };
 }
