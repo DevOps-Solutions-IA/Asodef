@@ -14,10 +14,11 @@ Los accesos públicos comparten `PublicHeader`. Los portales verificados usan sh
 
 1. El BFF consulta `ExternalCoreProvider`; el navegador nunca llama al sistema externo.
 2. Mientras `SELF_SERVICE_MESSAGE_PROVIDER=not_configured`, un lookup válido crea una sesión corta con garantía `LOOKUP`, ligada al navegador y separada de las sesiones administrativas.
-3. La sesión `LOOKUP` mantiene las operaciones ordinarias aprobadas para esta fase: lectura, actualización de contacto/perfil y quote/aplicación de pagos. Cambios de beneficiarios y carga de documentos sensibles permanecen reservados para OTP.
-4. Cuando WhatsApp OTP se active, el proveedor entregará canales habilitados, verificados y autorizados. Los destinos completos se conservarán cifrados solo en backend; la respuesta pública contendrá únicamente máscaras.
-5. ASODEF generará el OTP con aleatoriedad criptográfica, almacenará solo su hash y lo entregará mediante `SelfServiceMessageProvider`. El transporte preparado para autoservicio es WhatsApp Cloud API mediante una plantilla `AUTHENTICATION` aprobada.
-6. Tanto `LOOKUP` como `OTP` crean cookies opacas independientes por portal, `HttpOnly`, `SameSite=Strict`, `Secure` en producción y con vigencia corta. Las mutaciones autorizadas exigen alcance, idempotencia y token CSRF rotatorio de un solo uso.
+3. La sesión `LOOKUP` mantiene las operaciones ordinarias aprobadas para esta fase: lectura, actualización de contacto/perfil y cotización de pagos. Cambios de beneficiarios y carga de documentos sensibles permanecen reservados para OTP.
+4. La aplicación de un pago confirmado no es una operación del navegador: solo una confirmación confiable del proveedor de pagos podrá activar el futuro write bridge hacia el legado.
+5. Cuando WhatsApp OTP se active, el proveedor entregará canales habilitados, verificados y autorizados. Los destinos completos se conservarán cifrados solo en backend; la respuesta pública contendrá únicamente máscaras.
+6. ASODEF generará el OTP con aleatoriedad criptográfica, almacenará solo su hash y lo entregará mediante `SelfServiceMessageProvider`. El transporte preparado para autoservicio es WhatsApp Cloud API mediante una plantilla `AUTHENTICATION` aprobada.
+7. Tanto `LOOKUP` como `OTP` crean cookies opacas independientes por portal, `HttpOnly`, `SameSite=Strict`, `Secure` en producción y con vigencia corta. Las mutaciones autorizadas exigen alcance, idempotencia y token CSRF rotatorio de un solo uso.
 
 Las respuestas de lookup son anti-enumeración: salvo autorización explícita del proveedor, “no existe” y “no disponible” no se distinguen ante el navegador.
 
@@ -35,6 +36,12 @@ La interfaz y los scopes permiten continuar el flujo de actualización aun cuand
 
 Cuando OTP se active, la verificación por WhatsApp podrá elevar el mismo flujo sin alterar la autoridad de datos ni la separación de capas.
 
+## Pagos
+
+El cliente puede consultar y cotizar una obligación, y posteriormente iniciar checkout cuando la integración esté completa. No existe un endpoint de cliente para “marcar” un pago como confirmado o aplicado. La confirmación monetaria debe provenir de Bold por un canal autenticado/verificado; únicamente después de esa confirmación el backend podrá invocar el write bridge idempotente del legado.
+
+La reversa tampoco forma parte del autoservicio del cliente.
+
 ## Endpoints
 
 Namespace: `/api/v1/self-service`.
@@ -44,7 +51,7 @@ Namespace: `/api/v1/self-service`.
 - recursos de afiliado y empresa bajo su portal correspondiente.
 - ciclo `affiliate/beneficiary-change-requests` (mutaciones sensibles reservadas para OTP y además sujetas al proveedor legado).
 - `affiliate/contact-updates/start|request-code|verify|:requestId/status`.
-- `payments/quote|apply-confirmed|application/:id`. La reversa no forma parte del autoservicio del cliente.
+- `payments/quote|application/:id`; la aplicación confirmada es backend-only y la reversa no forma parte del autoservicio.
 - `provider-health`.
 
 El Centro de Pagos público añade `POST /api/v1/payment-orders/master/preflight` para revalidar una obligación Master sin crear una orden ni iniciar Bold mientras la aplicación al legado no esté certificada.
