@@ -2,6 +2,7 @@ import { apiClient } from "../api-client";
 import type {
   BoldPaymentStatus,
   CreateBoldPaymentResult,
+  MasterPaymentPreflightResponse,
   PaymentOrderSummary,
   PaymentsLookupRequest,
   PaymentsLookupResponse,
@@ -13,6 +14,11 @@ import type {
  * harmless for a @Public() route. */
 export function lookupPayments(input: PaymentsLookupRequest): Promise<PaymentsLookupResponse> {
   return apiClient.post<PaymentsLookupResponse>("/payments/lookup", input);
+}
+
+/** Read-only: revalidates an opaque Master selector immediately before any future checkout. */
+export function preflightMasterPayment(selectionToken: string): Promise<MasterPaymentPreflightResponse> {
+  return apiClient.post<MasterPaymentPreflightResponse>("/payment-orders/master/preflight", { selectionToken });
 }
 
 export function createPaymentOrder(obligationId: string): Promise<PaymentOrderSummary> {
