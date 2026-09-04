@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MasterQueryService } from "../master/application/master-query.service";
+import { positiveMasterDecimalToCents } from "../master/domain/master-money";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 
@@ -15,14 +16,6 @@ export interface VerifiedMasterPaymentSource {
   currency: "COP";
   dueDate: Date;
   status: string;
-}
-
-function decimalToCents(value: string | null): number | null {
-  if (!value) return null;
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  const cents = Math.round(amount * 100);
-  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 function parseMasterDate(value: string | null): Date | null {
@@ -61,7 +54,7 @@ export class MasterPaymentPreflightService {
       const installment = installments.find((candidate) => candidate.installmentId === selection.installmentId);
       if (!installment) return null;
 
-      const amountCents = decimalToCents(installment.balance);
+      const amountCents = positiveMasterDecimalToCents(installment.balance);
       const dueDate = parseMasterDate(installment.dueDate);
       const document = person.document?.trim() || person.personId;
       if (amountCents === null || dueDate === null || !document) return null;
