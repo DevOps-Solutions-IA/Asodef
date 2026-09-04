@@ -104,14 +104,15 @@ export class BoldWebhookService {
     // Current official VOID notifications are valid and auditable but they are
     // not payment-status transitions in the modern order state machine. Refund/
     // void semantics remain owned by the dedicated refund/reconciliation flow.
-    if (!normalized.providerStatus) {
+    const providerStatus = normalized.providerStatus;
+    if (!providerStatus) {
       await this.prisma.paymentEvent.update({ where: { id: eventId }, data: { processedAt: new Date() } });
       return;
     }
 
-    const mapping = mapBoldPaymentStatus(normalized.providerStatus);
+    const mapping = mapBoldPaymentStatus(providerStatus);
     if (!mapping.isKnownBoldStatus) {
-      this.logger.warn(`Unknown Bold webhook status "${normalized.providerStatus}" for reference ${reference}`);
+      this.logger.warn(`Unknown Bold webhook status "${providerStatus}" for reference ${reference}`);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -137,7 +138,7 @@ export class BoldWebhookService {
         await tx.paymentTransaction.create({
           data: {
             paymentAttemptId: latestAttempt.id,
-            status: normalized.providerStatus,
+            status: providerStatus,
             rawResponse: payload as unknown as Prisma.InputJsonValue,
           },
         });
