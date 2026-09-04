@@ -87,6 +87,7 @@ export function PaymentLookupPage() {
   });
 
   const isBusy = isSubmitting || lookupMutation.isPending || createOrderMutation.isPending;
+  const hasMasterObligations = result?.type === "customer" && result.obligations.some((obligation) => obligation.source === "master");
 
   return (
     <div className="mx-auto w-full max-w-[75rem]">
@@ -150,36 +151,51 @@ export function PaymentLookupPage() {
             {result.customer.documentType} {result.customer.maskedDocumentNumber}
           </p>
 
+          {hasMasterObligations && (
+            <Alert variant="info" className="mt-5">
+              Obligaciones consultadas directamente en el sistema maestro de ASODEF. El cobro en línea permanecerá deshabilitado hasta completar la aplicación automática y trazable del pago en el sistema maestro.
+            </Alert>
+          )}
+
           <ul className="mt-6 flex flex-col gap-3">
-            {result.obligations.map((obligation) => (
-              <li
-                key={obligation.obligationId}
-                className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-all duration-enterprise hover:-translate-y-0.5 hover:border-border-strong hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-text-main">{obligation.concept}</p>
-                  <p className="text-sm text-text-muted">Vence: {new Date(obligation.dueDate).toLocaleDateString("es-CO")}</p>
-                  <StatusBadge
-                    tone={obligation.status === "OVERDUE" ? "rejected" : "pending"}
-                    label={getObligationStatusLabel(obligation.status)}
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-display text-lg font-semibold tabular-nums text-brand-dark">
-                    {formatCurrency(obligation.amountCents, obligation.currency)}
-                  </p>
-                  <Button
-                    type="button"
-                    loading={createOrderMutation.isPending && createOrderMutation.variables === obligation.obligationId}
-                    disabled={isBusy}
-                    onClick={() => createOrderMutation.mutate(obligation.obligationId)}
-                  >
-                    Pagar
-                  </Button>
-                </div>
-              </li>
-            ))}
+            {result.obligations.map((obligation) => {
+              const onlinePaymentAvailable = obligation.onlinePaymentAvailable !== false;
+              return (
+                <li
+                  key={obligation.obligationId}
+                  className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-white p-4 shadow-e1 transition-all duration-enterprise hover:-translate-y-0.5 hover:border-border-strong hover:shadow-e2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium text-text-main">{obligation.concept}</p>
+                    <p className="text-sm text-text-muted">Vence: {new Date(obligation.dueDate).toLocaleDateString("es-CO")}</p>
+                    <StatusBadge
+                      tone={obligation.status === "OVERDUE" ? "rejected" : "pending"}
+                      label={getObligationStatusLabel(obligation.status)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="font-display text-lg font-semibold tabular-nums text-brand-dark">
+                      {formatCurrency(obligation.amountCents, obligation.currency)}
+                    </p>
+                    {onlinePaymentAvailable ? (
+                      <Button
+                        type="button"
+                        loading={createOrderMutation.isPending && createOrderMutation.variables === obligation.obligationId}
+                        disabled={isBusy}
+                        onClick={() => createOrderMutation.mutate(obligation.obligationId)}
+                      >
+                        Pagar
+                      </Button>
+                    ) : (
+                      <Button type="button" disabled>
+                        Pago en integración
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
