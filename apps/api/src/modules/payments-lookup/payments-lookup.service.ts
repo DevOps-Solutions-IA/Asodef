@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../database/prisma.service";
 import type { EnvConfig } from "../../config/env.validation";
 import { MasterQueryService } from "../master/application/master-query.service";
+import { positiveMasterDecimalToCents } from "../master/domain/master-money";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import { MasterPaymentSelectionTokenService } from "../payment-orders/master-payment-selection-token.service";
 import { OUTSTANDING_OBLIGATION_STATUSES, PaymentOrdersService } from "../payment-orders/payment-orders.service";
@@ -17,14 +18,6 @@ const GENERIC_NOT_FOUND_MESSAGE = "No se encontraron resultados.";
 
 function normalizeDocumentType(value: string): string {
   return value.trim().toUpperCase();
-}
-
-function masterAmountToCents(value: string | null): number | null {
-  if (!value) return null;
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  const cents = Math.round(amount * 100);
-  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 function masterDueDate(value: string | null): Date | null {
@@ -136,7 +129,7 @@ export class PaymentsLookupService {
 
     const obligations: LookupObligationResponse[] = groups.flatMap(({ contract, installments }) =>
       installments.flatMap((installment) => {
-        const amountCents = masterAmountToCents(installment.balance);
+        const amountCents = positiveMasterDecimalToCents(installment.balance);
         const dueDate = masterDueDate(installment.dueDate);
         if (amountCents === null || dueDate === null) return [];
         return [{
