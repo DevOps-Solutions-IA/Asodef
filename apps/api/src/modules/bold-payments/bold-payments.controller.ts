@@ -1,23 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  HttpCode,
-  HttpStatus,
-  NotFoundException,
-  Param,
-  Post,
-  Req,
-  type RawBodyRequest,
-} from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import type { Request } from "express";
 import { Public } from "../auth/decorators/public.decorator";
 import { BoldPaymentsService } from "./bold-payments.service";
 import { CreateBoldPaymentDto } from "./dto/create-bold-payment.dto";
 import { MasterBoldPaymentsService } from "./master-bold-payments.service";
-import { MasterBoldWebhookService } from "./master-bold-webhook.service";
 
 @ApiTags("payments")
 @Controller("payments")
@@ -25,19 +11,7 @@ export class BoldPaymentsController {
   constructor(
     private readonly boldPaymentsService: BoldPaymentsService,
     private readonly masterBoldPaymentsService: MasterBoldPaymentsService,
-    private readonly masterBoldWebhookService: MasterBoldWebhookService,
   ) {}
-
-  @Public()
-  @Post("bold/webhook")
-  @HttpCode(HttpStatus.OK)
-  receiveBoldWebhook(
-    @Req() request: RawBodyRequest<Request>,
-    @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body() payload: unknown,
-  ) {
-    return this.masterBoldWebhookService.handle(payload, request.rawBody, headers);
-  }
 
   @Public()
   @Post("bold/master/create")
