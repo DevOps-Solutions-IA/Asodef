@@ -70,11 +70,6 @@ export class PaymentsLookupService {
       where: { documentType_documentNumber: { documentType, documentNumber } },
     });
 
-    // A real customer with zero outstanding obligations is treated
-    // identically to "customer doesn't exist" - anything else would let
-    // an attacker distinguish "valid document, no debt" from "invalid
-    // document" by response shape alone, the exact enumeration this
-    // endpoint's negative case exists to prevent.
     if (!customer) {
       throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
     }
@@ -99,8 +94,6 @@ export class PaymentsLookupService {
     try {
       person = await this.master.findPersonByDocument(documentNumber.trim());
     } catch {
-      // Keep the same external shape as an unavailable/non-matching lookup.
-      // The public endpoint must never leak Firebird or network details.
       throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
     }
     if (!person) throw new NotFoundException(GENERIC_NOT_FOUND_MESSAGE);
@@ -131,7 +124,8 @@ export class PaymentsLookupService {
       installments.flatMap((installment) => {
         const amountCents = positiveMasterDecimalToCents(installment.balance);
         const dueDate = masterDueDate(installment.dueDate);
-        if (amountCents === null || dueDate === null) return [];
+        const status = payableInstallmentStatus(installment);
+        if (amountCents === null || dueDate === null || !status) return [];
         return [{
           obligationId: this.masterSelectionTokens.issue({
             personId: person.personId,
@@ -144,7 +138,7 @@ export class PaymentsLookupService {
           amountCents,
           currency: "COP",
           dueDate,
-          status: payableInstallmentStatus(installment),
+          status,
           source: "master" as const,
           onlinePaymentAvailable: false,
         }];
