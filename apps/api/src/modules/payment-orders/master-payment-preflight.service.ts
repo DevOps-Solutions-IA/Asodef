@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { MasterQueryService } from "../master/application/master-query.service";
-import { positiveMasterDecimalToCents } from "../master/domain/master-money";
+import { MasterPaymentQuoteService } from "../master/application/master-payment-quote.service";
 import { payableInstallmentStatus } from "../master/domain/master-payable-installments";
 import { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
 
@@ -18,23 +17,15 @@ export interface VerifiedMasterPaymentSource {
   status: string;
 }
 
-function parseMasterDate(value: string | null): Date | null {
-  if (!value) return null;
-  const day = /^(\d{4}-\d{2}-\d{2})/.exec(value)?.[1];
-  const date = new Date(day ? `${day}T12:00:00.000Z` : value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 /**
- * Revalidates an opaque /pagos Master selection against the read-only Master
- * immediately before any future payment-order persistence. Nothing from the
- * browser token is trusted as financial state: contract ownership, current
- * payable-installment membership, balance and due date are all read again.
+ * Revalidates an opaque /pagos Master selection against the single certified
+ * Master payment-quote authority immediately before any future payment-order
+ * persistence. Nothing from the browser token is trusted as financial state.
  */
 @Injectable()
 export class MasterPaymentPreflightService {
   constructor(
-    private readonly master: MasterQueryService,
+    private readonly quotes: MasterPaymentQuoteService,
     private readonly tokens: MasterPaymentSelectionTokenService,
   ) {}
 
@@ -43,21 +34,12 @@ export class MasterPaymentPreflightService {
     if (!selection) return null;
 
     try {
-      const person = await this.master.findPersonByDocument(selection.personId);
-      if (!person || person.personId !== selection.personId) return null;
+      const result = await this.quotes.quote(selection.personId, selection.contractId, selection.installmentId);
+      if (result.status !== "VERIFIED") return null;
 
-      const contracts = await this.master.getContractsByPerson(person.personId);
-      const contract = contracts.find((candidate) => candidate.contractId === selection.contractId);
-      if (!contract) return null;
-
-      const installments = await this.master.getOutstandingInstallments(contract.contractId);
-      const installment = installments.find((candidate) => candidate.installmentId === selection.installmentId);
-      if (!installment) return null;
-
-      const amountCents = positiveMasterDecimalToCents(installment.balance);
-      const dueDate = parseMasterDate(installment.dueDate);
+      const { person, contract, installment, amountCents, dueDate } = result.data;
       const document = person.document?.trim() || person.personId;
-      if (amountCents === null || dueDate === null || !document) return null;
+      if (!document) return null;
 
       return {
         personId: person.personId,
