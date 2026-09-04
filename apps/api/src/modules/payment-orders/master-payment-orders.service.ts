@@ -92,7 +92,9 @@ export class MasterPaymentOrdersService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       const lockKey = `${source.contractId}:${source.installmentId}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      await tx.$queryRaw<{ locked: string | null }[]>`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS locked
+      `;
 
       // An untouched order may expire. A PROCESSING order is intentionally not
       // expired automatically because provider outcome may still be unknown.
