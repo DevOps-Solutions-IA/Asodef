@@ -1,3 +1,4 @@
+import { MasterPaymentQuoteService } from "../master/application/master-payment-quote.service";
 import type { MasterQueryService } from "../master/application/master-query.service";
 import type { Contract, Installment, Payment, Person } from "../master/domain/master.models";
 import { MasterExternalCoreProvider } from "./master-external-core.provider";
@@ -17,6 +18,10 @@ function masterMock() {
     getContractBeneficiaries: jest.fn(),
     getContractStatus: jest.fn(),
   } as unknown as jest.Mocked<MasterQueryService>;
+}
+
+function providerFor(master: MasterQueryService): MasterExternalCoreProvider {
+  return new MasterExternalCoreProvider(master, new MasterPaymentQuoteService(master));
 }
 
 const person: Person = {
@@ -102,7 +107,7 @@ describe("MasterExternalCoreProvider", () => {
   it("resolves an affiliate document through the Master read service", async () => {
     const master = masterMock();
     master.findPersonByDocument.mockResolvedValue(person);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.startAffiliateLookup({ identifierMode: "DOCUMENT", documentType: "CC", identifier: person.document! }))
       .resolves.toEqual({ status: "VERIFIED", data: { subjectRef: person.personId } });
@@ -119,7 +124,7 @@ describe("MasterExternalCoreProvider", () => {
       phone2: "315 111 2233",
       phone: "602 555 0101",
     });
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.startCompanyLookupByNit({ nit: "900123456" }))
       .resolves.toEqual({ status: "VERIFIED", data: { subjectRef: "900123456" } });
@@ -128,7 +133,7 @@ describe("MasterExternalCoreProvider", () => {
   it("uses approved legacy phone/WhatsApp mobile fields as deduplicated WhatsApp OTP destinations", async () => {
     const master = masterMock();
     master.findPersonByDocument.mockResolvedValue(person);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.getAffiliateVerificationChannels(person.personId)).resolves.toEqual({
       status: "VERIFIED",
@@ -166,7 +171,7 @@ describe("MasterExternalCoreProvider", () => {
       phone2: "315 111 2233",
       phone: "300 999 8877",
     });
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.getCompanyVerificationChannels("900123456")).resolves.toEqual({
       status: "VERIFIED",
@@ -196,7 +201,7 @@ describe("MasterExternalCoreProvider", () => {
       phone2: null,
       phone: "6025550101",
     });
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.getCompanyContactDestinations("900000000")).resolves.toEqual({
       status: "VERIFIED",
@@ -209,7 +214,7 @@ describe("MasterExternalCoreProvider", () => {
     master.getContractsByPerson.mockResolvedValue([contract]);
     master.getPaymentHistory.mockResolvedValue([payment]);
     master.getOutstandingInstallments.mockResolvedValue([payableInstallment]);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.getAffiliateContracts(person.personId)).resolves.toEqual({
       status: "VERIFIED",
@@ -249,11 +254,12 @@ describe("MasterExternalCoreProvider", () => {
     });
   });
 
-  it("quotes a certified payable installment by re-reading ownership and current Master balance", async () => {
+  it("quotes a certified payable installment through the shared quote authority", async () => {
     const master = masterMock();
+    master.findPersonByDocument.mockResolvedValue(person);
     master.getContractsByPerson.mockResolvedValue([contract]);
     master.getOutstandingInstallments.mockResolvedValue([payableInstallment]);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.quotePayment(person.personId, {
       contractId: contract.contractId,
@@ -276,8 +282,9 @@ describe("MasterExternalCoreProvider", () => {
 
   it("refuses a payment quote when the contract is not owned by the authenticated subject", async () => {
     const master = masterMock();
+    master.findPersonByDocument.mockResolvedValue(person);
     master.getContractsByPerson.mockResolvedValue([]);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.quotePayment(person.personId, {
       contractId: contract.contractId,
@@ -291,9 +298,10 @@ describe("MasterExternalCoreProvider", () => {
 
   it("refuses a payment quote when the selected installment is no longer payable", async () => {
     const master = masterMock();
+    master.findPersonByDocument.mockResolvedValue(person);
     master.getContractsByPerson.mockResolvedValue([contract]);
     master.getOutstandingInstallments.mockResolvedValue([]);
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.quotePayment(person.personId, {
       contractId: contract.contractId,
@@ -306,7 +314,7 @@ describe("MasterExternalCoreProvider", () => {
 
   it("never enables Master payment application or reversal writes", async () => {
     const master = masterMock();
-    const provider = new MasterExternalCoreProvider(master);
+    const provider = providerFor(master);
 
     await expect(provider.applyConfirmedPayment()).resolves.toEqual(
       expect.objectContaining({ status: "NOT_CONFIGURED", error: expect.objectContaining({ code: "MASTER_WRITE_DISABLED" }) }),
