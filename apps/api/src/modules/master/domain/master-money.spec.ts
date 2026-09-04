@@ -1,8 +1,7 @@
-import { describe, expect, it } from "vitest";
 import { positiveMasterDecimalToCents } from "./master-money";
 
 describe("positiveMasterDecimalToCents", () => {
-  it.each([
+  it.each<[string, number]>([
     ["1", 100],
     ["1.2", 120],
     ["1.23", 123],
@@ -13,7 +12,7 @@ describe("positiveMasterDecimalToCents", () => {
     expect(positiveMasterDecimalToCents(value)).toBe(expected);
   });
 
-  it.each([null, "", "0", "0.00", "-1.00", "1.234", "abc", "1,23"])(
+  it.each<Array<string | null>>([[null], [""], ["0"], ["0.00"], ["-1.00"], ["1.234"], ["abc"], ["1,23"]])(
     "fails closed for non-positive or non-cent-exact value %s",
     (value) => {
       expect(positiveMasterDecimalToCents(value)).toBeNull();
