@@ -6,3 +6,9 @@ export function normalizeColombianMobile(value: string): string | null {
   if (!/^3\d{9}$/.test(national)) return null;
   return `57${national}`;
 }
+
+export function maskMobile(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 4) return "•".repeat(digits.length);
+  return `${"•".repeat(digits.length - 4)}${digits.slice(-4)}`;
+}
