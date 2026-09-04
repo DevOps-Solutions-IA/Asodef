@@ -39,7 +39,8 @@ export class MasterPaymentPreflightService {
 
       const { person, contract, installment, amountCents, dueDate } = result.data;
       const document = person.document?.trim() || person.personId;
-      if (!document) return null;
+      const status = payableInstallmentStatus(installment);
+      if (!document || !status) return null;
 
       return {
         personId: person.personId,
@@ -52,7 +53,7 @@ export class MasterPaymentPreflightService {
         amountCents,
         currency: "COP",
         dueDate,
-        status: payableInstallmentStatus(installment),
+        status,
       };
     } catch {
       return null;
