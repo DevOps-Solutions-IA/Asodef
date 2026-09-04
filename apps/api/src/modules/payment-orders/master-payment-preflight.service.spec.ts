@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from "vitest";
 import type { MasterPaymentQuoteService } from "../master/application/master-payment-quote.service";
 import type { Contract, Installment, Person } from "../master/domain/master.models";
 import type { MasterPaymentSelectionTokenService } from "./master-payment-selection-token.service";
@@ -66,10 +65,10 @@ const installment: Installment = {
 function harness(options?: { tokenValid?: boolean; rejected?: boolean; throws?: boolean }) {
   const selection = { personId: person.personId, contractId: contract.contractId, installmentId: installment.installmentId };
   const tokens = {
-    verify: vi.fn(() => options?.tokenValid === false ? null : selection),
+    verify: jest.fn(() => options?.tokenValid === false ? null : selection),
   } as unknown as MasterPaymentSelectionTokenService;
   const quotes = {
-    quote: vi.fn(async () => {
+    quote: jest.fn(async () => {
       if (options?.throws) throw new Error("Master unavailable");
       if (options?.rejected) return { status: "REJECTED", reason: "INSTALLMENT_NOT_PAYABLE" } as const;
       return {
