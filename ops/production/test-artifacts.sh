@@ -96,7 +96,7 @@ cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 if [[ "${1:-}" == run && "$*" == *'--network none'* && "$*" == *'find prisma/migrations'* ]]; then
-  printf '%s\n' "${FAKE_MIGRATION_COUNT:-51}"
+  printf '%s\n' "${FAKE_MIGRATION_COUNT:-53}"
   exit 0
 fi
 if [[ "${1:-}" == run && "$*" == *'--network asodef_public_platform_data'* && "${FAKE_MIGRATION_FAIL:-false}" == true ]]; then
@@ -240,7 +240,7 @@ dry_run_output=$(FAKE_DOCKER_LOG="$runtime/deploy-dry-run.log" FAKE_SHARED_DIR="
     --api-image-id "$api_image_id" \
     --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
     --web-image-id "$web_image_id")
-grep -Fq 'deploy=false scope=api,web migrations=not-applied migrationPlan=51' <<<"$dry_run_output"
+grep -Fq 'deploy=false scope=api,web migrations=not-applied migrationPlan=53' <<<"$dry_run_output"
 grep -Fq -- 'run --rm --network none --read-only' "$runtime/deploy-dry-run.log"
 if grep -Eq -- 'migrate deploy|up -d' "$runtime/deploy-dry-run.log"; then
   echo 'status=error code=DRY_RUN_APPLIED_PRODUCTION_CHANGE' >&2
@@ -319,7 +319,7 @@ FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime"
     --apply >/dev/null
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log"
 grep -Fq -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log"
-grep -Fq -- '--env EXPECTED_MIGRATIONS=51' "$runtime/deploy-docker.log"
+grep -Fq -- '--env EXPECTED_MIGRATIONS=53' "$runtime/deploy-docker.log"
 migration_line=$(grep -n -m1 -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log" | cut -d: -f1)
 up_line=$(grep -n -m1 -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log" | cut -d: -f1)
 [[ "$migration_line" -lt "$up_line" ]] || {

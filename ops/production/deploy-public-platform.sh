@@ -7,7 +7,7 @@ usage() {
 }
 
 shared_dir='' source_sha='' api_image='' api_image_id='' web_image='' web_image_id='' apply=false
-readonly EXPECTED_MIGRATIONS=51
+readonly EXPECTED_MIGRATIONS=53
 while (($#)); do
   case "$1" in
     --shared-dir) shared_dir=${2:-}; shift 2 ;;
@@ -122,7 +122,7 @@ network_name=asodef_mail_submission
 members=$(docker network inspect "$network_name" --format '{{range .Containers}}{{.Name}}={{.IPv4Address}}{{println}}{{end}}')
 if [[ "$(printf '%s\n' "$members" | sed '/^$/d' | wc -l)" -ne 1 ]] ||
    ! printf '%s\n' "$members" | grep -Fx "$api_container=172.25.52.2/29" >/dev/null; then
-    echo 'status=error code=MAIL_NETWORK_MEMBERSHIP_MISMATCH' >&2; exit 1;
+    echo 'status=error code=MAIL_NETWORK_MEMBERSHIP_MISMATCH' >&2; exit 1
 fi
 
 for _ in $(seq 1 30); do
@@ -130,12 +130,12 @@ for _ in $(seq 1 30); do
   web_health=$(docker inspect --format '{{.State.Health.Status}}' "$web_container" 2>/dev/null || true)
   [[ "$api_health" == healthy && "$web_health" == healthy ]] && break
   [[ "$api_health" != unhealthy && "$web_health" != unhealthy ]] || {
-    echo 'status=error code=DEPLOYED_SERVICE_UNHEALTHY' >&2; exit 1;
+    echo 'status=error code=DEPLOYED_SERVICE_UNHEALTHY' >&2; exit 1
   }
   sleep 2
 done
 [[ "$api_health" == healthy && "$web_health" == healthy ]] || {
-  echo 'status=error code=DEPLOYED_SERVICE_HEALTH_TIMEOUT' >&2; exit 1;
+  echo 'status=error code=DEPLOYED_SERVICE_HEALTH_TIMEOUT' >&2; exit 1
 }
 production_compose ps api web >/dev/null
 echo 'status=ok deploy=APPLIED scope=api,web composeContract=base,master,mail,admin,release mailAddress=172.25.52.2 health=PASS'
