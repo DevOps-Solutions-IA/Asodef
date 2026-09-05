@@ -4,6 +4,16 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 cd "$repo_root"
+expected_migrations=$(find "$repo_root/apps/api/prisma/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+[[ "$expected_migrations" =~ ^[1-9][0-9]*$ ]] || {
+  echo 'status=error code=PRODUCTION_MIGRATION_COUNT_INVALID' >&2
+  exit 1
+}
+grep -Fq "readonly EXPECTED_MIGRATIONS=$expected_migrations" "$script_dir/deploy-public-platform.sh" || {
+  echo "status=error code=PRODUCTION_MIGRATION_CONTRACT_STALE expected=$expected_migrations" >&2
+  exit 1
+}
+export FAKE_EXPECTED_MIGRATION_COUNT="$expected_migrations"
 for script in "$script_dir"/*.sh "$repo_root/ops/admin-core/rollback-public-admin-core.sh"; do bash -n "$script"; done
 for python_source in "$script_dir"/*.py; do
   python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$python_source"
@@ -96,7 +106,7 @@ cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 if [[ "${1:-}" == run && "$*" == *'--network none'* && "$*" == *'find prisma/migrations'* ]]; then
-  printf '%s\n' "${FAKE_MIGRATION_COUNT:-51}"
+  printf '%s\n' "${FAKE_MIGRATION_COUNT:-$FAKE_EXPECTED_MIGRATION_COUNT}"
   exit 0
 fi
 if [[ "${1:-}" == run && "$*" == *'--network asodef_public_platform_data'* && "${FAKE_MIGRATION_FAIL:-false}" == true ]]; then
@@ -240,13 +250,13 @@ dry_run_output=$(FAKE_DOCKER_LOG="$runtime/deploy-dry-run.log" FAKE_SHARED_DIR="
     --api-image-id "$api_image_id" \
     --web-image asodef-public-platform-web:0000000000000000000000000000000000000000 \
     --web-image-id "$web_image_id")
-grep -Fq 'deploy=false scope=api,web migrations=not-applied migrationPlan=51' <<<"$dry_run_output"
+grep -Fq "deploy=false scope=api,web migrations=not-applied migrationPlan=$expected_migrations" <<<"$dry_run_output"
 grep -Fq -- 'run --rm --network none --read-only' "$runtime/deploy-dry-run.log"
 if grep -Eq -- 'migrate deploy|up -d' "$runtime/deploy-dry-run.log"; then
   echo 'status=error code=DRY_RUN_APPLIED_PRODUCTION_CHANGE' >&2
   exit 1
 fi
-for unexpected_count in 50 52; do
+for unexpected_count in $((expected_migrations - 1)) $((expected_migrations + 1)); do
   mismatch_log="$runtime/deploy-wrong-migration-count-$unexpected_count.log"
   : >"$mismatch_log"
   if FAKE_MIGRATION_COUNT="$unexpected_count" FAKE_DOCKER_LOG="$mismatch_log" \
@@ -319,7 +329,7 @@ FAKE_DOCKER_LOG="$runtime/deploy-docker.log" FAKE_SHARED_DIR="$rollback_runtime"
     --apply >/dev/null
 grep -Fq -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log"
 grep -Fq -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log"
-grep -Fq -- '--env EXPECTED_MIGRATIONS=51' "$runtime/deploy-docker.log"
+grep -Fq -- "--env EXPECTED_MIGRATIONS=$expected_migrations" "$runtime/deploy-docker.log"
 migration_line=$(grep -n -m1 -- 'run --rm --network asodef_public_platform_data' "$runtime/deploy-docker.log" | cut -d: -f1)
 up_line=$(grep -n -m1 -- 'up -d --no-deps --force-recreate api web' "$runtime/deploy-docker.log" | cut -d: -f1)
 [[ "$migration_line" -lt "$up_line" ]] || {

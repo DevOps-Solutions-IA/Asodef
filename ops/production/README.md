@@ -123,10 +123,10 @@ After the dry-run succeeds, repeat the bounded deployment entrypoint with
 mail/Admin/release overlays, records a private backup pointer, validates the
 installed model and recreates only API/Web. Before changing those overlays or
 containers, it runs the exact API image's local Prisma binary against the
-private production data network, requires all 51 checked-in migrations, and
+private production data network, requires all 53 checked-in migrations, and
 verifies `migrate status`. Its dry-run first inspects the exact immutable API
 image without network or runtime credentials and rejects any migration count
-other than 51. A migration failure leaves the running API/Web and
+other than 53. A migration failure leaves the running API/Web and
 the installed Compose contract unchanged:
 
 ```sh
