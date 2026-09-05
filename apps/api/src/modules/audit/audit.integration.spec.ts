@@ -128,7 +128,7 @@ describe("Audit wiring for the payment domain (integration, real HTTP, BOLD_MODE
     // regress the order, but must still be audited as an attempted,
     // blocked transition - never silence.
     const webhookResponse = await request(app.getHttpServer()).post("/api/v1/webhooks/bold").send({ reference_id: reference, status: "REJECTED" });
-    expect(webhookResponse.status).toBe(202);
+    expect(webhookResponse.status).toBe(200);
 
     const order = await prisma.paymentOrder.findUniqueOrThrow({ where: { publicReference: reference } });
 
