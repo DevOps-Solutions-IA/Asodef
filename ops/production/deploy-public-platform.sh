@@ -7,7 +7,7 @@ usage() {
 }
 
 shared_dir='' source_sha='' api_image='' api_image_id='' web_image='' web_image_id='' apply=false
-readonly EXPECTED_MIGRATIONS=51
+readonly EXPECTED_MIGRATIONS=53
 while (($#)); do
   case "$1" in
     --shared-dir) shared_dir=${2:-}; shift 2 ;;
