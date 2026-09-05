@@ -1,15 +1,28 @@
+import { createHmac } from "node:crypto";
 import { Logger } from "@nestjs/common";
+import type { ConfigService } from "@nestjs/config";
+import type { EnvConfig } from "../../config/env.validation";
 import { BoldPaymentProvider } from "./bold-payment-provider.service";
 import { MockBoldTransport } from "./mock-bold.transport";
 import type { BoldTransport } from "./bold-transport.interface";
 
-describe("BoldPaymentProvider (mock mode)", () => {
+function config(values: Partial<Record<keyof EnvConfig, unknown>> = {}): ConfigService<EnvConfig, true> {
+  const defaults: Partial<Record<keyof EnvConfig, unknown>> = {
+    BOLD_MODE: "production",
+    BOLD_WEBHOOK_SECRET: "webhook-test-secret",
+  };
+  return {
+    get: jest.fn((key: keyof EnvConfig) => values[key] ?? defaults[key]),
+  } as unknown as ConfigService<EnvConfig, true>;
+}
+
+describe("BoldPaymentProvider (mock transport)", () => {
   let mockTransport: MockBoldTransport;
   let provider: BoldPaymentProvider;
 
   beforeEach(() => {
     mockTransport = new MockBoldTransport();
-    provider = new BoldPaymentProvider(mockTransport);
+    provider = new BoldPaymentProvider(mockTransport, config());
   });
 
   it("Example (AC): createPayment() in mock mode returns a well-formed CreatePaymentResult with no outbound HTTP request", async () => {
@@ -49,12 +62,50 @@ describe("BoldPaymentProvider (mock mode)", () => {
     expect(status).toEqual({ status: "APPROVED", raw: { status: "APPROVED", reference_id: "pub-ref-4" } });
   });
 
-  it("validateNotification always returns verified: false in Phase 1 - Bold's signature format isn't confirmed", async () => {
-    const payload = { event_type: "payment.approved", transaction_id: "tx-1" };
-    const result = await provider.validateNotification({ payload, headers: {} });
+  it("verifies the current Bold x-bold-signature contract using HMAC-SHA256 over Base64(raw body)", async () => {
+    const payload = { id: "notification-1", type: "SALE_APPROVED", data: { metadata: { reference: "ref-1" } } };
+    const rawBody = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = createHmac("sha256", "webhook-test-secret").update(rawBody.toString("base64")).digest("hex");
+
+    const result = await provider.validateNotification({
+      payload,
+      rawBody,
+      headers: { "x-bold-signature": signature },
+    });
+
+    expect(result.verified).toBe(true);
+    expect(result.raw).toBe(payload);
+  });
+
+  it("rejects a changed raw body even when the parsed payload object is the same", async () => {
+    const payload = { id: "notification-2", type: "SALE_APPROVED" };
+    const signedRawBody = Buffer.from(JSON.stringify(payload), "utf8");
+    const signature = createHmac("sha256", "webhook-test-secret").update(signedRawBody.toString("base64")).digest("hex");
+    const changedRawBody = Buffer.from('{"type":"SALE_APPROVED","id":"notification-2"}', "utf8");
+
+    const result = await provider.validateNotification({
+      payload,
+      rawBody: changedRawBody,
+      headers: { "x-bold-signature": signature },
+    });
 
     expect(result.verified).toBe(false);
-    expect(result.raw).toBe(payload);
+  });
+
+  it("fails closed when production webhook secret or raw body is missing", async () => {
+    const withoutSecret = new BoldPaymentProvider(mockTransport, config({ BOLD_WEBHOOK_SECRET: "" }));
+    const payload = { id: "notification-3", type: "SALE_APPROVED" };
+
+    await expect(withoutSecret.validateNotification({
+      payload,
+      rawBody: Buffer.from(JSON.stringify(payload)),
+      headers: { "x-bold-signature": "0".repeat(64) },
+    })).resolves.toMatchObject({ verified: false });
+
+    await expect(provider.validateNotification({
+      payload,
+      headers: { "x-bold-signature": "0".repeat(64) },
+    })).resolves.toMatchObject({ verified: false });
   });
 
   it("US-056: createRefund succeeds in mock mode for an already-created payment, with no outbound HTTP request", async () => {
@@ -68,17 +119,13 @@ describe("BoldPaymentProvider (mock mode)", () => {
     fetchSpy.mockRestore();
   });
 
-  it("createRefund throws rather than inventing an undocumented Bold refund endpoint when the transport doesn't implement it (real HttpBoldTransport's own behavior)", async () => {
-    // A minimal transport double implementing only the 3 required
-    // BoldTransport methods, deliberately omitting createRefund -
-    // simulates HttpBoldTransport, which has no createRefund method at
-    // all. BoldPaymentProvider must still refuse cleanly.
+  it("createRefund throws rather than inventing an undocumented Bold refund endpoint when the transport doesn't implement it", async () => {
     const transportWithoutRefund: BoldTransport = {
       createPaymentIntent: mockTransport.createPaymentIntent.bind(mockTransport),
       createPayment: mockTransport.createPayment.bind(mockTransport),
       getPayment: mockTransport.getPayment.bind(mockTransport),
     };
-    const providerWithoutRefund = new BoldPaymentProvider(transportWithoutRefund);
+    const providerWithoutRefund = new BoldPaymentProvider(transportWithoutRefund, config());
 
     await expect(
       providerWithoutRefund.createRefund({ providerReferenceId: "ref-1", amountCents: 1000, reason: "test" }),

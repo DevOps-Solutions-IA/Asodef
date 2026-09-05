@@ -19,9 +19,14 @@ async function bootstrap(): Promise<void> {
   // *before* our AppLogger/redaction is even attached. Disabling it lets
   // the failure surface as a normal rejected promise, handled below by our
   // own redacted, controlled error path instead.
+  //
+  // rawBody: true preserves the exact request bytes alongside the parsed JSON.
+  // Bold signs the Base64 encoding of those exact bytes with HMAC-SHA256;
+  // re-serializing req.body would not be cryptographically equivalent.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     abortOnError: false,
+    rawBody: true,
   });
   app.useLogger(logger);
 

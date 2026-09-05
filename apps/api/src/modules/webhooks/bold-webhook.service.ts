@@ -7,19 +7,10 @@ import { PAYMENT_PROVIDER, type PaymentProvider } from "../payment-providers/pay
 import { PaymentReceiptsService } from "../receipts/payment-receipts.service";
 import { AuditService, AuditSource } from "../audit/audit.service";
 import { canTransitionAttemptStatus, canTransitionOrderStatus, mapBoldPaymentStatus } from "../bold-payments/bold-payment-status-mapping";
+import { MasterBoldWebhookService } from "./master-bold-webhook.service";
 import { computeWebhookIdempotencyKey } from "./webhook-idempotency-key";
-import type { BoldWebhookPayload } from "./bold-webhook-payload";
+import { normalizeBoldWebhookPayload, type BoldWebhookPayload, type NormalizedBoldWebhookPayload } from "./bold-webhook-payload";
 
-/**
- * US-026. Two distinct halves, on purpose:
- *  - receive(): synchronous, fast - validate signature (best-effort,
- *    logged), resolve the order, dedupe + persist the raw PaymentEvent.
- *    The controller awaits only this before responding 202.
- *  - processDelivery(): the heavier state-transition work, dispatched
- *    from receive() without being awaited (no queue/job infrastructure
- *    exists in this project yet - a detached, self-caught async call is
- *    the smallest correct mechanism for "respond fast, process after").
- */
 @Injectable()
 export class BoldWebhookService {
   private readonly logger = new Logger(BoldWebhookService.name);
@@ -30,27 +21,34 @@ export class BoldWebhookService {
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     private readonly paymentReceiptsService: PaymentReceiptsService,
     private readonly auditService: AuditService,
+    private readonly masterWebhookService: MasterBoldWebhookService,
   ) {}
 
-  async receive(payload: BoldWebhookPayload, headers: Record<string, string | string[] | undefined>): Promise<void> {
-    // BoldPaymentProvider.validateNotification() already logs its own
-    // "unverified" warning (US-022) - the boolean is threaded through to
-    // processDelivery, which is what actually decides whether an
-    // unverified event may drive a transition.
-    const validation = await this.paymentProvider.validateNotification({ payload, headers });
+  async receive(
+    payload: BoldWebhookPayload,
+    headers: Record<string, string | string[] | undefined>,
+    rawBody?: Buffer,
+  ): Promise<void> {
+    const normalized = normalizeBoldWebhookPayload(payload);
+    if (!normalized) return;
 
-    const order = await this.prisma.paymentOrder.findUnique({ where: { publicReference: payload.reference_id } });
+    const validation = await this.paymentProvider.validateNotification({ payload, headers, rawBody });
+    const reference = normalized.reference;
+    if (!reference) {
+      this.logger.warn("Bold webhook without external reference acknowledged; no state mutation applied.");
+      return;
+    }
+
+    const order = await this.prisma.paymentOrder.findUnique({ where: { publicReference: reference } });
     if (!order) {
-      // Acknowledge anyway (nothing structurally wrong with the
-      // request) - never make Bold retry forever over an order that
-      // simply doesn't exist here. Nothing to store: PaymentEvent
-      // requires a real paymentOrderId.
-      this.logger.warn(`Bold webhook for unknown order reference ${payload.reference_id} - acknowledged, nothing stored`, BoldWebhookService.name);
+      const matchedMaster = await this.masterWebhookService.receive(payload, normalized, validation.verified);
+      if (!matchedMaster) {
+        this.logger.warn(`Bold webhook for unknown order reference ${reference} acknowledged; nothing stored.`);
+      }
       return;
     }
 
     const idempotencyKey = computeWebhookIdempotencyKey(payload);
-
     let event;
     try {
       event = await this.prisma.paymentEvent.create({
@@ -64,47 +62,36 @@ export class BoldWebhookService {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        this.logger.log(
-          `Duplicate Bold webhook delivery detected (idempotencyKey=${idempotencyKey}) - acknowledged, not reprocessed`,
-          BoldWebhookService.name,
-        );
+        this.logger.log(`Duplicate Bold webhook ${idempotencyKey} acknowledged without reprocessing.`);
         return;
       }
       throw error;
     }
 
-    void this.processDelivery(event.id, payload, validation.verified).catch((error: unknown) => {
-      this.logger.error(`Async Bold webhook processing failed for event ${event.id}: ${(error as Error).message}`, BoldWebhookService.name);
+    void this.processDelivery(event.id, payload, normalized, validation.verified).catch((error: unknown) => {
+      this.logger.error(`Async Bold webhook processing failed for event ${event.id}: ${(error as Error).message}`);
     });
   }
 
-  private async processDelivery(eventId: string, payload: BoldWebhookPayload, verified: boolean): Promise<void> {
-    const mapping = mapBoldPaymentStatus(payload.status);
-    if (!mapping.isKnownBoldStatus) {
-      this.logger.warn(`Unknown Bold webhook status "${payload.status}" for reference ${payload.reference_id}`, BoldWebhookService.name);
-    }
+  private async processDelivery(
+    eventId: string,
+    payload: BoldWebhookPayload,
+    normalized: NormalizedBoldWebhookPayload,
+    verified: boolean,
+  ): Promise<void> {
+    const reference = normalized.reference;
+    if (!reference) return;
 
     const productionPaymentsEnabled = this.configService.get("PRODUCTION_PAYMENTS_ENABLED", { infer: true });
     if (!verified && productionPaymentsEnabled) {
-      // PRD rule: once real money is in play, an unverified signature
-      // must never alone drive a transition. In BOLD_MODE=mock (Phase 1)
-      // every webhook is unverified by construction - this gate only
-      // actually engages once PRODUCTION_PAYMENTS_ENABLED is true, at
-      // which point a real, confirmed signature scheme (TODO: verify
-      // against Bold's merchant dashboard) must exist before it can
-      // safely be relaxed.
-      this.logger.warn(
-        `Unverified Bold webhook for reference ${payload.reference_id} received with PRODUCTION_PAYMENTS_ENABLED=true - stored for reconciliation, no state transition applied`,
-        BoldWebhookService.name,
-      );
-      const unverifiedOrder = await this.prisma.paymentOrder.findUnique({ where: { publicReference: payload.reference_id } });
+      const unverifiedOrder = await this.prisma.paymentOrder.findUnique({ where: { publicReference: reference } });
       await this.prisma.$transaction(async (tx) => {
         if (unverifiedOrder) {
           await this.auditService.record(tx, {
             paymentOrderId: unverifiedOrder.id,
             action: "order.unverified_signature_blocked",
             previousStatus: unverifiedOrder.status,
-            newStatus: mapping.orderStatus,
+            newStatus: unverifiedOrder.status,
             applied: false,
             source: AuditSource.WEBHOOK,
           });
@@ -114,13 +101,27 @@ export class BoldWebhookService {
       return;
     }
 
+    // Current official VOID notifications are valid and auditable but they are
+    // not payment-status transitions in the modern order state machine. Refund/
+    // void semantics remain owned by the dedicated refund/reconciliation flow.
+    const providerStatus = normalized.providerStatus;
+    if (!providerStatus) {
+      await this.prisma.paymentEvent.update({ where: { id: eventId }, data: { processedAt: new Date() } });
+      return;
+    }
+
+    const mapping = mapBoldPaymentStatus(providerStatus);
+    if (!mapping.isKnownBoldStatus) {
+      this.logger.warn(`Unknown Bold webhook status "${providerStatus}" for reference ${reference}`);
+    }
+
     await this.prisma.$transaction(async (tx) => {
       const lockRows = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM payment_orders WHERE public_reference = ${payload.reference_id} FOR UPDATE
+        SELECT id FROM payment_orders WHERE public_reference = ${reference} FOR UPDATE
       `;
       const lockedId = lockRows[0]?.id;
       if (!lockedId) {
-        this.logger.error(`Order ${payload.reference_id} vanished between webhook receipt and processing`, BoldWebhookService.name);
+        this.logger.error(`Order ${reference} vanished between webhook receipt and processing.`);
         return;
       }
 
@@ -131,14 +132,15 @@ export class BoldWebhookService {
         if (canTransitionAttemptStatus(latestAttempt.status, mapping.attemptStatus)) {
           await tx.paymentAttempt.update({ where: { id: latestAttempt.id }, data: { status: mapping.attemptStatus } });
         } else {
-          this.logger.warn(
-            `Blocked invalid PaymentAttempt transition ${latestAttempt.status} -> ${mapping.attemptStatus} from webhook for reference ${payload.reference_id}`,
-            BoldWebhookService.name,
-          );
+          this.logger.warn(`Blocked PaymentAttempt transition ${latestAttempt.status} -> ${mapping.attemptStatus} for ${reference}.`);
         }
 
         await tx.paymentTransaction.create({
-          data: { paymentAttemptId: latestAttempt.id, status: payload.status, rawResponse: payload as unknown as Prisma.InputJsonValue },
+          data: {
+            paymentAttemptId: latestAttempt.id,
+            status: providerStatus,
+            rawResponse: payload as unknown as Prisma.InputJsonValue,
+          },
         });
       }
 
@@ -154,10 +156,6 @@ export class BoldWebhookService {
           source: AuditSource.WEBHOOK,
         });
       } else {
-        this.logger.warn(
-          `Blocked invalid PaymentOrder transition ${order.status} -> ${mapping.orderStatus} from webhook for reference ${payload.reference_id}`,
-          BoldWebhookService.name,
-        );
         await this.auditService.record(tx, {
           paymentOrderId: order.id,
           action: "order.status_transition",

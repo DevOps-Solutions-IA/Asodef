@@ -1,4 +1,7 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import type { EnvConfig } from "../../config/env.validation";
 import { BOLD_TRANSPORT, type BoldTransport } from "./bold-transport.interface";
 import type {
   CreatePaymentInput,
@@ -12,20 +15,23 @@ import type {
 } from "./payment-provider.interface";
 import { isKnownBoldPaymentStatus } from "./bold-status";
 
-/**
- * PaymentProvider implementation for Bold (US-022). Orchestrates Bold's
- * documented two-step flow - create a payment-intent, then create the
- * actual payment against it - behind the single createPayment() call
- * the interface exposes. Delegates all HTTP work to an injected
- * BoldTransport (MockBoldTransport or HttpBoldTransport, selected by
- * BOLD_MODE - see bold-transport.provider.ts), so this class itself
- * never knows or cares whether calls are real or mocked.
- */
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | undefined {
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  const value = entry?.[1];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 @Injectable()
 export class BoldPaymentProvider implements PaymentProvider {
   private readonly logger = new Logger(BoldPaymentProvider.name);
 
-  constructor(@Inject(BOLD_TRANSPORT) private readonly transport: BoldTransport) {}
+  constructor(
+    @Inject(BOLD_TRANSPORT) private readonly transport: BoldTransport,
+    private readonly config: ConfigService<EnvConfig, true>,
+  ) {}
 
   async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
     const intent = await this.transport.createPaymentIntent({
@@ -36,10 +42,6 @@ export class BoldPaymentProvider implements PaymentProvider {
     const payment = await this.transport.createPayment(input.publicReference);
 
     if (!isKnownBoldPaymentStatus(payment.status)) {
-      // Never silently reinterpret an unknown status as success/failure -
-      // preserved as-is for diagnostics, logged structurally, and left
-      // for the caller (a later story's status mapping) to treat as a
-      // safe pending/review state rather than APPROVED.
       this.logger.warn(
         `Unknown Bold payment status "${payment.status}" for reference_id ${input.publicReference}`,
         BoldPaymentProvider.name,
@@ -60,31 +62,38 @@ export class BoldPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Always returns verified: false in Phase 1 - Bold's webhook
-   * signature header format could not be confirmed from public docs
-   * (PRD openQuestions: "webhook-specific page returned 404"). Per the
-   * PRD's own rule, an unverified event must still be logged/stored for
-   * later reconciliation, never silently dropped, and must never alone
-   * drive an APPROVED transition - that enforcement belongs to the
-   * story that actually processes webhooks; this method only reports
-   * the (always-false, for now) verification outcome honestly.
+   * Bold's current webhook contract signs Base64(raw HTTP body) with
+   * HMAC-SHA256 and sends the lowercase hexadecimal MAC in x-bold-signature.
+   * Validation is fail-closed when raw bytes/signature are unavailable. In
+   * production an empty secret is never accepted; Bold's documented test
+   * environment is the only mode where an empty webhook key is legitimate.
    */
   validateNotification(input: ValidateNotificationInput): Promise<ValidateNotificationResult> {
-    this.logger.warn(
-      "Bold webhook signature validation is unverified (signature header format not confirmed from public docs) - treating as unverified, not rejecting",
-      BoldPaymentProvider.name,
-    );
-    return Promise.resolve({ verified: false, raw: input.payload });
+    const signature = headerValue(input.headers, "x-bold-signature")?.trim().toLowerCase();
+    if (!input.rawBody || !signature || !/^[0-9a-f]{64}$/.test(signature)) {
+      return Promise.resolve({ verified: false, raw: input.payload });
+    }
+
+    const mode = this.config.get("BOLD_MODE", { infer: true });
+    const secret = this.config.get("BOLD_WEBHOOK_SECRET", { infer: true });
+    if (mode === "production" && secret.length === 0) {
+      this.logger.error("Bold webhook validation is disabled: BOLD_WEBHOOK_SECRET is not configured in production.");
+      return Promise.resolve({ verified: false, raw: input.payload });
+    }
+
+    const encodedBody = input.rawBody.toString("base64");
+    const expected = createHmac("sha256", secret).update(encodedBody).digest("hex");
+    const expectedBytes = Buffer.from(expected, "utf8");
+    const receivedBytes = Buffer.from(signature, "utf8");
+    const verified = expectedBytes.length === receivedBytes.length
+      && timingSafeEqual(expectedBytes, receivedBytes);
+
+    if (!verified) {
+      this.logger.warn("Rejected Bold webhook notification with invalid signature.");
+    }
+    return Promise.resolve({ verified, raw: input.payload });
   }
 
-  /**
-   * US-056: delegates to the injected transport, same as every other
-   * method - MockBoldTransport implements this (a synthetic mock-mode
-   * simulation), HttpBoldTransport deliberately does not (no real Bold
-   * refund endpoint is documented anywhere in this project's approved
-   * sources - per "do not invent endpoint paths", real mode still
-   * refuses rather than guessing one).
-   */
   async createRefund(input: CreateRefundInput): Promise<CreateRefundResult> {
     if (!this.transport.createRefund) {
       throw new Error("BoldPaymentProvider.createRefund is not implemented for this transport: no Bold refund endpoint is documented in approved project sources");

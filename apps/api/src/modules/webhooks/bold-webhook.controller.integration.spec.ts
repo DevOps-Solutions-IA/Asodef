@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
@@ -25,7 +25,7 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
   const createdCustomerIds: string[] = [];
 
   beforeAll(async () => {
-    app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
+    app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false, rawBody: true });
     configureApp(app);
     await app.init();
     prisma = app.get(PrismaService);
@@ -58,7 +58,6 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
     createdCustomerIds.push(customer.id);
 
     const plan = await upsertActivePlanDemo(prisma);
-
     const obligation = await prisma.obligation.create({
       data: {
         customerId: customer.id,
@@ -83,27 +82,52 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
       },
     });
 
-    if (withAttempt) {
-      await prisma.paymentAttempt.create({ data: { paymentOrderId: order.id, status: "PENDING" } });
-    }
-
+    if (withAttempt) await prisma.paymentAttempt.create({ data: { paymentOrderId: order.id, status: "PENDING" } });
     return { customer, obligation, order };
   }
 
-  it("Example (AC): a valid APPROVED event transitions the order and creates exactly one PaymentEvent and one AuditLog entry even when POSTed twice", async () => {
+  it("accepts the current official signed SALE_APPROVED payload and transitions the modern order", async () => {
+    const { order } = await createOrder("PROCESSING");
+    const body = {
+      id: randomUUID(),
+      type: "SALE_APPROVED",
+      subject: "bold-payment-test",
+      data: {
+        payment_id: "bold-payment-test",
+        metadata: { reference: order.publicReference },
+      },
+    };
+    const raw = JSON.stringify(body);
+    const signature = createHmac("sha256", "").update(Buffer.from(raw).toString("base64")).digest("hex");
+
+    const response = await request(app.getHttpServer())
+      .post("/api/v1/webhooks/bold")
+      .set("x-bold-signature", signature)
+      .set("content-type", "application/json")
+      .send(raw);
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
+      (o) => o.status === "APPROVED",
+    );
+    const finalOrder = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
+    expect(finalOrder.status).toBe("APPROVED");
+  });
+
+  it("a valid legacy/mock APPROVED event transitions once even when POSTed twice", async () => {
     const { order } = await createOrder("PROCESSING");
     const body = { reference_id: order.publicReference, status: "APPROVED" };
 
     const first = await request(app.getHttpServer()).post("/api/v1/webhooks/bold").send(body);
-    expect(first.status).toBe(202);
-
+    expect(first.status).toBe(200);
     await waitFor(
       () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
       (o) => o.status === "APPROVED",
     );
 
     const second = await request(app.getHttpServer()).post("/api/v1/webhooks/bold").send(body);
-    expect(second.status).toBe(202);
+    expect(second.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const events = await prisma.paymentEvent.findMany({ where: { paymentOrderId: order.id } });
@@ -119,113 +143,77 @@ describe("Bold webhook endpoint (integration, real HTTP, BOLD_MODE=mock)", () =>
       applied: true,
       source: "WEBHOOK",
     });
-
-    const finalOrder = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
-    expect(finalOrder.status).toBe("APPROVED");
   });
 
-  it("Negative case (AC): a malformed payload (missing reference_id) returns 400 and creates no PaymentEvent", async () => {
+  it("returns 400 for a malformed payload", async () => {
     const before = await prisma.paymentEvent.count();
     const response = await request(app.getHttpServer()).post("/api/v1/webhooks/bold").send({ status: "APPROVED" });
     expect(response.status).toBe(400);
-    const after = await prisma.paymentEvent.count();
-    expect(after).toBe(before);
+    expect(await prisma.paymentEvent.count()).toBe(before);
   });
 
-  it("returns 400 for a payload missing status", async () => {
-    const response = await request(app.getHttpServer()).post("/api/v1/webhooks/bold").send({ reference_id: "abc" });
-    expect(response.status).toBe(400);
-  });
-
-  it("acknowledges (202) an event for an unknown order reference without storing anything", async () => {
+  it("acknowledges an event for an unknown order reference without storing a modern event", async () => {
     const before = await prisma.paymentEvent.count();
     const response = await request(app.getHttpServer())
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: "does-not-exist-anywhere", status: "APPROVED" });
-    expect(response.status).toBe(202);
-    const after = await prisma.paymentEvent.count();
-    expect(after).toBe(before);
+    expect(response.status).toBe(200);
+    expect(await prisma.paymentEvent.count()).toBe(before);
   });
 
-  it("preserves an unknown Bold status as a safe non-success state instead of approving", async () => {
+  it("preserves an unknown legacy provider status as a safe non-success state", async () => {
     const { order } = await createOrder("PROCESSING");
     const response = await request(app.getHttpServer())
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: order.publicReference, status: "SOME_FUTURE_STATUS" });
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
 
     await waitFor(
       () => prisma.paymentEvent.findFirst({ where: { paymentOrderId: order.id } }),
       (e) => e?.processedAt != null,
     );
-
-    const finalOrder = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
-    expect(finalOrder.status).toBe("PROCESSING");
+    expect((await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe("PROCESSING");
   });
 
-  it("blocks an invalid regression: a REJECTED webhook cannot downgrade an already-APPROVED order", async () => {
+  it("blocks an invalid regression: REJECTED cannot downgrade an already-APPROVED modern order", async () => {
     const { order } = await createOrder("APPROVED");
     const response = await request(app.getHttpServer())
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: order.publicReference, status: "REJECTED" });
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
 
     await waitFor(
       () => prisma.paymentEvent.findFirst({ where: { paymentOrderId: order.id } }),
       (e) => e?.processedAt != null,
     );
-
-    const finalOrder = await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } });
-    expect(finalOrder.status).toBe("APPROVED");
+    expect((await prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe("APPROVED");
   });
 
-  it("concurrent duplicate delivery: two simultaneous identical requests still result in exactly one PaymentEvent", async () => {
+  it("concurrent duplicate legacy delivery still creates exactly one PaymentEvent", async () => {
     const { order } = await createOrder("PROCESSING");
     const body = { reference_id: order.publicReference, status: "APPROVED" };
-
     const [r1, r2] = await Promise.all([
       request(app.getHttpServer()).post("/api/v1/webhooks/bold").send(body),
       request(app.getHttpServer()).post("/api/v1/webhooks/bold").send(body),
     ]);
-    expect(r1.status).toBe(202);
-    expect(r2.status).toBe(202);
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
 
     await waitFor(
       () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
       (o) => o.status === "APPROVED",
     );
-
-    const events = await prisma.paymentEvent.count({ where: { paymentOrderId: order.id } });
-    expect(events).toBe(1);
+    expect(await prisma.paymentEvent.count({ where: { paymentOrderId: order.id } })).toBe(1);
   });
 
-  it("does not require authentication", async () => {
+  it("does not require authentication and never leaks database ids", async () => {
     const { order } = await createOrder("PROCESSING");
     const response = await request(app.getHttpServer())
       .post("/api/v1/webhooks/bold")
       .send({ reference_id: order.publicReference, status: "APPROVED" });
-    expect(response.status).not.toBe(401);
-
-    // The controller ACKs before processDelivery() (fire-and-forget)
-    // finishes - without waiting for it to settle here, a straggling
-    // receipt-issuance write can still land after afterAll's own
-    // cleanup has already run, violating payment_receipts' FK into
-    // payment_orders.
-    await waitFor(
-      () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
-      (o) => o.status === "APPROVED",
-    );
-  });
-
-  it("never leaks internal database ids in the acknowledgement response", async () => {
-    const { order } = await createOrder("PROCESSING");
-    const response = await request(app.getHttpServer())
-      .post("/api/v1/webhooks/bold")
-      .send({ reference_id: order.publicReference, status: "APPROVED" });
+    expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: "received" });
 
-    // Same reasoning as the test above - wait for the fire-and-forget
-    // processDelivery() to fully settle before this test returns.
     await waitFor(
       () => prisma.paymentOrder.findUniqueOrThrow({ where: { id: order.id } }),
       (o) => o.status === "APPROVED",
