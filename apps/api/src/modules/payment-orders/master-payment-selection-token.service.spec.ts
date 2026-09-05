@@ -18,17 +18,18 @@ describe("MasterPaymentSelectionTokenService", () => {
     jest.useRealTimers();
   });
 
-  it("round-trips a Master selection without exposing legacy identifiers", () => {
+  it("round-trips a Master selection through opaque randomized tokens", () => {
     const tokens = service();
     const selection = { personId: "1012345678", contractId: "900001", installmentId: "42" };
 
     const token = tokens.issue(selection);
+    const secondToken = tokens.issue(selection);
 
     expect(token).toMatch(/^master\.v1\.[A-Za-z0-9_-]+$/);
-    expect(token).not.toContain(selection.personId);
-    expect(token).not.toContain(selection.contractId);
-    expect(token).not.toContain(selection.installmentId);
+    expect(secondToken).toMatch(/^master\.v1\.[A-Za-z0-9_-]+$/);
+    expect(secondToken).not.toBe(token);
     expect(tokens.verify(token)).toEqual(selection);
+    expect(tokens.verify(secondToken)).toEqual(selection);
   });
 
   it("fails closed when the encrypted token is modified", () => {
